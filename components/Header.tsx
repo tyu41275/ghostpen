@@ -10,7 +10,7 @@ const Header = () => {
   return (
     <header className="flex items-center justify-between py-10">
       <div>
-        <Link href="/" aria-label={siteMetadata.headerTitle}>
+        {/* <Link href="/" aria-label={siteMetadata.headerTitle}>
           <div className="flex items-center justify-between">
             <div className="mr-3">
               <Logo />
@@ -23,7 +23,7 @@ const Header = () => {
               siteMetadata.headerTitle
             )}
           </div>
-        </Link>
+        </Link> */}
       </div>
       <div className="flex items-center space-x-4 leading-5 sm:space-x-6">
         {headerNavLinks
