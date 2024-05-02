@@ -19,7 +19,7 @@ When I tried to publish my newly curated Sitecore content page, I was met with t
 
 ![BlobProviderException](/static/images/blobproviderexception/PublishingError.png)
 
-Ok. That's new. I did what I always do with errors I haven't seen before and I took to Google to find out what others may know about this issue. This yielded a good list of results, the first of which was this [Stack Overflow post](https://sitecore.stackexchange.com/questions/33776/publish-exception-on-blobproviderexception) on a similar issue. In this post, there is an answer to the issue that suggests running the following queries to identify any problematic content items:
+Ok. That's new. I did what I always do with errors I haven't encountered before and I took to Google to find out what others may know about this issue. This yielded a good list of results, the first of which was this [Stack Overflow post](https://sitecore.stackexchange.com/questions/33776/publish-exception-on-blobproviderexception) on a similar issue. In this post, there is an answer to the issue that suggests running the following queries to identify any problematic content items:
 
 ```
 SELECT ItemId FROM [dbo].[SharedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
