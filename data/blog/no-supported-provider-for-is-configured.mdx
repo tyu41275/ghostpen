@@ -11,7 +11,7 @@ authors: ['default', 'sparrowhawk']
 
 ## Introduction
 
-Recently I started work for a client that utilized Sitecore XP 10.1. I was handed a copy of a VM that already had the tools and software necessary to hit the ground running and get to work on tickets. My first ticket involved curating a brand new content page composed of components that already existed in the solution. A purely content driven task should really be done by a content authoring team, but that's neither here nor there. Either way, this should have been a simple task, right?
+I recently started work for a client that utilized Sitecore XP 10.1. I was handed a copy of a VM that already had the tools and software necessary to hit the ground running and get to work on tickets. My first ticket involved curating a brand new content page composed of components that already existed in the solution. A purely content driven task should really be done by a content authoring team, but that's neither here nor there. Either way, this should have been a simple task, right?
 
 ## The problem
 
@@ -21,9 +21,9 @@ When I tried to publish my newly curated Sitecore content page, I was met with t
 
 Ok. That's new. I did what I always do with errors I haven't seen before and I took to Google to find out what others may know about this issue. This yielded a good list of results, the first of which was this [Stack Overflow post](https://sitecore.stackexchange.com/questions/33776/publish-exception-on-blobproviderexception) on a similar issue. In this post, there is an answer to the issue that suggests running the following queries to identify any problematic content items:
 
-SELECT ItemId FROM [dbo].[SharedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
+<!-- SELECT ItemId FROM [dbo].[SharedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
 SELECT ItemId FROM [dbo].[VersionedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
-SELECT ItemId FROM [dbo].[UnversionedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
+SELECT ItemId FROM [dbo].[UnversionedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null -->
 
 The gist of the issue was that I had media items that do not have any media associated with them. Ok, so if I run the above queries and search for an item that gets returned, I should find a media library image with no image attached, right? In my case, all of the items that were coming back from the SQL query all had images attached. And subsequents search results on Google all referenced running the above query and deleting the items that came back from the results. So, now what?
 
@@ -35,11 +35,11 @@ But then, I noticed something. I could publish the problematic media library ite
 
 I drilled down to a datasource template that was being referenced in my Sitecore content page item. Within that datasource template, there was a reference to an image field. When I examined that image field a bit closer, I noticed that there was a shared checkbox template field called _Blob_ and it was checked.
 
-[BlobTemplateField](/static/images/blobproviderexception/PublishingError.PNG)
+![BlobTemplateField](/static/images/blobproviderexception/PublishingError.PNG)
 
 I have ran into this checkbox in the past, and it caused issues with package generation when generating Sitecore packages for images that had the Blob template field checked.
 
-[PackageGenerationFailed](/static/images/blobproviderexception/PackageGenerationFailed.png)
+![PackageGenerationFailed](/static/images/blobproviderexception/PackageGenerationFailed.png)
 
 When I unchecked the Blob checkbox, I was able to successfully publish my content item. Cool.
 
@@ -49,7 +49,7 @@ But why was this Blob checkbox checked in the first place? A quick Google search
 
 When I searched for what the attachment field is, I wound up in the [documentation](https://doc.sitecore.com/xp/en/developers/101/sitecore-experience-manager/the-system-field-types.html) for Sitecore XP. And in that documentation there's a description for the Attachment field with a very subtle warning message:
 
-[AttachmentFieldType](/static/images/blobproviderexception/AttachmentFieldType.PNG)
+![AttachmentFieldType](/static/images/blobproviderexception/AttachmentFieldType.PNG)
 
 Ominous. I came across [another article](https://blogs.perficient.com/2012/12/05/working-with-the-sitecore-attachment-field-type/) from December of 2012 that spoke about the usage of this attachment field. The article utilized the attachment field for a customer that was using Sitecore 6.6.
 
