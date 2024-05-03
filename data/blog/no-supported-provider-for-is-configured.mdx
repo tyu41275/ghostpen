@@ -19,7 +19,7 @@ When I tried to publish my newly curated Sitecore content page, I was met with t
 
 ![BlobProviderException](/static/images/blobproviderexception/PublishingError.PNG)
 
-Ok. That's new. I did what I always do with errors I haven't encountered in the past, and I took to Google to find out what others may know about this issue. This yielded a good list of results, the first of which was this [Stack Overflow post](https://sitecore.stackexchange.com/questions/33776/publish-exception-on-blobproviderexception) on a similar issue. In this post, there is an answer to the issue that suggests running the following queries to identify any problematic content items:
+Ok. That's new. I did what I always do with errors I haven't encountered in the past, and I took to Google to find out what others may know about this issue. This yielded a good list of results, the first of which was this [Stack Overflow post](https://sitecore.stackexchange.com/questions/33776/publish-exception-on-blobproviderexception) on a similar issue. In this post, there is an answer to the issue that suggests running the following queries to identify any problematic content items, and deleting the items:
 
 ```
 SELECT ItemId FROM [dbo].[SharedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
@@ -27,7 +27,7 @@ SELECT ItemId FROM [dbo].[VersionedFields] where FieldId='{40E50ED9-BA07-4702-99
 SELECT ItemId FROM [dbo].[UnversionedFields] where FieldId='{40E50ED9-BA07-4702-992E-A912738D32DC}' and [Value] = '' or [Value] is null
 ```
 
-The gist of the issue was that I had media items that do not have any media associated with them. Ok, so if I run the above queries and search for an item that gets returned, I should find a media library image with no image attached, right? In my case, all of the items that were coming back from the SQL query all had images attached. Subsequent search results on Google referenced running the above queries. So, now what?
+The gist of the issue was that I had media items that do not have any media associated with them. Ok, so if I run the above queries and search for an item that gets returned, I should find a media library image with no image attached, right? In my case, all of the items that were coming back from the SQL query all had images attached. I probably don't want to delete these media items either, or I would end up with a site with references to a bunch of missing images! Subsequent search results on Google referenced running the above queries as well. So, now what?
 
 I tried downloading and reattaching the images to the media library items, but to no avail. When I tried to republish the content item that referenced the media library item that was throwing the error, I would still get the BlobProviderException error in the publishing window.
 
