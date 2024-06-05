@@ -1,0 +1,61 @@
+---
+title: 'SearchStax deployment backups are failing with a disaster recovery environment'
+date: '2024-06-05'
+lastmod: '2024-06-05'
+tags: ['next-js', 'tailwind', 'guide']
+draft: false
+summary: 'Troubleshooting issues with SearchStax deployment backups failing with a disaster recovery environment.'
+images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+authors: ['default', 'sparrowhawk']
+---
+
+## Introduction
+
+While working on a client engagement with Sitecore XP 10.2.1, I received correspondence from Sitecore about our production SearchStax instance and failing deployment backups.
+
+## The problem
+
+As I understand it, when SearchStax takes backups of deployments to, in this case, a production environment to update a a disaster recovery environment. In the event that the production environment were to go down, a failover to the DR environment would occur
+and users would be directed to this failover environment. The issue with failing deployment backups is that now users will be redirected to a site with old data.
+
+![SitecoreCorrespondence](/static/images/searchstaxbackupsfailing/SitecoreCorrespondence.PNG)
+
+## The Solution
+
+We worked with Sitecore support to triage this issue, and one of the things they noticed was that the alias names for our main and rebuild indexes was the same as the name of the collection.
+
+![TroubleshootingSteps](/static/images/searchstaxbackupsfailing/TroubleshootingSteps.PNG)
+
+For the backup process to work you should:
+
+1. Remove the aliases
+1. Recreate them with the "MainAlias" "RebuildAlias" suffix
+
+```
+<index id="web_index" type="Sitecore.ContentSearch.SolrProvider.SwitchOnRebuildSolrCloudSearchIndex, Sitecore.ContentSearch.SolrProvider" role:require="ContentManagement">
+    <param desc="name">$(id)</param>
+    <param desc="mainalias">$(id)MainAlias</param>
+    <param desc="rebuildalias">$(id)_secRebuildAlias</param>
+    <param desc="collection">$(id)</param>
+    <param desc="rebuildcollection">$(id)_sec</param>
+    <param desc="propertyStore" ref="contentSearch/indexConfigurations/databasePropertyStore" param1="$(id)" />
+    <configuration ref="contentSearch/indexConfigurations/defaultSolrIndexConfiguration" />
+    <strategies hint="list:AddStrategy">
+        <strategy ref="contentSearch/indexConfigurations/indexUpdateStrategies/onPublishEndAsyncSingleInstance" />
+        <strategy ref="contentSearch/indexConfigurations/indexUpdateStrategies/remoteRebuild" role:require="ContentDelivery" />
+    </strategies>
+    <locations hint="list:AddCrawler">
+        <crawler type="Sitecore.ContentSearch.SitecoreItemCrawler, Sitecore.ContentSearch">
+        <Database>web</Database>
+        <Root>/sitecore/content/site/Home</Root>
+        </crawler>
+    </locations>
+    <enableItemLanguageFallback>false</enableItemLanguageFallback>
+    <enableFieldLanguageFallback>false</enableFieldLanguageFallback>
+</index>
+```
+
+1. Update the configuration on the CM instance so it uses the new aliases
+1. Update the configuration on the CD instance so it uses the "MainAlias"
+
+More information about the index configuration can be found [here](https://doc.sitecore.com/xp/en/developers/102/platform-administration-and-architecture/switch-solr-indexes.html#switch-solrcloud-indexes).
