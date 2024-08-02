@@ -1,0 +1,119 @@
+---
+title: 'Setting Up a Local Sitecore XM Cloud Environment'
+date: '2024-07-27'
+lastmod: '2024-07-27'
+tags: ['next-js', 'tailwind', 'guide']
+draft: false
+summary: 'Setting up a Local Sitecore XM Cloud Environment on a Hyper-V VM.'
+images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+authors: ['default', 'sparrowhawk']
+---
+
+## Introduction
+
+I wanted to spin up a Sitecore XM Cloud local environment to play around with a few things. There are plenty of guides on this topic. But as with a lot of these how-to guides, there 
+were subtle nuances to my particular setup. I followed [this guide](https://www.getfishtank.com/blog/creating-a-local-sitecore-xm-installation-for-xm-cloud), and thought I would 
+share some of the issues that I ran into with my environment setup.
+
+## The Tech
+
+1. Hosted on a Windows 11 22H2 Pro Hyper-V Virtual Machine
+1. [Docker](https://docs.docker.com/desktop/install/windows-install/) version 4.33.1 (the [article](https://www.getfishtank.com/blog/creating-a-local-sitecore-xm-installation-for-xm-cloud) I mentioned earlier recommends version 4.11.1 but it appears that that version is no longer available for download)
+1. [DotNet 6 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/6.0)
+1. [.NET Framework 4.8 runtime](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48)
+
+## Nested Virtualization on a Virtual Machine
+One of the first problems that I ran into was enabling Hyper-V services on my virtual machine. Docker requires Hyper-V services to be enabled. Hyper-V services on a virtual machine, or "nested virtualization", 
+is not enabled by default. You will need to turn off your virtual machine and run the following powershell command on your host machine:
+
+```
+Set-VMProcessor -VMName "<name of your virtual machine>" -ExposeVirtualizationExtensions $true
+```
+
+Start your Virtual Machine back up, and you should be able to enable nested virtualization. 
+
+![NestedVirtualization](/static/images/settinguplocalsitecorexmcloudenvironment/TurnHyperVOn.PNG)
+
+And with this, you should now be able to install Docker.
+
+## Prereqs
+
+If applicable, make sure that you stop iis:
+
+```
+iisreset /stop
+```
+
+Also, stop the solr via the Services window if Solr is running.
+
+## Docker Issues
+
+After installing Docker, you must switch to windows containers. With my setup, I ran into an issue with running the Privileged helper service. 
+This seems to be a service that Docker utilizes to access privileged parts of Windows:
+
+![PrivilegedHelperService](/static/images/settinguplocalsitecorexmcloudenvironment/PrivilegedHelperService.png)
+
+Go ahead and start up the service by clicking on the Start service button in the error window.
+
+You should then see the following error releated to Windows containers not being enabled:
+
+![WindowsContainersNotEnabled](/static/images/settinguplocalsitecorexmcloudenvironment/WindowsContainersNotEnabled.PNG)
+
+You will need to run the following command on your virtual machine:
+
+```
+Enable-WindowsOptionalFeature -Online -FeatureName $("Microsoft-Hyper-V", "Containers") -All
+```
+
+![EnableWindowsOptionalFeature](/static/images/settinguplocalsitecorexmcloudenvironment/EnableWindowsOptionalFeature.png)
+
+Restart your machine and you should be able to run the Docker engine successfully.
+
+##Installing the XM Starter Kit
+
+You will need a valid Sitecore XM Cloud license file to proceed further. 
+
+Pull down the (XM Starter Kit project)[https://github.com/sitecorelabs/xmcloud-foundation-head-staging] on GitHub.
+
+In the starter kit project folder, run the following command: 
+
+```
+.\init.ps1 -InitEnv -LicenseXmlPath "C:\<path to valid Sitecore license>\license.xml" -AdminPassword "<password of your choice>"
+```
+
+You should see the installation process kick-off: 
+
+![SitecoreInstall1](/static/images/settinguplocalsitecorexmcloudenvironment/SitecoreInstall1.png)
+![SitecoreInstallCert](/static/images/settinguplocalsitecorexmcloudenvironment/SitecoreInstallCert.png)
+![SitecoreInstall2](/static/images/settinguplocalsitecorexmcloudenvironment/SitecoreInstall2.png)
+
+When the installation is complete, run the following powershell command in the project directory to start the Docker containers:
+
+```
+.\up.ps1
+```
+
+![up1](/static/images/settinguplocalsitecorexmcloudenvironment/up1.png)
+![up1](/static/images/settinguplocalsitecorexmcloudenvironment/up2.png)
+
+If successful, you should see the Device Confirmation screen:
+
+![DeviceConfirmation](/static/images/settinguplocalsitecorexmcloudenvironment/DeviceConfirmation.png)
+
+Create an account if needed using the Sign Up button at the bottom. 
+
+![DeviceConfirmationSuccess](/static/images/settinguplocalsitecorexmcloudenvironment/DeviceConfirmationSuccess.png)
+
+Return back to your PowerShell window:
+
+![StartSolr](/static/images/settinguplocalsitecorexmcloudenvironment/StartSolr.png)
+![StartSite](/static/images/settinguplocalsitecorexmcloudenvironment/StartSite.png)
+
+If all goes well, you should see the Sitecore dashboard open in your browser:
+
+![SitecoreDashboard](/static/images/settinguplocalsitecorexmcloudenvironment/SitecoreDashboard.png)
+![SitecoreContentEditor](/static/images/settinguplocalsitecorexmcloudenvironment/SitecoreContentEditor.png)
+
+##Conclusion
+
+That's it! You should have a running Sitecore XM Cloud local environment. Next time, I hope to add further details around serializing XM Cloud to your local environment.
