@@ -48,16 +48,14 @@ Also, stop Solr via the Services window if Solr is running.
 
 ## Docker Issues
 
-After installing Docker, you must switch to windows containers. With my setup, I ran into an issue with running the Privileged helper service. 
+After installing Docker, you must switch to Windows containers. With my setup, I ran into an issue with running the Privileged helper service. 
 This seems to be a service that Docker utilizes to access privileged parts of Windows:
 
 ![PrivilegedHelperService](/static/images/settinguplocalsitecorexmcloudenvironment/PrivilegedHelperService.png)
 
-Go ahead and start up the service by clicking on the Start service button in the error window.
+Go ahead and start up the service by clicking on the Start service button in the error window. You should then see the following error releated to Windows containers not being enabled:
 
-You should then see the following error releated to Windows containers not being enabled:
-
-![WindowsContainersNotEnabled](/static/images/settinguplocalsitecorexmcloudenvironment/WindowsContainersNotEnabled.PNG)
+![WindowsContainersNotEnabled](/static/images/settinguplocalsitecorexmcloudenvironment/WindowsContainersNotEnabled.png)
 
 You will need to run the following command on your virtual machine:
 
