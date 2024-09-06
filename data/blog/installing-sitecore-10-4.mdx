@@ -11,10 +11,10 @@ authors: ['default', 'sparrowhawk']
 
 ## Introduction
 
-While working on a client engagement with Sitecore XP 10.2.1 I had been tasked with upgrading to the latest version of Sitecore, which at the time of writing this is version 10.4.
+While working on a client engagement with Sitecore XP 10.2.1 I was tasked with upgrading to the latest version of Sitecore, which at the time of writing this is version 10.4. The first step in upgrading to Sitecore 10.4 is to install Sitecore 10.4.
 
 There are numerous guides on installing any version of Sitecore, like [this one](https://insightswithvishalkhera.wordpress.com/2024/04/30/install-sitecore-xp-10-4-using-sitecore-install-assistantt/) that I followed to complete my first installation of Sitecore 10.4.
-But you may run into issues specific to your setup, that may not be covered in the installation guide that you followed. I'm hoping to cover a couple of those in this article. Let's get into it!
+You may, however, run into issues specific to your setup, that may not be covered in the installation guide that you follow. I'm hoping to cover a couple of issues that you may run into in this article. Let's get into it!
 
 ## The tech
 
@@ -22,26 +22,26 @@ But you may run into issues specific to your setup, that may not be covered in t
 1. [SQL Server 2022 Developer Edition](https://microsoft.com/en-us/sql-server/sql-server-downloads) and [SSMS](https://learn.microsoft.com/en-us/sql/ssms/download-sql-server-management-studio-ssms?view=sql-server-ver16) - any version 2017 and up should suffice
 1. [Installation Assistant for XP Single](https://developers.sitecore.com/downloads/Sitecore_Experience_Platform/104/Sitecore_Experience_Platform_104)
 
-![InstallationAssistantforXPSingle](/static/images/sitecore104install/Installation Assistant for XP Single.png)
+![InstallationAssistantforXPSingle](/static/images/sitecore104install/InstallationAssistantforXPSingle.png)
 
 ## Installing SQL Server and validating the sa account via SSMS
 
 For the most part, you want to keep the default options. For the feature selection step, check _Database Engine Services_. Nothing more, nothing less.
 
-[SQLDBEngineServices](/static/images/sitecore104install/SQL DB Engine Services.png)
+[SQLDBEngineServices](/static/images/sitecore104install/SQLDBEngineServices.png)
 
 Now, we want to make sure that the sa account works because the Sitecore Installation Assistant will use the sa account to create new databases for our Sitecore install. Try to connect to your local database. If you kept the default options for your SQL install, you should be able to connect with server name _localhost_.
 
 If you run into the issue below, you will need to first connect using Windows Authentication and enable mixed mode authentication. Right-click on your local server in SSMS Object Explorer and click properties to get to the Server properties in the screenshot below. Make sure to _restart the SQL Server service_ after this step!
 
-![CannotConnectViaSQLServerAuth](/static/images/sitecore104install/SQL Cannot Connect Using SQL Auth.png)
-![MixedModeAuth](/static/images/sitecore104install/SQL Mixed Mode Auth.png)
+![CannotConnectViaSQLServerAuth](/static/images/sitecore104install/SQLCannotConnectUsingSQLAuth.png)
+![MixedModeAuth](/static/images/sitecore104install/SQLMixedModeAuth.png)
 
 After restarting SQL Server, finish configuring the sa account. Right-click the sa account in SSMS Object Explorer, and click properties. Give it a password that you will remember, you will need to provide this password for the Sitecore Installation Assistant later.
 
 On the status page, make sure to grant permission to conneft to the database engine and enable login:
 
-![SAAccountProperties](/static/images/sitecore104install/SA Account Properties.png)
+![SAAccountProperties](/static/images/sitecore104install/SAAccountProperties.png)
 
 Now validate the connection to your local SQL Server using the sa account.
 
@@ -49,17 +49,17 @@ Now validate the connection to your local SQL Server using the sa account.
 
 Unpack the zip file for the [Sitecore Installation Assistant for XP Single](https://developers.sitecore.com/downloads/Sitecore_Experience_Platform/104/Sitecore_Experience_Platform_104), and run the setup application.
 
-![SIASetup](/static/images/sitecore104install/SIA Setup Application.png)
+![SIASetup](/static/images/sitecore104install/SIASetupApplication.png)
 
 Proceed with installing the prerequisites:
 
-![SIAPrereqs1](/static/images/sitecore104install/SIA Prereqs 1.png)
-![SIAPrereqs2](/static/images/sitecore104install/SIA Prereqs 2.png)
+![SIAPrereqs1](/static/images/sitecore104install/SIAPrereqs1.png)
+![SIAPrereqs2](/static/images/sitecore104install/SIAPrereqs2.png)
 
 If you run into the error below, you will need to restart your machine to enable IIS if it has not been enabled on your machine as a feature yet. The Installation Assistant will enable IIS for you, but you will need to restart your machine and rerun the installation tool.
 
-![SIAPrereqsIISError](/static/images/sitecore104install/SIA Prereqs IIS Error.png)
-![SIAPrereqsIISErrorLog](/static/images/sitecore104install/SIA Prereqs IIS Error Logs.png)
+![SIAPrereqsIISError](/static/images/sitecore104install/SIAPrereqsIISError.png)
+![SIAPrereqsIISErrorLog](/static/images/sitecore104install/SIAPrereqsIISErrorLogs.png)
 
 For the Solr and SQL server settings:
 
@@ -69,17 +69,17 @@ For the Solr and SQL server settings:
 
 Optionally, for the SXA step, check the box if you need SXA. I did not, so I left this unchecked.
 
-![SIASXA](/static/images/sitecore104install/SIA Prereqs 1.png)
+![SIASXA](/static/images/sitecore104install/SIAPrereqs1.png)
 
 Proceed to the Summary and validation pages and validate that all values are correct. Once validated, proceed to the installation step.
 
-![SIAValidation](/static/images/sitecore104install/SIA Validation.png)
+![SIAValidation](/static/images/sitecore104install/SIAValidation.png)
 
 If your installation finishes without any issues, you will be able to navigate to your new Sitecore 10.4 instance. That's it!
 
-![SIAInstallCompleted](/static/images/sitecore104install/SIA Install Completed.png)
-![SitecoreDash](/static/images/sitecore104install/Sitecore Dash.png)
-![SitecoreContentEditor](/static/images/sitecore104install/Sitecore Content Editor.png)
+![SIAInstallCompleted](/static/images/sitecore104install/SIAInstallCompleted.png)
+![SitecoreDash](/static/images/sitecore104install/SitecoreDash.png)
+![SitecoreContentEditor](/static/images/sitecore104install/SitecoreContentEditor.png)
 
 ## Conclusion
 
