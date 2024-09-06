@@ -16,7 +16,7 @@ While working on a client engagement with Sitecore XP 10.2.1 I was tasked with u
 There are numerous guides on installing any version of Sitecore, like [this one](https://insightswithvishalkhera.wordpress.com/2024/04/30/install-sitecore-xp-10-4-using-sitecore-install-assistantt/) that I followed to complete my first installation of Sitecore 10.4.
 You may, however, run into issues specific to your setup, that may not be covered in the installation guide that you follow. I'm hoping to cover a couple of issues that you may run into in this article. Let's get into it!
 
-## The tech
+## The Tech
 
 1. Windows Server 2022 Datacenter - this was the OS that was provisioned for me, but obviously other Windows OS should work fine
 1. [SQL Server 2022 Developer Edition](https://microsoft.com/en-us/sql-server/sql-server-downloads) and [SSMS](https://learn.microsoft.com/en-us/sql/ssms/download-sql-server-management-studio-ssms?view=sql-server-ver16) - any version 2017 and up should suffice
@@ -30,7 +30,7 @@ For the most part, you want to keep the default options. For the feature selecti
 
 ![SQLDBEngineServices](/static/images/sitecore104install/SQLDBEngineServices.png)
 
-Now, we want to make sure that the sa account works because the Sitecore Installation Assistant will use the sa account to create new databases for our Sitecore install. Try to connect to your local database. If you kept the default options for your SQL install, you should be able to connect with server name _localhost_.
+Now, we want to make sure that the sa account works because the Sitecore Installation Assistant will use the sa account to create new databases for our Sitecore install. Try to connect to your local database using the sa account. If you kept the default options for your SQL install, you should be able to connect with server name _localhost_.
 
 If you run into the issue below, you will need to first connect using Windows Authentication and enable mixed mode authentication. Right-click on your local server in SSMS Object Explorer and click properties to get to the Server properties in the screenshot below. Make sure to _restart the SQL Server service_ after this step!
 
