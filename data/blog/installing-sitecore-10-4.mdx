@@ -28,7 +28,7 @@ You may, however, run into issues specific to your setup, that may not be covere
 
 For the most part, you want to keep the default options. For the feature selection step, check _Database Engine Services_. Nothing more, nothing less.
 
-[SQLDBEngineServices](/static/images/sitecore104install/SQLDBEngineServices.png)
+![SQLDBEngineServices](/static/images/sitecore104install/SQLDBEngineServices.png)
 
 Now, we want to make sure that the sa account works because the Sitecore Installation Assistant will use the sa account to create new databases for our Sitecore install. Try to connect to your local database. If you kept the default options for your SQL install, you should be able to connect with server name _localhost_.
 
@@ -39,7 +39,7 @@ If you run into the issue below, you will need to first connect using Windows Au
 
 After restarting SQL Server, finish configuring the sa account. Right-click the sa account in SSMS Object Explorer, and click properties. Give it a password that you will remember, you will need to provide this password for the Sitecore Installation Assistant later.
 
-On the status page, make sure to grant permission to conneft to the database engine and enable login:
+On the status page, make sure to grant permission to connect to the database engine and enable login:
 
 ![SAAccountProperties](/static/images/sitecore104install/SAAccountProperties.png)
 
@@ -65,7 +65,7 @@ For the Solr and SQL server settings:
 
 1. For the Solr installation step, install Solr if you do not already have it installed. Keep the port number and give it a path/path prefix
 1. For the Microsoft SQL Server settings step, provide your local server name and sa credentials and proceed.
-1. For the Solr settings step, provde valid solr path/url and service name.
+1. For the Solr settings step, provide valid solr path/url and service name.
 
 Optionally, for the SXA step, check the box if you need SXA. I did not, so I left this unchecked.
 
