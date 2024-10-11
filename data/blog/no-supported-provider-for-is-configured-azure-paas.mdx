@@ -1,7 +1,7 @@
 ---
 title: 'No supported provider for blob is configured in an Azure PaaS and Sitecore 10.2 to 10.4 upgrade'
-date: '2024-08-31'
-lastmod: '2024-08-31'
+date: '2024-10-09'
+lastmod: '2024-10-09'
 tags: ['next-js', 'tailwind', 'guide']
 draft: false
 summary: 'A walkthrough of importing blob storage containers as a part of upgrading Sitecore to a newer version.'
@@ -11,7 +11,7 @@ authors: ['default', 'sparrowhawk']
 
 ## Introduction
 
-While working on a client engagement with Sitecore XP 10.2.1 I was tasked with upgrading to the latest version of Sitecore, which at the time of writing this is version 10.4. Our current Sitecore 10.2 environment is hosted on Azure. Similarly, our 10.4 environment will also be hosted Azure.
+While working on a client engagement with Sitecore XP 10.2.1 I was tasked with upgrading to the latest version of Sitecore, which at the time of writing this is version 10.4. Our current Sitecore 10.2 environment is hosted on Azure. Similarly, our 10.4 environment will also be hosted on Azure.
 
 Back in May 2024, I wrote [this](https://timyu-blog.vercel.app/blog/no-supported-provider-for-is-configured) post on an error related to blob providers and media library items. The scenario for this blob provider exception involves moving Sitecore's blob storage references to media library items from one Azure PaaS instance to another (Sitecore 10.2 PaaS to 10.4).
 
@@ -25,7 +25,7 @@ You should then upgrade your databases to match the values in your connection st
 
 Assuming that you have completed all of the other preliminary steps, such as upgrading your Sitecore solution with the latest Sitecore assemblies, you should be able to navigate to the CM instance of your Sitecore Azure 10.4 environment and view your site's content. If you try to publish your Media Library items, however, you may run into this issue:
 
-![PublishingError](public/static/images/blobproviderexceptionpaas/PublishingError.PNG)
+![PublishingError](/static/images/blobproviderexceptionpaas/PublishingError.PNG)
 
 Furthermore, if you view your site's pages on CD, you may see missing images.
 
@@ -37,7 +37,7 @@ This means that when restoring Sitecore media library items from another Azure S
 
 Once the Azure blob container is copied over to your new Sitecore environment, make sure to update your connection strings to match. You should have an 'azureblob' connection string that asks for a storage account name and an access key, both of which can be found on the storage account itself:
 
-![AzureStorageAccountAccessKeys](public/static/images/blobproviderexceptionpaas/StorageAccountAccessKeys.png)
+![AzureStorageAccountAccessKeys](/static/images/blobproviderexceptionpaas/StorageAccountAccessKeys.png)
 
 ## Conclusion
 
