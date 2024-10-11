@@ -1,0 +1,44 @@
+---
+title: 'No supported provider for blob is configured in an Azure PaaS and Sitecore 10.2 to 10.4 upgrade'
+date: '2024-08-31'
+lastmod: '2024-08-31'
+tags: ['next-js', 'tailwind', 'guide']
+draft: false
+summary: 'A walkthrough of importing blob storage containers as a part of upgrading Sitecore to a newer version.'
+images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+authors: ['default', 'sparrowhawk']
+---
+
+## Introduction
+
+While working on a client engagement with Sitecore XP 10.2.1 I was tasked with upgrading to the latest version of Sitecore, which at the time of writing this is version 10.4. Our current Sitecore 10.2 environment is hosted on Azure. Similarly, our 10.4 environment will also be hosted Azure.
+
+Back in May 2024, I wrote [this](https://timyu-blog.vercel.app/blog/no-supported-provider-for-is-configured) post on an error related to blob providers and media library items. The scenario for this blob provider exception involves moving Sitecore's blob storage references to media library items from one Azure PaaS instance to another (Sitecore 10.2 PaaS to 10.4).
+
+Myself and a colleague of mine were both surprised at how little documentation there was on how to migrate media library blob storage references from one Sitecore PaaS instance to another, so I thought I might write this post to cover our experience with this task.
+
+## The Problem
+
+When upgrading from one version of Sitecore to another, on Azure PaaS, it is necessary to migrate Azure SQL databases to a new instance for use in the new environment. This is relatively straight-forward. You typically run [upgrade scripts](<https://scdp.blob.core.windows.net/downloads/Sitecore%20Experience%20Platform/104/Sitecore%20Experience%20Platform%20104/Sitecore%2010.4.0%20rev.%20010422%20(WDP%20XP0%20packages).zip>) provided by Sitecore, following [guidelines](https://scdp.blob.core.windows.net/downloads/Sitecore%20Experience%20Platform/104/Sitecore%20Experience%20Platform%20104/Upgrade_Installation_Guide_for_Sitecore_Experience_Platform_10_4_0.pdf) that are also provided by Sitecore.
+
+You should then upgrade your databases to match the values in your connection strings for things like user passwords and database names.
+
+Assuming that you have completed all of the other preliminary steps, such as upgrading your Sitecore solution with the latest Sitecore assemblies, you should be able to navigate to the CM instance of your Sitecore Azure 10.4 environment and view your site's content. If you try to publish your Media Library items, however, you may run into this issue:
+
+![PublishingError](public/static/images/blobproviderexceptionpaas/PublishingError.PNG)
+
+Furthermore, if you view your site's pages on CD, you may see missing images.
+
+## Sitecore Azure PaaS Blob Storage for Media Library Items
+
+Sitecore in Azure PaaS uses [blob storage](https://doc.sitecore.com/xp/en/developers/latest/sitecore-experience-manager/blob-storage-and-sitecore-media-items.html) to store Media Library items. The master/web databases only contain metadata information for media library items and a blob storage id to refer to the correct item in Azure blob storage.
+
+This means that when restoring Sitecore media library items from another Azure SQL database, we must also bring the Azure blob storage instance over to the new environment. You should be able to use a tool like [Azure Storage Explorer](https://azure.microsoft.com/en-us/products/storage/storage-explorer) to accomplish this. Also, you should ensure that the [Azure Blob Module](https://doc.sitecore.com/xp/en/developers/latest/sitecore-experience-manager/enable-the-azure-blob-storage-module-for-sitecore-blobs.html#verify-deployment-for-all-installations) is installed on your environment.
+
+Once the Azure blob container is copied over to your new Sitecore environment, make sure to update your connection strings to match. You should have an 'azureblob' connection string that asks for a storage account name and an access key, both of which can be found on the storage account itself:
+
+![AzureStorageAccountAccessKeys](public/static/images/blobproviderexceptionpaas/StorageAccountAccessKeys.png)
+
+## Conclusion
+
+And that's it! Publish your media library items, and hopefully the publish works and the images render on your site. Hope this saved you some headache when working with Sitecore Azure PaaS and media library items.
