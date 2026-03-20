@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Blog post generator — reads EcoOrchestra pipeline artifacts and generates
-draft blog posts via the llm-router HTTP API.
+draft blog posts via the Anthropic API.
 
 Usage:
     python scripts/generate_post.py --feature <feature-slug>
@@ -11,6 +11,7 @@ Requires: requests (pip install requests)
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -35,7 +36,9 @@ BLOG_ROOT = SCRIPT_DIR.parent
 BLOG_DIR = BLOG_ROOT / "data" / "blog"
 STYLE_GUIDE_PATH = BLOG_ROOT / "data" / "style-guide.md"
 BLOG_IMAGES_DIR = BLOG_ROOT / "public" / "static" / "images"
-LLM_ROUTER_URL = os.environ.get("LLM_ROUTER_URL", "http://localhost:8000")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 # ---------------------------------------------------------------------------
 # Core functions
@@ -49,11 +52,10 @@ def find_blogworthy_feature(
 
     Returns the matching approval entry or None.
     """
-    briefs_dir = artifacts_dir / "decisions" / "vision-briefs"
-    if not briefs_dir.exists():
-        return None
-
-    briefs = list(briefs_dir.glob(f"*{feature_slug}*"))
+    # Check vision briefs directory for a matching file
+    briefs = list(
+        (artifacts_dir / "decisions" / "vision-briefs").glob(f"*{feature_slug}*")
+    )
     if not briefs:
         return None
 
@@ -78,13 +80,8 @@ def blog_post_exists(feature_slug: str) -> bool:
 
 def gather_artifacts(feature_slug: str, artifacts_dir: Path) -> dict:
     """Gather all available artifacts for a feature."""
-    artifacts: dict = {
-        "feature": feature_slug,
-        "vision_brief": None,
-        "standups": [],
-        "reviews": [],
-        "screenshots": [],
-    }
+    artifacts: dict = {"feature": feature_slug, "vision_brief": None,
+                       "standups": [], "reviews": [], "screenshots": []}
 
     # 1. Vision brief
     briefs = list(
@@ -105,16 +102,15 @@ def gather_artifacts(feature_slug: str, artifacts_dir: Path) -> dict:
                     content = md_file.read_text(encoding="utf-8")
                 except OSError:
                     continue
-                slug_lower = feature_slug.lower()
-                content_lower = content.lower()
-                if slug_lower in content_lower or slug_lower.replace("-", " ") in content_lower:
+                if feature_slug in content.lower() or feature_slug.replace("-", " ") in content.lower():
                     artifacts["standups"].append(content)
 
     # 3. Review files — search for reviews mentioning the feature
     for review_file in artifacts_dir.rglob("reviews/*"):
         if not review_file.is_file():
             continue
-        if feature_slug in review_file.name.lower():
+        name_lower = review_file.name.lower()
+        if feature_slug in name_lower:
             try:
                 artifacts["reviews"].append(review_file.read_text(encoding="utf-8"))
             except OSError:
@@ -131,7 +127,8 @@ def gather_artifacts(feature_slug: str, artifacts_dir: Path) -> dict:
 
 
 def generate_post(artifacts: dict, style_guide: str) -> str:
-    """Call llm-router to generate the blog post body."""
+    """Call Anthropic API to generate the blog post body."""
+    # Build user prompt from artifacts
     parts = [f"Write a blog post about the '{artifacts['feature']}' feature.\n"]
 
     if artifacts["vision_brief"]:
@@ -150,10 +147,7 @@ def generate_post(artifacts: dict, style_guide: str) -> str:
             parts.append(f"### Review {i}\n{review}\n")
 
     if artifacts["screenshots"]:
-        parts.append(
-            f"\n(There are {len(artifacts['screenshots'])} screenshots "
-            f"available for this feature.)\n"
-        )
+        parts.append(f"\n(There are {len(artifacts['screenshots'])} screenshots available for this feature.)\n")
 
     parts.append(
         "\nGenerate ONLY the markdown body of the blog post (no frontmatter). "
@@ -173,18 +167,19 @@ def generate_post(artifacts: dict, style_guide: str) -> str:
         resp = requests.post(url, json=payload, timeout=120)
         resp.raise_for_status()
     except requests.ConnectionError:
-        print(f"Error: Cannot connect to llm-router at {LLM_ROUTER_URL}")
-        print("Make sure the llm-router server is running: python -m llm_router.server")
+        print(f"Error: Cannot connect to Anthropic API at {LLM_ROUTER_URL}")
+        print("Make sure the Anthropic API server is running: python -m llm_router.server")
         sys.exit(1)
     except requests.HTTPError as exc:
-        print(f"Error: llm-router returned {exc.response.status_code}: {exc.response.text}")
+        print(f"Error: Anthropic API returned {exc.response.status_code}: {exc.response.text}")
         sys.exit(1)
     except requests.Timeout:
-        print("Error: llm-router request timed out after 120 seconds.")
+        print("Error: Anthropic API request timed out after 120 seconds.")
         sys.exit(1)
 
     data = resp.json()
-    return data.get("raw_text", "")
+    content_blocks = data.get("content", [])
+    return chr(10).join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
 
 
 def write_post(feature_slug: str, content: str, title: str | None = None) -> Path:
@@ -193,21 +188,25 @@ def write_post(feature_slug: str, content: str, title: str | None = None) -> Pat
     slug = f"{today}-{feature_slug}"
 
     if not title:
+        # Derive title from slug
         title = feature_slug.replace("-", " ").title()
 
     # Extract first sentence as summary
     first_line = content.strip().split("\n")[0] if content.strip() else title
+    # Strip markdown heading markers for the summary
     summary = first_line.lstrip("#").strip()
     if len(summary) > 200:
         summary = summary[:197] + "..."
 
     # Build relevant tags from feature slug keywords
     tags = ["ai", "dev-log"]
-    skip_words = {"the", "a", "an", "and", "or", "for", "in", "of", "to"}
-    for kw in feature_slug.split("-")[:3]:
-        if kw not in skip_words and kw not in tags:
-            tags.append(kw)
+    keywords = feature_slug.split("-")
+    for kw in keywords[:3]:
+        if kw not in ("the", "a", "an", "and", "or", "for", "in", "of", "to"):
+            if kw not in tags:
+                tags.append(kw)
 
+    # Escape single quotes in title (same as summary)
     safe_title = title.replace("'", "''")
 
     frontmatter = f"""---
@@ -216,7 +215,7 @@ date: '{today}'
 tags: {json.dumps(tags)}
 draft: true
 aiGenerated: true
-summary: '{summary.replace(chr(39), chr(39)+chr(39))}'
+summary: '{summary.replace("'", "''")}'
 images: []
 authors: ['default']
 ---
@@ -247,6 +246,7 @@ def copy_screenshots(feature_slug: str, screenshots: list[Path]) -> list[str]:
     for src in screenshots:
         dest = dest_dir / src.name
         shutil.copy2(src, dest)
+        # Return path relative to public/ for use in markdown
         rel = f"/static/images/{slug}/{src.name}"
         image_paths.append(rel)
         print(f"Copied screenshot: {src.name} -> {dest}")
@@ -264,12 +264,13 @@ def create_pr(feature_slug: str, title: str, post_path: Path) -> None:
     def git(*args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git", "-C", repo_dir] + list(args),
-            capture_output=True, text=True,
+            capture_output=True, text=True
         )
 
     # Create and switch to branch
     result = git("checkout", "-b", branch)
     if result.returncode != 0:
+        # Branch may already exist
         git("checkout", branch)
 
     # Stage files
@@ -280,7 +281,7 @@ def create_pr(feature_slug: str, title: str, post_path: Path) -> None:
         git("add", str(images_dir.relative_to(BLOG_ROOT)))
 
     # Commit
-    commit_msg = f"blog: add AI-generated draft \u2014 {title}"
+    commit_msg = f"blog: add AI-generated draft — {title}"
     result = git("commit", "-m", commit_msg)
     if result.returncode != 0:
         print(f"Warning: git commit issue: {result.stderr.strip()}")
@@ -298,13 +299,14 @@ def create_pr(feature_slug: str, title: str, post_path: Path) -> None:
         "AI-generated draft blog post. Review and flip `draft: false` to publish.\n\n"
         f"Generated from: `{brief_path}`"
     )
+    safe_pr_title = sanitize_title_for_cli(title)
     pr_result = subprocess.run(
         ["gh", "pr", "create",
          "--base", "main",
-         "--title", f"Blog: {sanitize_title_for_cli(title)}",
+         "--title", f"Blog: {safe_pr_title}",
          "--body", body,
          "--draft"],
-        capture_output=True, text=True, cwd=repo_dir,
+        capture_output=True, text=True, cwd=repo_dir
     )
     if pr_result.returncode == 0:
         print(f"Created draft PR: {pr_result.stdout.strip()}")
@@ -319,23 +321,25 @@ def create_pr(feature_slug: str, title: str, post_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a draft blog post from EcoOrchestra pipeline artifacts.",
+        description="Generate a draft blog post from EcoOrchestra pipeline artifacts."
     )
     parser.add_argument(
         "--feature", required=True,
-        help="Feature slug (e.g. 'anthropic-failover')",
+        help="Feature slug (e.g. 'anthropic-failover')"
     )
     parser.add_argument(
         "--artifacts-dir",
         default=os.environ.get("ECOORCHESTRA_DIR", "C:/Repos/EcoOrchestra"),
-        help="Path to EcoOrchestra directory (default: C:/Repos/EcoOrchestra or $ECOORCHESTRA_DIR)",
+        help="Path to EcoOrchestra directory (default: C:/Repos/EcoOrchestra or $ECOORCHESTRA_DIR)"
     )
     return parser.parse_args()
 
 
 def sanitize_title_for_cli(title: str) -> str:
     """Strip characters from an LLM-generated title that could cause shell issues."""
-    sanitized = re.sub(r"[^\w\s\-:.,!?()\'/ ]", "", title)
+    # Keep alphanumeric, spaces, hyphens, colons, and basic punctuation
+    sanitized = re.sub(r"[^\w\s\-:.,!?()'/]", "", title)
+    # Collapse whitespace
     sanitized = re.sub(r"\s+", " ", sanitized).strip()
     return sanitized or "Untitled"
 
@@ -361,12 +365,12 @@ def main() -> None:
     # 1. Check blog-worthiness (vision brief must exist)
     feature_info = find_blogworthy_feature(feature_slug, artifacts_dir)
     if not feature_info:
-        print(f"No vision brief found for '{feature_slug}' \u2014 not blog-worthy")
+        print(f"No vision brief found for '{feature_slug}' — not blog-worthy")
         sys.exit(0)
 
     # 2. Check if post already exists
     if blog_post_exists(feature_slug):
-        print(f"Blog post already exists for '{feature_slug}' \u2014 skipping")
+        print(f"Blog post already exists for '{feature_slug}' — skipping")
         sys.exit(0)
 
     print(f"Feature '{feature_slug}' is blog-worthy. Generating post...")
@@ -386,7 +390,7 @@ def main() -> None:
     else:
         style_guide = STYLE_GUIDE_PATH.read_text(encoding="utf-8")
 
-    # 5. Generate the blog post via llm-router
+    # 5. Generate the blog post via Anthropic API
     content = generate_post(artifacts, style_guide)
     if not content:
         print("Error: LLM returned empty content.")
@@ -396,9 +400,9 @@ def main() -> None:
     title = feature_slug.replace("-", " ").title()
     if artifacts["vision_brief"]:
         for line in artifacts["vision_brief"].split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("# "):
-                title = stripped[2:].strip()
+            line = line.strip()
+            if line.startswith("# "):
+                title = line.lstrip("# ").strip()
                 break
 
     # 7. Write the .mdx file
