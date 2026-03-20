@@ -194,11 +194,12 @@ Feature posts MUST NOT link to external GitHub repos for projects in the ecosyst
 
 Every ecosystem project referenced in a feature post must have a foundation post:
 
-| Project      | Foundation post slug   | Purpose                    |
-| ------------ | ---------------------- | -------------------------- |
-| EcoOrchestra | `what-is-ecoorchestra` | The AI persona pipeline    |
-| llm-router   | `what-is-llm-router`   | Multi-provider LLM routing |
-| AutoAgent    | `what-is-autoagent`    | VOD analysis agent         |
+| Project      | Foundation post slug                    | Purpose                    |
+| ------------ | --------------------------------------- | -------------------------- |
+| EcoOrchestra | `what-is-ecoorchestra`                  | The AI persona pipeline    |
+| llm-router   | `what-is-llm-router`                    | Multi-provider LLM routing |
+| AutoAgent    | `what-is-autoagent`                     | VOD analysis agent         |
+| Ghostpen     | `how-i-built-a-blog-that-writes-itself` | AI-powered blog generator  |
 
 ### Enforcement rules
 
