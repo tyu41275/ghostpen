@@ -69,6 +69,16 @@ It classifies each project by its role in the ecosystem:
 
 This classification drives the Mermaid dependency graph that gets auto-generated and committed to `docs/ecosystem.md`.
 
+## Inspiration
+
+EcoOrchestra did not come out of nowhere. Two projects influenced how I think about AI-assisted development:
+
+[gstax](https://github.com/gstax/gstax) shaped how I think about structured orchestration -- the idea that AI agents benefit from explicit workflow stages rather than free-form prompting. The separation of concerns between planning, building, and reviewing in EcoOrchestra's pipeline is a direct descendant of patterns I saw in gstax.
+
+[Superpowers](https://github.com/obra/superpowers) influenced the methodology side -- particularly the ideas around atomic task decomposition, systematic debugging (reproduce, hypothesize, trace, verify), and test-first development. When I evaluated Superpowers against EcoOrchestra, I realized the two tools are complementary: Superpowers provides methodology, EcoOrchestra provides orchestration. I imported the methodology ideas -- atomic task specs with explicit file paths and verification steps, systematic debugging for fix loops -- without adopting the framework architecture. EcoOrchestra's persona commands already ARE skills, so adding a skills abstraction layer would have been unnecessary indirection.
+
+Both projects are worth checking out if you are building your own AI development workflows.
+
 ## Conclusion
 
 EcoOrchestra is the foundation everything else runs on. Every feature in every project goes through this pipeline. The enforcement is not optional -- and that is the point. The few times I have tried to skip steps "just for a quick fix," the pipeline caught issues I would have shipped.
