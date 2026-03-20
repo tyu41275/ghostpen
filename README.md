@@ -2,6 +2,8 @@
 
 A blog that automatically drafts posts from your development work -- using AI to turn structured artifacts (decision records, daily logs, code reviews) into blog posts written in your voice.
 
+**Live site:** [timyu-blog.vercel.app](https://timyu-blog.vercel.app)
+
 Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
 
 ## The idea
@@ -106,7 +108,16 @@ Images go in `public/static/images/<post-slug>/`.
 - **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** -- Git-backed visual editor at `/admin`
 - **[Vercel](https://vercel.com/)** -- Hosting with automatic deploys on push
 
-## DependenciesGhostpen has a strong dependency on [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra), which produces the structured artifacts the generator reads (decision records, daily standups, code reviews). EcoOrchestra is currently a private repository but may be made public in the future. If you are forking Ghostpen, you will need to either:- Set up your own EcoOrchestra instance (once it is public), or- Modify `scripts/generate_post.py` to read artifacts from your own source -- any directory of structured markdown files will workThe blog itself (Next.js, contentlayer, Sveltia CMS) has no dependency on EcoOrchestra. Only the generator script requires it.
+## Dependencies
+
+Ghostpen has a strong dependency on [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra), which produces the structured artifacts the generator reads (decision records, daily standups, code reviews).
+
+EcoOrchestra is currently a private repository but may be made public in the future. If you are forking Ghostpen, you will need to either:
+
+- Set up your own EcoOrchestra instance (once it is public), or
+- Modify `scripts/generate_post.py` to read artifacts from your own source -- any directory of structured markdown files will work
+
+The blog itself (Next.js, contentlayer, Sveltia CMS) has no dependency on EcoOrchestra. Only the generator script requires it.
 
 ## Credits
 

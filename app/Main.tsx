@@ -1,4 +1,5 @@
 import Link from '@/components/Link'
+import Image from '@/components/Image'
 import Tag from '@/components/Tag'
 import siteMetadata from '@/data/siteMetadata'
 import { formatDate } from 'pliny/utils/formatDate'
@@ -17,6 +18,33 @@ export default function Home({ posts }) {
           {/* <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">
             {siteMetadata.description}
           </p> */}
+        </div>
+        <div className="flex items-center gap-4 pb-8">
+          <Image
+            src="/static/images/avatar.png"
+            alt="Tim Yu"
+            width={64}
+            height={64}
+            className="h-16 w-16 rounded-full"
+          />
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Tim Yu</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Senior Software Engineer</p>
+            <div className="flex gap-3 pt-1">
+              <Link
+                href="https://github.com/tyu41275"
+                className="text-sm text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+              >
+                GitHub
+              </Link>
+              <Link
+                href="https://www.linkedin.com/in/yutim1275"
+                className="text-sm text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+              >
+                LinkedIn
+              </Link>
+            </div>
+          </div>
         </div>
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
           {!posts.length && 'No posts found.'}
