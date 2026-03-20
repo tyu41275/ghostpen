@@ -100,6 +100,17 @@ export default function PostLayout({ content, authorDetails, next, prev, childre
                   </ul>
                 </dd>
               </dl>
+              {aiGenerated && (
+                <div className="pt-4 text-sm text-gray-400 dark:text-gray-500">
+                  Written by{' '}
+                  <Link
+                    href="https://github.com/tyu41275/ghostpen"
+                    className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                  >
+                    Ghostpen
+                  </Link>
+                </div>
+              )}
             </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700 xl:col-span-3 xl:row-span-2 xl:pb-0">
               {aiGenerated && <AIGeneratedBanner />}
