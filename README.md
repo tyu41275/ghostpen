@@ -1,55 +1,59 @@
 # Ghostpen
 
-AI-powered blog that automatically drafts posts from development pipeline artifacts — standups, vision briefs, code reviews, and fix loops — in the author's writing style. Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
+AI-powered blog that automatically drafts posts from development pipeline artifacts -- standups, vision briefs, code reviews, and fix loops -- in the author's writing style. Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
 
 ## How it works
 
 ```
-EcoOrchestra pipeline    →   Post-ship hook     →   Generator script    →   Draft PR
+Pipeline artifacts       ->   Post-ship hook     ->   Generator script    ->   Draft PR
 (standups, vision briefs,    (fires after /ship,     (reads artifacts,       (draft: true .mdx,
- reviews, fix loops)          checks blog-worthy)     calls llm-router,       user reviews,
+ reviews, fix loops)          checks blog-worthy)     calls Anthropic API,    user reviews,
                                                       writes in your voice)   merges to publish)
 ```
 
 1. **You ship features** through the normal development pipeline
 2. **A post-ship hook** detects blog-worthy features (anything with a vision brief)
-3. **A generator script** reads the pipeline artifacts, loads a writing style guide, and calls [llm-router](https://github.com/tyu41275/llm-router) to draft a blog post
+3. **A generator script** reads the pipeline artifacts, loads a writing style guide, and calls the Anthropic API to draft a blog post
 4. **Playwright screenshots** captured at pipeline moments are included as visual evidence
-5. **A draft PR** is created — you review, edit via Sveltia CMS or code, and merge to publish
+5. **A draft PR** is created -- you review, edit via Sveltia CMS or code, and merge to publish
 
 AI-generated posts are transparently labeled with an `aiGenerated` frontmatter field and a banner on the post.
 
 ## Content
 
-- **Sitecore** — Hands-on troubleshooting posts from real client engagements (written by hand)
-- **AI** — Auto-generated posts about building AI-augmented development tools (drafted by AI, reviewed before publishing)
+- **Sitecore** -- Hands-on troubleshooting posts from real client engagements (written by hand)
+- **AI** -- Auto-generated posts about building AI-augmented development tools (drafted by AI, reviewed before publishing)
 
 ## Local development
 
 ```bash
-# Install dependencies — uses yarn (pinned to 3.6.1 via packageManager)
+# Install dependencies -- uses yarn (pinned to 3.6.1 via packageManager)
 yarn install
 
-# Start the dev server — runs Next.js on http://localhost:3000
+# Start the dev server -- runs Next.js on http://localhost:3000
 yarn dev
 
-# Production build — processes .mdx files via contentlayer, then builds Next.js
+# Production build -- processes .mdx files via contentlayer, then builds Next.js
 yarn build
 ```
 
 ## Generating a blog post
 
-Requires [llm-router](https://github.com/tyu41275/llm-router) running on localhost:8000.
+Requires an `ANTHROPIC_API_KEY` environment variable. Get one at [console.anthropic.com](https://console.anthropic.com/).
 
 ```bash
 # Generate a draft post for a shipped feature
 python scripts/generate_post.py --feature <feature-slug>
 
-# The feature slug must match a vision brief in EcoOrchestra
-# e.g. python scripts/generate_post.py --feature anthropic-failover-strategy
+# The feature slug must match a vision brief in your artifacts directory
+# e.g. python scripts/generate_post.py --feature anthropic-failover
 ```
 
-The script reads EcoOrchestra artifacts, generates a draft `.mdx` with `draft: true` and `aiGenerated: true`, copies screenshots, and opens a draft PR.
+The script reads pipeline artifacts, generates a draft `.mdx` with `draft: true` and `aiGenerated: true`, copies screenshots, and opens a draft PR.
+
+## Customizing your voice
+
+Replace `data/style-guide.md` with a style guide based on your own existing writing. The generator uses this file as the system prompt -- your voice, your patterns, your anti-patterns. The included style guide is specific to this blog's author and should be rewritten when forking.
 
 ## Editing posts
 
@@ -78,15 +82,15 @@ Images go in `public/static/images/<post-slug>/`.
 
 ## Stack
 
-- **[Next.js](https://nextjs.org/) 14** — React framework with App Router
-- **[Tailwind CSS](https://tailwindcss.com/)** — Utility-first CSS
-- **[contentlayer2](https://github.com/timlrx/contentlayer2)** — MDX content processing with type-safe frontmatter
-- **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** — Git-backed visual editor at `/admin`
-- **[Vercel](https://vercel.com/)** — Hosting with automatic deploys on push
+- **[Next.js](https://nextjs.org/) 14** -- React framework with App Router
+- **[Tailwind CSS](https://tailwindcss.com/)** -- Utility-first CSS
+- **[contentlayer2](https://github.com/timlrx/contentlayer2)** -- MDX content processing with type-safe frontmatter
+- **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** -- Git-backed visual editor at `/admin`
+- **[Vercel](https://vercel.com/)** -- Hosting with automatic deploys on push
 
 ## Part of the ecosystem
 
-Ghostpen consumes [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra) pipeline artifacts (standups, vision briefs, reviews). The generator script lives here; the post-ship hook lives in `~/.claude/hooks/`. EcoOrchestra stays generic and shareable.
+Ghostpen was built alongside [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra), an ecosystem orchestrator that produces the pipeline artifacts this blog consumes. The generator script lives here; the post-ship hook lives in `~/.claude/hooks/`. EcoOrchestra stays generic and shareable -- ghostpen is a consumer, not a dependency.
 
 ## Credits
 
