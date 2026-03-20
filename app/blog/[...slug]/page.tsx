@@ -35,7 +35,7 @@ export async function generateMetadata({
     const authorResults = allAuthors.find((p) => p.slug === author)
     return coreContent(authorResults as Authors)
   })
-  if (!post) {
+  if (!post || (isProduction && post.draft)) {
     return
   }
 
