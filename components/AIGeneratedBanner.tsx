@@ -7,7 +7,7 @@ const AIGeneratedBanner = () => {
       <span className="mr-1.5 inline-block text-gray-400 dark:text-gray-500" aria-hidden="true">
         &#9432;
       </span>
-      This post was AI-generated from development pipeline artifacts and reviewed by Tim Yu before
+      This post was AI-generated from development pipeline artifacts and reviewed by me before
       publishing.
     </div>
   )
