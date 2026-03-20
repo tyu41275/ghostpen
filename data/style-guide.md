@@ -140,3 +140,48 @@ Posts in the AI category differ from Sitecore posts in these ways:
 - **The investigation narrative comes from review findings and fix loops** — "The reviewer caught a bug where..." replaces "I took to Google to find out..."
 
 The voice, structure, and rejection criteria remain identical.
+
+## Delegator Voice -- How Tim Relates to AI-Built Code
+
+Tim's Sitecore posts come from hands-on debugging -- he wrote the code, he hit the error, he found the fix. The AI ecosystem posts are different. Tim directs work through an AI persona pipeline (/vision, /plan, /build, /review, /qa, /ship). He makes product decisions, architectural calls, and quality judgments. He does NOT write the implementation code.
+
+**Do NOT pretend Tim wrote code he directed.** The honest voice is architect/delegator, not hands-on coder.
+
+### Voice mapping (Sitecore vs AI posts)
+
+| Sitecore (hands-on)            | AI ecosystem (delegator)                              |
+| ------------------------------ | ----------------------------------------------------- |
+| "I ran the query"              | "The plan called for..."                              |
+| "I noticed something"          | "The review caught something"                         |
+| "I tried X but it didn't work" | "The first approach was X -- but it had a problem"    |
+| "I unchecked the checkbox"     | "The fix was to..."                                   |
+| "I took to Google"             | "I challenged the approach -- does this belong here?" |
+
+### What Tim actually does (center the narrative here)
+
+- **Product decisions**: "My instinct was to put failover in AutoAgent, but that would cross the abstraction boundary"
+- **Scope and planning**: "I replanned the feature because the first task breakdown was too vague -- 11 issues with no file paths"
+- **Review oversight**: "The reviewer found a thundering herd bug. Here is what that means and why it matters"
+- **Quality gates**: "The QA step caught that the banner was missing from two of the three layouts"
+- **Trade-off calls**: "We deferred TDD enforcement because the multi-language ecosystem makes strict enforcement impractical"
+
+### What makes this voice unique
+
+Everyone writes "I used AI to build X." Almost nobody writes "Here is how I direct an AI development pipeline -- what I delegate, what I review, what decisions I still make myself." That is the story only Tim can tell. The meta-story of directing AI agents IS the content.
+
+### Code snippets in delegator voice
+
+Still include code -- but frame it as "here is what was built" not "here is what I wrote":
+
+- "The circuit breaker ended up looking like this:" (not "I wrote the following:")
+- "The error classification function handles five categories:" (not "I started with a classification function:")
+- Show code to explain concepts, not to demonstrate personal authorship
+
+### Investigation narrative in delegator voice
+
+The investigation comes from DECISIONS, not debugging:
+
+- Why this feature, why now, why in this repo
+- What the review caught and why it mattered
+- How the plan changed when the first approach was wrong
+- What the pipeline's quality gates prevented from shipping

@@ -5,22 +5,22 @@ lastmod: '2026-03-20'
 tags: ['ai', 'dev-log', 'llm-router', 'circuit-breaker', 'failover']
 draft: true
 aiGenerated: true
-summary: 'How I shipped a circuit breaker with failover across llm-router and AutoAgent in 9 issues, and what the AI review caught that I would have missed.'
+summary: 'How I directed a circuit breaker feature across llm-router and AutoAgent using an AI development pipeline, and what the automated review caught before it hit production.'
 authors: ['default']
 images: []
 ---
 
 ## Introduction
 
-I have been building an AI agent called AutoAgent that watches gaming VODs and extracts knowledge from them using vision APIs. The whole pipeline runs through a library I wrote called [llm-router](https://github.com/tyu41275/llm-router), which handles multi-provider LLM routing for Anthropic, OpenAI, and Google. Anthropic has been my primary vision provider because they are the only ones that support batch processing, which cuts costs in half.
+I have been building an ecosystem of AI tools for analyzing gaming VODs. The core app, AutoAgent, watches video-on-demand recordings and extracts game knowledge using vision APIs. All LLM calls go through a shared library I built called [llm-router](https://github.com/tyu41275/llm-router), which routes requests across Anthropic, OpenAI, and Google based on rate limit headroom and cost.
 
-The problem? When Anthropic goes down with 500s, 529s, or the occasional 503, everything stops. The Watch phase cannot extract frames, the knowledge base does not grow, and the whole learning loop grinds to a halt.
+Anthropic has been the primary vision provider because they support batch processing -- 50% cost savings. But when their API goes down with 500s and 529s, the entire learning pipeline stops. I wanted graceful failover to OpenAI and Google so that when Anthropic is having a bad day, work continues on another provider.
 
-I wanted graceful failover so that when Anthropic is having a bad day, work continues on another provider. Sounds straightforward. It was not.
+This is the story of how that feature shipped -- nine issues across two repos, with an AI development pipeline doing the implementation while I made the architectural calls and reviewed the output.
 
-## The Problem
+## The Architectural Decision
 
-My first instinct was to handle failover in AutoAgent's WatchLoop -- just catch the exception and retry with a different provider. Something like:
+My first question was _where_ the failover logic belongs. The obvious place was AutoAgent's WatchLoop -- just catch the exception and retry with a different provider:
 
 ```python
 try:
@@ -30,21 +30,24 @@ except AnthropicError:
     response = await router.complete(request)
 ```
 
-But that would mean encoding provider-specific knowledge -- HTTP status codes, retry semantics -- above the abstraction boundary. AutoAgent submits `LLMRequest` objects and gets `LLMResponse` objects back. It should not need to know whether Anthropic is returning 529s or if OpenAI rate limit headers look different from Google's.
+I challenged that immediately. AutoAgent submits `LLMRequest` objects and gets `LLMResponse` objects back. It should not need to know whether Anthropic is returning 529s or if OpenAI's rate limit headers look different from Google's. That is provider-specific knowledge leaking above the abstraction boundary.
 
-So the circuit breaker had to go into llm-router. The router already selects providers based on rate limit headroom via `_select_provider()`. It already tracks errors per provider. It just did not _use_ that error signal to avoid sick providers.
+The circuit breaker had to go into llm-router. The router already selects providers based on rate limit headroom. It already tracks errors. It just did not _use_ that signal to avoid sick providers. The foundation was there -- it just needed the decision logic on top.
 
-Ok. So where exactly does the circuit breaker state live?
+## Planning -- And Replanning
 
-## Error Classification -- The Foundation
+The first pass at task breakdown produced 11 issues with titles like "Circuit breaker state + error classification on \_ProviderState." No explicit file paths, no verification steps, no acceptance criteria. Vague.
 
-Before the router can decide a provider is unhealthy, it needs to understand _what kind_ of error it is looking at. I started with a classification function:
+I scrapped them and replanned. The second attempt produced 9 issues -- 4 in llm-router, 5 in AutoAgent. Each issue was atomic: max 3 files, explicit file paths with reasons, verification commands, and acceptance criteria checkboxes. Two fewer issues but each one was actually completable without guessing at scope. The task boundaries mattered more than the task count.
+
+## What Got Built
+
+The implementation started with error classification -- before the router can make health decisions, it needs to know what kind of error it is looking at. The classification function handles five categories:
 
 ```python
 def _classify_error(exc):
-    # Timeouts are their own category -- not a server failure
-    timeout_types = ("TimeoutError", "APITimeoutError", "DeadlineExceeded")
-    if type(exc).__name__ in timeout_types:
+    # Timeouts -- not a server failure, different handling
+    if type(exc).__name__ in ("TimeoutError", "APITimeoutError", "DeadlineExceeded"):
         return "timeout", None
 
     status_code = getattr(exc, "status_code", None)
@@ -57,13 +60,9 @@ def _classify_error(exc):
     return "unknown", status_code
 ```
 
-A 500 is a server error -- the provider is sick. A 429 is a rate limit -- already handled. A 400 is a client error -- retrying will not help, so it should not count toward the circuit breaker. I wrote 30 tests for this, TDD style, red-green.
+A 500 means the provider is sick. A 429 is a rate limit -- already handled. A 400 is a client error -- retrying will not fix bad input. 30 tests cover these categories.
 
-The review immediately caught something I missed. I had `DeadlineExceeded` classified as a server error. But it is actually a timeout -- the request did not fail on the server side, it just took too long. Different classification, different circuit breaker behavior. Small distinction, big difference if you are making health decisions based on it.
-
-## The Circuit Breaker
-
-The breaker state lives on `_ProviderState` -- the per-provider tracking object that already existed for rate limit headroom:
+The circuit breaker state ended up on `_ProviderState`, which already tracked rate limit headroom:
 
 ```python
 class _ProviderState:
@@ -71,61 +70,50 @@ class _ProviderState:
     COOLDOWN_SECONDS = 300  # 5 minutes, fixed
 
     def __init__(self, provider):
-        self.provider = provider
         self.consecutive_errors = 0
         self.unhealthy_since = None
         self.half_open_lock = False
-
-    def _is_half_open(self):
-        if self.unhealthy_since is None:
-            return False
-        return (time.time() - self.unhealthy_since) >= self.COOLDOWN_SECONDS
 ```
 
-Three consecutive failures and the provider gets marked unhealthy. After a 5-minute cooldown, it enters half-open state -- one probe request gets through to test if the provider has recovered.
+Three consecutive failures marks the provider unhealthy. After a 5-minute cooldown, one probe request tests recovery. Simple on paper.
 
-Sounds clean, right? The review found four critical issues in this code alone.
+## What the Review Caught
 
-## The Bugs the Review Caught
+This is where directing an AI pipeline pays for itself. The automated review step -- a separate model with fresh eyes -- found four critical issues that the developer agent missed.
 
-**Thundering herd on the probe.** When a provider's cooldown expires, `_select_provider()` checks `_is_half_open()` and sends a probe request. But in a concurrent system, multiple requests could all see half-open as true simultaneously and all send probes at once -- hammering a recovering provider with a burst of traffic. Ok. That is not good.
-
-The fix was a lock boolean:
+**Thundering herd on the probe.** When a provider's cooldown expires, `_select_provider()` allows a probe request through. But in a concurrent system, multiple requests could all see the provider as ready-to-probe simultaneously and all send probes at once. That is the exact opposite of "gentle recovery." The fix was a lock boolean:
 
 ```python
-for state in self._states:
-    if state._is_half_open() and not state.half_open_lock:
-        state.half_open_lock = True   # Only one probe at a time
-        return state, False, None
+if state._is_half_open() and not state.half_open_lock:
+    state.half_open_lock = True   # One probe at a time
+    return state, False, None
 ```
 
-This works because `_select_provider()` is synchronous -- no `await` points, so the check-then-set is atomic under asyncio. I almost reached for `asyncio.Lock` before realizing that was overkill for a synchronous code path.
+**Cooldown reset bug.** Each new error was resetting `unhealthy_since` to the current timestamp, which meant the 5-minute cooldown kept restarting under sustained failures. A provider that was truly down would _never_ get a recovery probe. The fix: only set the timestamp on the transition from healthy to unhealthy.
 
-**Cooldown reset bug.** Every time a new error came in while the provider was already unhealthy, I was resetting `unhealthy_since` to the current timestamp. This meant the 5-minute cooldown kept restarting, and a provider under sustained load would _never_ get a recovery probe. The fix: only set `unhealthy_since` on the transition from healthy to unhealthy, not on subsequent errors.
+**Interleaved error ambiguity.** A successful response on provider B was clearing provider A's consecutive error count. Each provider's health is independent -- a success on one tells you nothing about the other.
 
-**Interleaved error ambiguity.** If provider A fails and then provider B succeeds, should B's success reset A's consecutive error count? Obviously not -- each provider's counter is independent. But I had a code path where a successful response on _any_ provider was clearing `consecutive_errors` globally. That would have been a subtle, hard-to-reproduce bug in production.
+**Unbounded counter.** Minor, but `consecutive_errors` had no cap. Capped it at the threshold value.
 
-**Unbounded counter.** `consecutive_errors` just kept incrementing. Not a bug in practice since we only check `>= BREAKER_THRESHOLD`, but the reviewer flagged it as a correctness issue. I capped it at the threshold value. Fair enough.
+These are the kind of bugs you only discover under production load. The review step caught them in code review, before a single request hit the circuit breaker. That is 8 critical issues across two tasks, all resolved before shipping.
 
-## Wiring It Into AutoAgent
+## The AutoAgent Side
 
-With 84 tests passing in llm-router, the AutoAgent side was mostly plumbing. Database migration added `provider_used` and `was_failover` columns to the jobs table:
+With 84 tests passing in llm-router, the AutoAgent integration was straightforward plumbing:
 
 ```sql
 ALTER TABLE jobs ADD COLUMN provider_used TEXT;
 ALTER TABLE jobs ADD COLUMN was_failover BOOLEAN DEFAULT FALSE;
 ```
 
-The WatchLoop now aggregates which providers served which frames in a batch. And `create_router()` always includes fallback providers -- before this change, it only configured the one you selected in the UI.
-
-The UI work was three tasks: a health endpoint (`GET /api/provider-health`), provider badges on job cards showing which provider served the response, and colored dots in the header showing each provider's circuit breaker state. All clean passes -- no fix loops on any of the frontend tasks. Cool!
+The WatchLoop aggregates provider attribution across a batch. The UI shows which provider served each job with colored health dots in the header. All five AutoAgent tasks shipped without fix loops -- clean passes through review and QA.
 
 ## What I Learned
 
-The review step caught 8 critical issues across the first two tasks. The thundering herd bug in particular is the kind of thing you would only discover under load, and by then it is causing the exact cascading failure the circuit breaker was supposed to prevent.
+The review step is the most valuable part of this pipeline. I made the architectural decisions -- where the circuit breaker lives, how errors are classified, what the threshold should be. But I did not catch the thundering herd bug, the cooldown reset, or the interleaved error ambiguity. A separate model reviewing with fresh eyes did. That is the same reason I use a different model for review than for development -- familiarity blinds you to your own mistakes.
 
-The replanning was also worth calling out. My first task breakdown produced 11 issues with vague descriptions -- titles like "Circuit breaker state + error classification on \_ProviderState" that bundled multiple concerns. No file paths, no verification steps. The second attempt produced 9 issues with explicit file paths, verification commands, and acceptance criteria. Fewer issues, but each one was actually completable without guessing at scope.
+The replanning was also a lesson. Vague task specs produce vague implementations. When the plan has explicit file paths and verification commands, the developer agent builds exactly what was scoped. When the plan says "implement circuit breaker," you get something that works in the happy path but misses edge cases.
 
 ## Conclusion
 
-The circuit breaker is live. When Anthropic goes down, the router switches providers automatically. When it recovers, a half-open probe verifies before routing traffic back. And the whole thing is transparent -- you can see which provider served each job and whether failover was involved.
+The circuit breaker is live. When Anthropic goes down, the router switches providers automatically. When it recovers, a half-open probe verifies before routing traffic back. And the whole thing is transparent -- the UI shows which provider served each request and whether failover was involved.
