@@ -210,3 +210,15 @@ Every ecosystem project referenced in a feature post must have a foundation post
 ### Adding new projects
 
 When a new project joins the ecosystem, add it to the table above and write a foundation post before any feature post references it.
+
+### Strict linking rule
+
+**Every mention of an ecosystem project name in ANY post (foundation or feature) must be a hyperlink to that project's foundation post.** No plain-text project names. If the project does not have a foundation post yet, do not mention it by name -- describe it generically (e.g., "a live stream monitoring tool" instead of "StreamWatcher").
+
+This applies to:
+
+- Feature posts linking to foundations
+- Foundation posts cross-linking to each other
+- Any post referencing any ecosystem project
+
+The only exception is frontmatter fields (title, summary) where markdown links are not rendered.

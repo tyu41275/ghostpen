@@ -69,7 +69,7 @@ The consuming application gets immediate results for a subset while the bulk pro
 
 ## The HTTP API
 
-llm-router started as a Python library consumed via `pip install`. But when I needed to use it from a TypeScript project (StreamWatcher), I could not import a Python module from Node.js.
+llm-router started as a Python library consumed via `pip install`. But when I needed to use it from a TypeScript project (a live stream monitoring tool), I could not import a Python module from Node.js.
 
 The solution was a FastAPI HTTP server that wraps the routing engine:
 
@@ -89,7 +89,7 @@ The server also exposes `GET /provider-health` which reports each provider's cir
 
 ## Current State
 
-As of March 2026, llm-router has 124 tests across error classification, circuit breaker, rate limiting, provider selection, and the HTTP API. It is consumed by AutoAgent (as a pip dependency) and will be consumed by StreamWatcher (via the HTTP API) once that integration is built.
+As of March 2026, llm-router has 124 tests across error classification, circuit breaker, rate limiting, provider selection, and the HTTP API. It is consumed by [AutoAgent](/blog/2026-03-17-what-is-autoagent) (as a pip dependency) and will be consumed by a TypeScript project (via the HTTP API) once that integration is built.
 
 ## Conclusion
 

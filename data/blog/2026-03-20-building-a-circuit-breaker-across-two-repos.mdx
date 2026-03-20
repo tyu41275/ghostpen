@@ -12,7 +12,7 @@ images: []
 
 ## Introduction
 
-I have been building an ecosystem of AI tools for analyzing gaming VODs. The core app, AutoAgent, watches video-on-demand recordings and extracts game knowledge using vision APIs. All LLM calls go through a shared library I built called [llm-router](/blog/2026-03-16-what-is-llm-router), which routes requests across Anthropic, OpenAI, and Google based on rate limit headroom and cost.
+I have been building an ecosystem of AI tools for analyzing gaming VODs. The core app, [AutoAgent](/blog/2026-03-17-what-is-autoagent), watches video-on-demand recordings and extracts game knowledge using vision APIs. All LLM calls go through a shared library I built called [llm-router](/blog/2026-03-16-what-is-llm-router), which routes requests across Anthropic, OpenAI, and Google based on rate limit headroom and cost.
 
 Anthropic has been the primary vision provider because they support batch processing -- 50% cost savings. But when their API goes down with 500s and 529s, the entire learning pipeline stops. I wanted graceful failover to OpenAI and Google so that when Anthropic is having a bad day, work continues on another provider.
 
@@ -20,7 +20,7 @@ This is the story of how that feature shipped -- nine issues across two repos, w
 
 ## The Architectural Decision
 
-My first question was _where_ the failover logic belongs. The obvious place was AutoAgent's WatchLoop -- just catch the exception and retry with a different provider:
+My first question was _where_ the failover logic belongs. The obvious place was [AutoAgent](/blog/2026-03-17-what-is-autoagent)'s WatchLoop -- just catch the exception and retry with a different provider:
 
 ```python
 try:
@@ -30,7 +30,7 @@ except AnthropicError:
     response = await router.complete(request)
 ```
 
-I challenged that immediately. AutoAgent submits `LLMRequest` objects and gets `LLMResponse` objects back. It should not need to know whether Anthropic is returning 529s or if OpenAI's rate limit headers look different from Google's. That is provider-specific knowledge leaking above the abstraction boundary.
+I challenged that immediately. [AutoAgent](/blog/2026-03-17-what-is-autoagent) submits `LLMRequest` objects and gets `LLMResponse` objects back. It should not need to know whether Anthropic is returning 529s or if OpenAI's rate limit headers look different from Google's. That is provider-specific knowledge leaking above the abstraction boundary.
 
 The circuit breaker had to go into llm-router. The router already selects providers based on rate limit headroom. It already tracks errors. It just did not _use_ that signal to avoid sick providers. The foundation was there -- it just needed the decision logic on top.
 
@@ -38,7 +38,7 @@ The circuit breaker had to go into llm-router. The router already selects provid
 
 The first pass at task breakdown produced 11 issues with titles like "Circuit breaker state + error classification on \_ProviderState." No explicit file paths, no verification steps, no acceptance criteria. Vague.
 
-I scrapped them and replanned. The second attempt produced 9 issues -- 4 in llm-router, 5 in AutoAgent. Each issue was atomic: max 3 files, explicit file paths with reasons, verification commands, and acceptance criteria checkboxes. Two fewer issues but each one was actually completable without guessing at scope. The task boundaries mattered more than the task count.
+I scrapped them and replanned. The second attempt produced 9 issues -- 4 in llm-router, 5 in [AutoAgent](/blog/2026-03-17-what-is-autoagent). Each issue was atomic: max 3 files, explicit file paths with reasons, verification commands, and acceptance criteria checkboxes. Two fewer issues but each one was actually completable without guessing at scope. The task boundaries mattered more than the task count.
 
 ## What Got Built
 
@@ -97,16 +97,16 @@ if state._is_half_open() and not state.half_open_lock:
 
 These are the kind of bugs you only discover under production load. The review step caught them in code review, before a single request hit the circuit breaker. That is 8 critical issues across two tasks, all resolved before shipping.
 
-## The AutoAgent Side
+## The [AutoAgent](/blog/2026-03-17-what-is-autoagent) Side
 
-With 84 tests passing in llm-router, the AutoAgent integration was straightforward plumbing:
+With 84 tests passing in llm-router, the [AutoAgent](/blog/2026-03-17-what-is-autoagent) integration was straightforward plumbing:
 
 ```sql
 ALTER TABLE jobs ADD COLUMN provider_used TEXT;
 ALTER TABLE jobs ADD COLUMN was_failover BOOLEAN DEFAULT FALSE;
 ```
 
-The WatchLoop aggregates provider attribution across a batch. The UI shows which provider served each job with colored health dots in the header. All five AutoAgent tasks shipped without fix loops -- clean passes through review and QA.
+The WatchLoop aggregates provider attribution across a batch. The UI shows which provider served each job with colored health dots in the header. All five [AutoAgent](/blog/2026-03-17-what-is-autoagent) tasks shipped without fix loops -- clean passes through review and QA.
 
 ## What I Learned
 
