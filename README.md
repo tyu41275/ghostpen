@@ -1,28 +1,41 @@
 # Ghostpen
 
-AI-powered blog that automatically drafts posts from development pipeline artifacts -- standups, vision briefs, code reviews, and fix loops -- in the author's writing style. Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
+A blog that automatically drafts posts from your development work -- using AI to turn structured artifacts (decision records, daily logs, code reviews) into blog posts written in your voice.
+
+Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
+
+## The idea
+
+Developers solve interesting problems every day but rarely write about them. The context is fresh during development but stale by the time you sit down to blog. Ghostpen captures that context automatically and drafts posts while the details are still there.
+
+It works by reading structured artifacts that your development process produces -- things like:
+
+- **Decision records** -- why you chose approach A over B, what trade-offs you considered
+- **Daily logs** -- what you built, what broke, what you learned
+- **Code reviews** -- what bugs were caught, what patterns were flagged
+- **Screenshots** -- captured automatically at key moments (build start, review findings, QA pass)
+
+A generator script feeds these artifacts plus a writing style guide to an LLM, which drafts a blog post in your voice. The draft lands as a pull request for you to review and edit before publishing.
 
 ## How it works
 
 ```
-Pipeline artifacts       ->   Post-ship hook     ->   Generator script    ->   Draft PR
-(standups, vision briefs,    (fires after /ship,     (reads artifacts,       (draft: true .mdx,
- reviews, fix loops)          checks blog-worthy)     calls Anthropic API,    user reviews,
-                                                      writes in your voice)   merges to publish)
+Your dev artifacts     ->   Generator script    ->   Draft PR        ->   Published post
+(decision records,         (reads artifacts,        (draft: true,        (you review,
+ daily logs, reviews,       loads style guide,       opens PR)            flip draft flag,
+ screenshots)               calls Anthropic API)                          Vercel deploys)
 ```
 
-1. **You ship features** through the normal development pipeline
-2. **A post-ship hook** detects blog-worthy features (anything with a vision brief)
-3. **A generator script** reads the pipeline artifacts, loads a writing style guide, and calls the Anthropic API to draft a blog post
-4. **Playwright screenshots** captured at pipeline moments are included as visual evidence
-5. **A draft PR** is created -- you review, edit via Sveltia CMS or code, and merge to publish
+The generator can be triggered manually (`python scripts/generate_post.py --feature <slug>`) or by a post-ship hook that fires after you merge a PR. It only generates posts for features that have a decision record -- the heuristic for "this is worth writing about."
 
 AI-generated posts are transparently labeled with an `aiGenerated` frontmatter field and a banner on the post.
 
 ## Content
 
+This blog has two categories:
+
 - **Sitecore** -- Hands-on troubleshooting posts from real client engagements (written by hand)
-- **AI** -- Auto-generated posts about building AI-augmented development tools (drafted by AI, reviewed before publishing)
+- **AI** -- Posts about building AI-augmented development tools (drafted by AI from development artifacts, reviewed before publishing)
 
 ## Local development
 
@@ -44,12 +57,17 @@ Requires an `ANTHROPIC_API_KEY` environment variable. Get one at [console.anthro
 ```bash
 # Generate a draft post for a shipped feature
 python scripts/generate_post.py --feature <feature-slug>
-
-# The feature slug must match a vision brief in your artifacts directory
-# e.g. python scripts/generate_post.py --feature anthropic-failover
 ```
 
-The script reads pipeline artifacts, generates a draft `.mdx` with `draft: true` and `aiGenerated: true`, copies screenshots, and opens a draft PR.
+The feature slug must match a decision record in your artifacts directory. The script reads the artifacts, generates a draft `.mdx` with `draft: true` and `aiGenerated: true`, copies any associated screenshots, and opens a draft PR.
+
+### What are artifacts?
+
+Artifacts are structured files your development process produces. Ghostpen was built alongside an AI development pipeline that generates these naturally, but you can adapt the generator to read whatever your workflow produces -- commit messages, PR descriptions, Notion docs, or plain markdown notes. The key is that the source material is structured and machine-readable.
+
+### Configuring the artifacts directory
+
+By default, the generator looks for artifacts in `C:/Repos/EcoOrchestra` (the development pipeline this blog was built with). Set the `ECOORCHESTRA_DIR` environment variable to point to your own artifacts directory, or modify `scripts/generate_post.py` to read from your preferred source.
 
 ## Customizing your voice
 
@@ -58,7 +76,7 @@ Replace `data/style-guide.md` with a style guide based on your own existing writ
 ## Editing posts
 
 - **Code:** Edit `.mdx` files directly in `data/blog/`
-- **CMS:** Navigate to `/admin` on the deployed site for a visual editor powered by [Sveltia CMS](https://github.com/sveltia/sveltia-cms) (requires GitHub OAuth setup via Cloudflare Worker)
+- **CMS:** Navigate to `/admin` on the deployed site for a visual editor powered by [Sveltia CMS](https://github.com/sveltia/sveltia-cms) -- a git-backed editor that commits changes directly to your repo (requires one-time GitHub OAuth setup via a Cloudflare Worker)
 
 ## Writing a post manually
 
@@ -87,10 +105,6 @@ Images go in `public/static/images/<post-slug>/`.
 - **[contentlayer2](https://github.com/timlrx/contentlayer2)** -- MDX content processing with type-safe frontmatter
 - **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** -- Git-backed visual editor at `/admin`
 - **[Vercel](https://vercel.com/)** -- Hosting with automatic deploys on push
-
-## Part of the ecosystem
-
-Ghostpen was built alongside [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra), an ecosystem orchestrator that produces the pipeline artifacts this blog consumes. The generator script lives here; the post-ship hook lives in `~/.claude/hooks/`. EcoOrchestra stays generic and shareable -- ghostpen is a consumer, not a dependency.
 
 ## Credits
 
