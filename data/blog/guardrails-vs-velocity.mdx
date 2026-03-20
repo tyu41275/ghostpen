@@ -1,11 +1,17 @@
 ---
 title: 'Guardrails vs Velocity: Two Philosophies for AI-Assisted Development'
-date: '2026-03-20'
-tags: ['ai', 'patterns', 'architecture', 'dev-log']
+date: 2026-03-20
+lastmod: ''
+tags:
+  - ai
+  - patterns
+  - architecture
+  - dev-log
 draft: true
-summary: 'EcoOrchestra governs every step. Ralph ships every loop. Both work. The question is which failure mode you fear more.'
 aiGenerated: true
-authors: ['default']
+summary: EcoOrchestra governs every step. Ralph ships every loop. Both work. The question is which failure mode you fear more.
+authors:
+  - default
 ---
 
 ## Introduction
@@ -136,17 +142,17 @@ No personas. No review handoff. No vision gates. Quality comes from the acceptan
 
 ## The Comparison
 
-| Dimension            | EcoOrchestra (Governance)                 | Ralph (Velocity)                                    |
-| -------------------- | ----------------------------------------- | --------------------------------------------------- |
-| **Optimizes for**    | Correctness across a complex ecosystem    | Shipping speed on focused tasks                     |
-| **Context model**    | Long-lived personas, persistent state     | Fresh context every iteration                       |
-| **Quality gates**    | Multi-persona review + visual QA          | Tests + typecheck + acceptance criteria             |
-| **Orchestration**    | Sequential pipeline with fix loops        | Autonomous bash loop                                |
-| **Human role**       | Architect and delegator                   | Task definer                                        |
-| **Memory strategy**  | Vision briefs, standups, review artifacts | progress.txt, AGENTS.md, git history                |
-| **Task granularity** | Atomic specs with file paths              | User stories with acceptance criteria               |
-| **Failure mode**     | Over-governance -- too slow, too cautious | Under-governance -- ships bugs, misses architecture |
-| **Sweet spot**       | Multi-repo ecosystems with dependencies   | Single-repo features with good test coverage        |
+| Dimension | EcoOrchestra (Governance) | Ralph (Velocity) |
+| --- | --- | --- |
+| **Optimizes for** | Correctness across a complex ecosystem | Shipping speed on focused tasks |
+| **Context model** | Long-lived personas, persistent state | Fresh context every iteration |
+| **Quality gates** | Multi-persona review + visual QA | Tests + typecheck + acceptance criteria |
+| **Orchestration** | Sequential pipeline with fix loops | Autonomous bash loop |
+| **Human role** | Architect and delegator | Task definer |
+| **Memory strategy** | Vision briefs, standups, review artifacts | progress.txt, AGENTS.md, git history |
+| **Task granularity** | Atomic specs with file paths | User stories with acceptance criteria |
+| **Failure mode** | Over-governance -- too slow, too cautious | Under-governance -- ships bugs, misses architecture |
+| **Sweet spot** | Multi-repo ecosystems with dependencies | Single-repo features with good test coverage |
 
 Neither column is objectively better. They are responses to different failure modes.
 
