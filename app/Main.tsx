@@ -22,13 +22,13 @@ export default function Home({ posts }) {
         <div className="flex items-center gap-4 pb-8">
           <Image
             src="/static/images/avatar.png"
-            alt="Tim Yu"
+            alt="Tim"
             width={64}
             height={64}
             className="h-16 w-16 rounded-full"
           />
           <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Tim Yu</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Tim</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">Senior Software Engineer</p>
             <div className="flex gap-3 pt-1">
               <Link

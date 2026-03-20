@@ -1,7 +1,7 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
   title: 'Posts',
-  author: 'Tim Yu',
+  author: 'Tim',
   headerTitle: 'Posts',
   description: 'A blog created with Next.js and Tailwind.css',
   language: 'en-us',
