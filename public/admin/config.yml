@@ -2,6 +2,7 @@ backend:
   name: github
   repo: tyu41275/ghostpen
   branch: main
+  base_url: https://sveltia-cms-auth.tyu41275.workers.dev
 
 media_folder: public/static/images
 public_folder: /static/images
