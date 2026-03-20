@@ -2028,13 +2028,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fortawesome/fontawesome-free@npm:^6.0.0":
-  version: 6.7.2
-  resolution: "@fortawesome/fontawesome-free@npm:6.7.2"
-  checksum: 2ceb384ada8e4a1e8a8e24384a35e3afa01589ddec67c8c52e3ad5d7db1662d0fc92560bd9a23baa4e0676e721e423aef99fb79fe6899bf13900fd1e611b6760
-  languageName: node
-  linkType: hard
-
 "@gar/promise-retry@npm:^1.0.0":
   version: 1.0.3
   resolution: "@gar/promise-retry@npm:1.0.3"
@@ -6573,31 +6566,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fsevents@npm:2.3.2":
-  version: 2.3.2
-  resolution: "fsevents@npm:2.3.2"
-  dependencies:
-    node-gyp: latest
-  checksum: 97ade64e75091afee5265e6956cb72ba34db7819b4c3e94c431d4be2b19b8bb7a2d4116da417950c3425f17c8fe693d25e20212cac583ac1521ad066b77ae31f
-  conditions: os=darwin
-  languageName: node
-  linkType: hard
-
 "fsevents@npm:~2.3.2":
   version: 2.3.3
   resolution: "fsevents@npm:2.3.3"
   dependencies:
     node-gyp: latest
   checksum: 11e6ea6fea15e42461fc55b4b0e4a0a3c654faa567f1877dbd353f39156f69def97a69936d1746619d656c4b93de2238bf731f6085a03a50cabf287c9d024317
-  conditions: os=darwin
-  languageName: node
-  linkType: hard
-
-"fsevents@patch:fsevents@2.3.2#~builtin<compat/fsevents>":
-  version: 2.3.2
-  resolution: "fsevents@patch:fsevents@npm%3A2.3.2#~builtin<compat/fsevents>::version=2.3.2&hash=df0bf1"
-  dependencies:
-    node-gyp: latest
   conditions: os=darwin
   languageName: node
   linkType: hard
@@ -8636,23 +8610,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mermaid-isomorphic@npm:^3.0.0":
-  version: 3.1.0
-  resolution: "mermaid-isomorphic@npm:3.1.0"
-  dependencies:
-    "@fortawesome/fontawesome-free": ^6.0.0
-    katex: ^0.16.0
-    mermaid: ^11.0.0
-  peerDependencies:
-    playwright: 1
-  peerDependenciesMeta:
-    playwright:
-      optional: true
-  checksum: a1e9a1a3b1dfcd336054eab4143654340ebd975ad091fcf30a1b2e6113effa8816224f6bdd37df7a8b1b0876568e8e1a2e8457e90d644f49be29ca2b9612996d
-  languageName: node
-  linkType: hard
-
-"mermaid@npm:^11.0.0":
+"mermaid@npm:^11.13.0":
   version: 11.13.0
   resolution: "mermaid@npm:11.13.0"
   dependencies:
@@ -9211,7 +9169,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mini-svg-data-uri@npm:^1.0.0, mini-svg-data-uri@npm:^1.2.3":
+"mini-svg-data-uri@npm:^1.2.3":
   version: 1.4.4
   resolution: "mini-svg-data-uri@npm:1.4.4"
   bin:
@@ -10036,30 +9994,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright-core@npm:1.58.2":
-  version: 1.58.2
-  resolution: "playwright-core@npm:1.58.2"
-  bin:
-    playwright-core: cli.js
-  checksum: fd8c4c6658b80f5db90af36db9f560e7bf461f704d0ffe706e8858570af0321312fff9c44a5ee49552df3e3cce981e1f8dd9e8b09e6d7bdd62e094639b68bddd
-  languageName: node
-  linkType: hard
-
-"playwright@npm:^1.58.2":
-  version: 1.58.2
-  resolution: "playwright@npm:1.58.2"
-  dependencies:
-    fsevents: 2.3.2
-    playwright-core: 1.58.2
-  dependenciesMeta:
-    fsevents:
-      optional: true
-  bin:
-    playwright: cli.js
-  checksum: 3536138633135bdd62eb3aa63c653036b944fbb6fb2d57f4d936baaad9d706c11bde13ef11b307677fba061bad2f4ad68256f84978cc9280667437d1106d12e6
-  languageName: node
-  linkType: hard
-
 "pliny@npm:0.2.0":
   version: 0.2.0
   resolution: "pliny@npm:0.2.0"
@@ -10670,28 +10604,6 @@ __metadata:
     unist-util-visit-parents: ^6.0.0
     vfile: ^6.0.0
   checksum: d8f90f2b481fcf8a922410b812dbaed253a488bf61f4981b7b37d4983845060c1fcefb1690063e31ecfb941fb6ef6858e1a044e2f8c6146687266df1f6423a7b
-  languageName: node
-  linkType: hard
-
-"rehype-mermaid@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "rehype-mermaid@npm:3.0.0"
-  dependencies:
-    "@types/hast": ^3.0.0
-    hast-util-from-html-isomorphic: ^2.0.0
-    hast-util-to-text: ^4.0.0
-    mermaid-isomorphic: ^3.0.0
-    mini-svg-data-uri: ^1.0.0
-    space-separated-tokens: ^2.0.0
-    unified: ^11.0.0
-    unist-util-visit-parents: ^6.0.0
-    vfile: ^6.0.0
-  peerDependencies:
-    playwright: 1
-  peerDependenciesMeta:
-    playwright:
-      optional: true
-  checksum: b969882c1fdbebafba9c87f821ae7ef3f3713bd7366297efb8d3e114c5534ef5d459397bc63ef6033291c6654f8e60f5c5aed4deee1890a1220ef2ae4d347af3
   languageName: node
   linkType: hard
 
@@ -12023,10 +11935,10 @@ __metadata:
     husky: ^9.0.0
     image-size: 1.0.0
     lint-staged: ^13.0.0
+    mermaid: ^11.13.0
     next: 14.1.4
     next-contentlayer2: 0.4.4
     next-themes: ^0.3.0
-    playwright: ^1.58.2
     pliny: 0.2.0
     postcss: ^8.4.24
     prettier: ^3.0.0
@@ -12037,7 +11949,6 @@ __metadata:
     rehype-autolink-headings: ^7.1.0
     rehype-citation: ^2.0.0
     rehype-katex: ^7.0.0
-    rehype-mermaid: ^3.0.0
     rehype-preset-minify: 7.0.0
     rehype-prism-plus: ^2.0.0
     rehype-slug: ^6.0.0
