@@ -1,3 +1,5 @@
+import Link from './Link'
+
 const AIGeneratedBanner = () => {
   return (
     <div
@@ -7,8 +9,14 @@ const AIGeneratedBanner = () => {
       <span className="mr-1.5 inline-block text-gray-400 dark:text-gray-500" aria-hidden="true">
         &#9432;
       </span>
-      This post was AI-generated from development pipeline artifacts and reviewed by me before
-      publishing.
+      This post was AI-generated from{' '}
+      <Link
+        href="/blog/2026-03-15-what-is-ecoorchestra"
+        className="underline decoration-gray-400 underline-offset-2 hover:text-gray-800 dark:decoration-gray-500 dark:hover:text-gray-300"
+      >
+        development pipeline artifacts
+      </Link>{' '}
+      and reviewed by me before publishing.
     </div>
   )
 }
