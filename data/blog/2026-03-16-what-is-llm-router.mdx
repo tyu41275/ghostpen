@@ -14,7 +14,7 @@ images: []
 
 When I started building AI tools, I was making API calls directly to Anthropic. Then I needed OpenAI for cheaper vision analysis. Then Google for their Gemini Flash model. Each provider has different SDKs, different rate limit headers, different error formats, and different pricing. I was duplicating provider-specific logic across projects and it was getting messy.
 
-llm-router was my answer to that. It is a Python library that sits between my applications and the LLM providers. Applications submit `LLMRequest` objects and get `LLMResponse` objects back. They never touch provider-specific APIs. The router handles provider selection, rate limit tracking, batching, and cost normalization behind a clean abstraction.
+llm-router was my answer to that. (The repo is currently private but may be made public in the future.) It is a Python library that sits between my applications and the LLM providers. Applications submit `LLMRequest` objects and get `LLMResponse` objects back. They never touch provider-specific APIs. The router handles provider selection, rate limit tracking, batching, and cost normalization behind a clean abstraction.
 
 ## The Core Abstraction
 

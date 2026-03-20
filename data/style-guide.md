@@ -235,3 +235,16 @@ Foundation posts ("What is X") must go beyond describing what the project does. 
 3. **The "why" behind constraints** -- if the project enforces rules or limitations, explain why. "The pipeline is not optional" is a claim. "The few times I tried to skip steps, the pipeline caught issues I would have shipped" is a justification.
 
 These requirements prevent foundation posts from being shallow feature lists. The goal is to help a reader understand the thinking, not just the tooling.
+
+### Repository visibility disclosure
+
+Every foundation post must state whether the project's repo is public or private. Place this parenthetically near the first mention of the project name.
+
+| Project      | Visibility | Disclosure                                                               |
+| ------------ | ---------- | ------------------------------------------------------------------------ |
+| Ghostpen     | Public     | Link to repo: `[source on GitHub](https://github.com/tyu41275/ghostpen)` |
+| EcoOrchestra | Private    | "(The repo is currently private but may be made public in the future.)"  |
+| llm-router   | Private    | "(The repo is currently private but may be made public in the future.)"  |
+| AutoAgent    | Private    | "(The repo is currently private but may be made public in the future.)"  |
+
+Update this table when repo visibility changes. When a repo goes public, replace the parenthetical with a GitHub link.
