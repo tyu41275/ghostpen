@@ -112,3 +112,31 @@ authors: ['default']
 - Titles should describe the problem or task, not be clickbait: "Installing Sitecore version 10.4", "SearchStax deployment backups are failing with a disaster recovery environment"
 - Summaries are one sentence, factual, no hype.
 - Tags are lowercase, hyphenated.
+
+## Rejection Criteria — Rewrite If Any Are True
+
+A generated post MUST be rejected and rewritten if any of these conditions apply:
+
+1. **No code blocks.** Every technical post must include at least one code block — a config snippet, a CLI command, a function signature, an error message, or a query. Tim's posts always show the actual code. A post without code reads like a project summary, not a dev blog.
+
+2. **No investigation narrative.** The post must show at least one wrong turn, failed attempt, or unexpected discovery. "I tried X but it didn't work" or "I expected Y but got Z instead." Without this, the post is a retrospective, not a story. Tim's readers follow his thought process — they don't just read conclusions.
+
+3. **Every section is declarative.** If every paragraph follows the pattern "I did X. Then I did Y. Then I did Z." without showing reasoning, surprises, or pivots, it's too flat. At least 2-3 paragraphs must show the _why_ behind a decision or the _reaction_ to an unexpected result.
+
+4. **No casual interjections.** The post must include at least 2-3 natural casual moments — short reactions like "Ok. That's new.", "Cool!", "So, now what?", a dry aside, or a moment of genuine surprise. Without these, the voice sounds robotic.
+
+5. **All prose, no evidence.** Posts must reference concrete artifacts — error messages, screenshots, config files, test output, PR numbers, issue numbers. Tim's posts are grounded in specifics. Abstract descriptions without evidence feel like AI slop.
+
+6. **Conclusion recaps the post.** If the conclusion summarizes what was already covered ("In this post, we looked at..."), reject. Conclusions should state a theory, a forward-looking remark, or a brief takeaway.
+
+## AI Category Adaptations
+
+Posts in the AI category differ from Sitecore posts in these ways:
+
+- **Context is the ecosystem, not a client engagement.** Instead of "While working on a client engagement with Sitecore XP 10.2.1...", AI posts use "I've been building..." or "One of the tools in my ecosystem..."
+- **Code snippets are Python/TypeScript/bash**, not SQL/XML/PowerShell.
+- **Screenshots may be GitHub PRs, dashboard screenshots, or terminal output** instead of Sitecore admin UIs.
+- **Links reference GitHub issues and PRs** instead of Sitecore documentation.
+- **The investigation narrative comes from review findings and fix loops** — "The reviewer caught a bug where..." replaces "I took to Google to find out..."
+
+The voice, structure, and rejection criteria remain identical.
