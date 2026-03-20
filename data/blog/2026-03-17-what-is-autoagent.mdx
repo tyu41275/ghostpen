@@ -69,6 +69,10 @@ AutoAgent has a Next.js dashboard for managing the pipeline. You can add streame
 
 The dashboard also shows provider health status -- colored dots indicating whether each LLM provider's circuit breaker is healthy, unhealthy, or recovering. This was part of the [failover feature](/blog/2026-03-20-building-a-circuit-breaker-across-two-repos) that ensures the Watch phase continues working when a provider goes down.
 
+The cost calculator gives you an estimate before running a Watch session -- how many frames, how many API calls, and what it will cost at current provider pricing:
+
+![AutoAgent Cost Calculator](/static/images/what-is-autoagent/cost-calculator.png)
+
 ## The Ecosystem
 
 AutoAgent does not stand alone. It depends on two shared libraries:
