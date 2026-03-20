@@ -222,3 +222,15 @@ This applies to:
 - Any post referencing any ecosystem project
 
 The only exception is frontmatter fields (title, summary) where markdown links are not rendered.
+
+## Foundation Post Requirements
+
+Foundation posts ("What is X") must go beyond describing what the project does. They should also cover:
+
+1. **Architectural reasoning** -- explain the thinking behind key design decisions. Why was it built this way? What problem does the architecture solve that simpler approaches do not? For EcoOrchestra, this means explaining how it reasons about feature placement across repos, not just listing the pipeline steps.
+
+2. **Differentiation from alternatives** -- if similar tools exist, explain how this project relates to them. What was borrowed? Where does it diverge? Why? Readers want to understand the landscape, not just the tool in isolation.
+
+3. **The "why" behind constraints** -- if the project enforces rules or limitations, explain why. "The pipeline is not optional" is a claim. "The few times I tried to skip steps, the pipeline caught issues I would have shipped" is a justification.
+
+These requirements prevent foundation posts from being shallow feature lists. The goal is to help a reader understand the thinking, not just the tooling.
