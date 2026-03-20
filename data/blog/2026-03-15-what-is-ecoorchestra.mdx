@@ -1,0 +1,74 @@
+---
+title: 'What is EcoOrchestra'
+date: '2026-03-15'
+lastmod: '2026-03-20'
+tags: ['ai', 'dev-log', 'ecoorchestra', 'tooling']
+draft: true
+aiGenerated: true
+summary: 'How I built an AI development pipeline that runs a team of personas -- planner, developer, reviewer, QA engineer -- and enforces quality gates across multiple repos.'
+authors: ['default']
+images: []
+---
+
+## Introduction
+
+I got tired of context-switching. I was building multiple projects -- an AI agent for game analysis, a multi-provider LLM router, a frame extraction library -- and every time I moved between repos, I lost track of what was in progress, what depended on what, and whether changes in one project would break another.
+
+So I built EcoOrchestra. It is an orchestrator that auto-discovers projects in my workspace, generates dependency graphs, and provides a set of slash commands that enforce a development pipeline. The idea is simple: instead of me keeping track of everything in my head, the tooling enforces the workflow.
+
+## The Pipeline
+
+The core of EcoOrchestra is a persona-based pipeline. Each step is handled by a different "persona" -- an AI agent with a specific role and, critically, a different model than the one before it:
+
+```
+/vision  ->  /plan  ->  /build  ->  /review  ->  /qa  ->  /ship
+(opus)       (opus)     (opus)      (sonnet)     (sonnet)
+```
+
+Each persona has a specific job:
+
+- **Vision** challenges the idea before any code is written. Is this the right feature? Does it belong in this repo? What is the blast radius if the approach is wrong?
+- **Plan** decomposes features into atomic tasks with explicit file paths, verification steps, and acceptance criteria.
+- **Build** implements from the task spec. It does not freelance -- it builds what was planned.
+- **Review** is read-only code review with a different model than the developer. The fresh perspective catches what familiarity misses.
+- **QA** takes Playwright screenshots and runs E2E tests. It is the only step that can close GitHub Issues -- the quality gate.
+- **Ship** pushes, creates PRs, and handles last-mile release.
+
+The key design decision was using different models for different roles. The developer uses Opus for strong reasoning. The reviewer uses Sonnet -- a deliberately different model so it does not share the developer's blind spots. This is the same reason you would not have the person who wrote the code also review it.
+
+## Pipeline Enforcement
+
+I did not want the pipeline to be optional. If it is optional, I will skip steps when I am in a hurry -- which is exactly when the steps matter most.
+
+EcoOrchestra enforces the pipeline at three layers:
+
+1. **Edit/Write hooks** block code edits unless the developer persona is active. You cannot modify product code without going through `/build`.
+2. **Bash hooks** block shell commands that would modify code files (like `sed -i` or `echo >`) without the developer persona. This prevents bypassing the Edit/Write enforcement via the terminal.
+3. **Session lifecycle hooks** clean up persona state on session start and stop, preventing stale state from a crashed session from bypassing enforcement.
+
+If I try to edit a file without running `/build` first, the hook blocks it. If the reviewer finds critical issues, it automatically sends the work back to `/build` for fixes. If QA finds problems, same thing -- automatic fix loop back to the developer.
+
+## The War Room Dashboard
+
+I am a visual person. I need to see what is happening, not just read logs. So I built a dashboard -- a pixel-art isometric office where each persona is a character that walks between desks, the meeting table, and a coffee machine based on their activity state.
+
+When `/build` is running, the developer character sits at a desk. When `/review` starts, the developer walks to the meeting table and the reviewer joins. When `/qa` fires, the QA character takes over. It polls state files every 2 seconds and animates the transitions.
+
+Is it necessary? No. Does it immediately tell me what the pipeline is doing? Yes. And it has caught bugs -- I once noticed the developer character was still active during a review, which led me to discover that state files were not being cleaned up on handoff.
+
+## Auto-Discovery
+
+EcoOrchestra does not have a hardcoded list of projects. It scans my `REPOS_DIR` directory, reads `pyproject.toml` and `package.json` manifests, and builds a dependency graph automatically. When I create a new repo with a manifest file, EcoOrchestra picks it up within 30 seconds.
+
+It classifies each project by its role in the ecosystem:
+
+- **lib** (green) -- shared libraries consumed by other projects
+- **app** (blue) -- applications that depend on libraries
+- **hub** (blue) -- projects that both depend on and are depended on
+- **standalone** (grey) -- projects with no dependencies in either direction
+
+This classification drives the Mermaid dependency graph that gets auto-generated and committed to `docs/ecosystem.md`.
+
+## Conclusion
+
+EcoOrchestra is the foundation everything else runs on. Every feature in every project goes through this pipeline. The enforcement is not optional -- and that is the point. The few times I have tried to skip steps "just for a quick fix," the pipeline caught issues I would have shipped.

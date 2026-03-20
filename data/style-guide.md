@@ -185,3 +185,28 @@ The investigation comes from DECISIONS, not debugging:
 - What the review caught and why it mattered
 - How the plan changed when the first approach was wrong
 - What the pipeline's quality gates prevented from shipping
+
+## Foundation Posts -- Prerequisite Enforcement
+
+Feature posts MUST NOT link to external GitHub repos for projects in the ecosystem. Instead, they link to foundation posts that explain what the project is.
+
+### Required foundation posts
+
+Every ecosystem project referenced in a feature post must have a foundation post:
+
+| Project      | Foundation post slug   | Purpose                    |
+| ------------ | ---------------------- | -------------------------- |
+| EcoOrchestra | `what-is-ecoorchestra` | The AI persona pipeline    |
+| llm-router   | `what-is-llm-router`   | Multi-provider LLM routing |
+| AutoAgent    | `what-is-autoagent`    | VOD analysis agent         |
+
+### Enforcement rules
+
+1. **Before generating a feature post**, check if all referenced projects have foundation posts in `data/blog/`. If a foundation post is missing, write it first.
+2. **Never link to GitHub repos** for ecosystem projects in post body text. Link to the foundation blog post instead. GitHub links belong in the foundation posts only.
+3. **Foundation posts are dated earlier** than the feature posts that reference them, so they appear first chronologically.
+4. **Cross-link between foundation posts** where projects depend on each other (e.g., AutoAgent's foundation post links to llm-router's).
+
+### Adding new projects
+
+When a new project joins the ecosystem, add it to the table above and write a foundation post before any feature post references it.

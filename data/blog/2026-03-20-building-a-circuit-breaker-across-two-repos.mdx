@@ -12,7 +12,7 @@ images: []
 
 ## Introduction
 
-I have been building an ecosystem of AI tools for analyzing gaming VODs. The core app, AutoAgent, watches video-on-demand recordings and extracts game knowledge using vision APIs. All LLM calls go through a shared library I built called [llm-router](https://github.com/tyu41275/llm-router), which routes requests across Anthropic, OpenAI, and Google based on rate limit headroom and cost.
+I have been building an ecosystem of AI tools for analyzing gaming VODs. The core app, AutoAgent, watches video-on-demand recordings and extracts game knowledge using vision APIs. All LLM calls go through a shared library I built called [llm-router](/blog/2026-03-16-what-is-llm-router), which routes requests across Anthropic, OpenAI, and Google based on rate limit headroom and cost.
 
 Anthropic has been the primary vision provider because they support batch processing -- 50% cost savings. But when their API goes down with 500s and 529s, the entire learning pipeline stops. I wanted graceful failover to OpenAI and Google so that when Anthropic is having a bad day, work continues on another provider.
 

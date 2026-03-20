@@ -1,0 +1,96 @@
+---
+title: 'What is llm-router'
+date: '2026-03-16'
+lastmod: '2026-03-20'
+tags: ['ai', 'dev-log', 'llm-router', 'tooling']
+draft: true
+aiGenerated: true
+summary: 'A multi-provider LLM routing library that handles rate limits, batching, and failover -- so consuming applications never touch provider-specific APIs.'
+authors: ['default']
+images: []
+---
+
+## Introduction
+
+When I started building AI tools, I was making API calls directly to Anthropic. Then I needed OpenAI for cheaper vision analysis. Then Google for their Gemini Flash model. Each provider has different SDKs, different rate limit headers, different error formats, and different pricing. I was duplicating provider-specific logic across projects and it was getting messy.
+
+llm-router was my answer to that. It is a Python library that sits between my applications and the LLM providers. Applications submit `LLMRequest` objects and get `LLMResponse` objects back. They never touch provider-specific APIs. The router handles provider selection, rate limit tracking, batching, and cost normalization behind a clean abstraction.
+
+## The Core Abstraction
+
+The design principle is simple: the consumer should not know or care which provider served the request. Here is what the interface looks like:
+
+```python
+from llm_router import LLMRouter, LLMRequest, ContentBlock
+
+router = LLMRouter(providers=[anthropic, openai, google])
+
+request = LLMRequest(
+    content=[ContentBlock(type="text", text="Analyze this frame")],
+    max_tokens=1024,
+)
+
+response = await router.complete(request)
+# response.text, response.cost, response.latency, response.provider
+```
+
+The response is normalized -- same fields regardless of whether Anthropic, OpenAI, or Google served it. Cost is calculated from each provider's token pricing. Latency is measured end-to-end.
+
+## Provider Selection
+
+The router picks providers based on rate limit headroom. Each provider has a `_ProviderState` object that tracks recent request timestamps and current concurrency:
+
+```python
+@property
+def available_rpm(self):
+    now = time.time()
+    recent = sum(1 for t in self.request_times if t > now - 60)
+    return self.provider.rpm_limit - recent
+```
+
+When a request comes in, `_select_provider()` picks the provider with the most remaining capacity. If you set a priority list (e.g., prefer Anthropic, fall back to OpenAI), it respects that -- but still switches if the preferred provider is below 20% headroom.
+
+This matters for vision workloads. When analyzing hundreds of video frames, you burn through rate limits fast. The router distributes requests across providers automatically instead of hammering one until it rate-limits you.
+
+## Batch Processing
+
+Anthropic supports a Batch API that processes requests asynchronously at 50% cost. This is significant when you are analyzing thousands of frames from a gaming VOD -- the cost difference between real-time and batch can be hundreds of dollars.
+
+llm-router wraps this with `start_hybrid()`:
+
+```python
+result = await router.start_hybrid(requests, realtime_pct=0.1)
+# Submits 100% to Anthropic Batch API (50% cheaper)
+# Streams ~10% through real-time providers for immediate progress
+# Returns HybridResult with batch_id for polling
+```
+
+The consuming application gets immediate results for a subset while the bulk processes cheaply in the background. When the batch completes (up to 24 hours later), `poll_batch()` retrieves the results.
+
+## The HTTP API
+
+llm-router started as a Python library consumed via `pip install`. But when I needed to use it from a TypeScript project (StreamWatcher), I could not import a Python module from Node.js.
+
+The solution was a FastAPI HTTP server that wraps the routing engine:
+
+```bash
+# Start the server
+python -m llm_router.server
+
+# Route a request
+curl -X POST http://localhost:8000/route \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Hello", "max_tokens": 100}'
+```
+
+Provider API keys are auto-discovered from environment variables. If `ANTHROPIC_API_KEY` is set, Anthropic is registered. Same for `OPENAI_API_KEY` and `GOOGLE_API_KEY`. Zero configuration beyond setting the keys.
+
+The server also exposes `GET /provider-health` which reports each provider's circuit breaker status -- healthy, unhealthy, or half-open (recovering). This is the foundation for the [circuit breaker feature](/blog/2026-03-20-building-a-circuit-breaker-across-two-repos) that handles provider failover.
+
+## Current State
+
+As of March 2026, llm-router has 124 tests across error classification, circuit breaker, rate limiting, provider selection, and the HTTP API. It is consumed by AutoAgent (as a pip dependency) and will be consumed by StreamWatcher (via the HTTP API) once that integration is built.
+
+## Conclusion
+
+llm-router exists so that every other project in the ecosystem can make LLM calls without thinking about providers, rate limits, or failover. One library, one interface, one place to add a new provider when the next one comes along.
