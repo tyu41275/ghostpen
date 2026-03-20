@@ -1,7 +1,7 @@
 ---
 title: 'Guardrails vs Velocity: Two Philosophies for AI-Assisted Development'
 date: '2026-03-20'
-tags: ['ai', 'patterns', 'architecture']
+tags: ['ai', 'patterns', 'architecture', 'dev-log']
 draft: true
 summary: 'EcoOrchestra governs every step. Ralph ships every loop. Both work. The question is which failure mode you fear more.'
 aiGenerated: true
@@ -26,13 +26,15 @@ This is not a benchmark. It is an architect's reasoning about which risk keeps h
 
 EcoOrchestra runs every change through a pipeline of personas, each with a different role and -- critically -- a different AI model:
 
-```
-/vision ──→ /plan ──→ /build ──→ /review ──→ /qa ──→ /ship
-  (opus)     (opus)    (opus)     (sonnet)   (sonnet)
-                          ↑          │          │
-                          └──────────┘          │
-                          │   fix loop          │
-                          └─────────────────────┘
+```mermaid
+graph LR
+    V["/vision<br/>(opus)"] --> P["/plan<br/>(opus)"]
+    P --> B["/build<br/>(opus)"]
+    B --> R["/review<br/>(sonnet)"]
+    R --> Q["/qa<br/>(sonnet)"]
+    Q --> S["/ship"]
+    R -- "fix loop" --> B
+    Q -- "fix loop" --> B
 ```
 
 The reviewer and QA engineer deliberately use a different model than the developer. A Sonnet instance reviewing Opus-generated code catches things that the Opus instance is blind to -- the same reason you would not have the author of a pull request review their own code.
@@ -76,15 +78,16 @@ The pipeline is not optional. Edit hooks block code modifications unless the dev
 
 [Ralph](https://github.com/snarktank/ralph) takes a different position. Instead of multiple personas reviewing each other's work, it spawns a single AI instance per iteration with completely fresh context:
 
-```
-┌─→ Read PRD ──→ Spawn fresh AI ──→ Implement ──→ Quality checks ──→ Commit ─┐
-│                                                                              │
-│   ┌──────────────────────────────────────────────────────────────────────┐   │
-│   │ All stories pass? ──→ Yes ──→ <promise>COMPLETE</promise> ──→ Done  │   │
-│   │                  └──→ No  ──→ Next iteration                        │   │
-│   └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-└──────────────────────────── max 10 iterations ───────────────────────────────┘
+```mermaid
+graph TD
+    A["Read PRD"] --> B["Spawn fresh AI"]
+    B --> C["Implement"]
+    C --> D["Quality checks"]
+    D --> E["Commit"]
+    E --> F{"All stories pass?"}
+    F -- "Yes" --> G["COMPLETE"]
+    F -- "No" --> H["Next iteration"]
+    H -- "max 10 iterations" --> A
 ```
 
 The core loop is a bash script. It pipes a prompt into the AI tool of choice, captures the output, and checks for the completion signal:
