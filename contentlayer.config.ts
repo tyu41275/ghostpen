@@ -154,8 +154,12 @@ export default makeSource({
     ],
   },
   onSuccess: async (importData) => {
-    const { allBlogs } = await importData()
-    createTagCount(allBlogs)
-    createSearchIndex(allBlogs)
+    try {
+      const { allBlogs } = await importData()
+      createTagCount(allBlogs)
+      createSearchIndex(allBlogs)
+    } catch (e) {
+      console.log('Warning: onSuccess callback skipped:', (e as Error).message)
+    }
   },
 })
