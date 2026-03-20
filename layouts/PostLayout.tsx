@@ -109,6 +109,17 @@ export default function PostLayout({ content, authorDetails, next, prev, childre
                   >
                     Ghostpen
                   </Link>
+                  {slug !== '2026-03-18-how-i-built-a-blog-that-writes-itself' && (
+                    <>
+                      {' � '}
+                      <Link
+                        href="/blog/2026-03-18-how-i-built-a-blog-that-writes-itself"
+                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                      >
+                        How it works
+                      </Link>
+                    </>
+                  )}
                 </div>
               )}
             </div>

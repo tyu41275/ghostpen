@@ -52,6 +52,13 @@ export default function Home({ posts }) {
               >
                 Ghostpen
               </Link>
+              {' � '}
+              <Link
+                href="/blog/2026-03-18-how-i-built-a-blog-that-writes-itself"
+                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+              >
+                How it works
+              </Link>
             </p>
           </div>
         </div>
