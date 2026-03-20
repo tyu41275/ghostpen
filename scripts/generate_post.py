@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -207,8 +208,10 @@ def write_post(feature_slug: str, content: str, title: str | None = None) -> Pat
         if kw not in skip_words and kw not in tags:
             tags.append(kw)
 
+    safe_title = title.replace("'", "''")
+
     frontmatter = f"""---
-title: '{title}'
+title: '{safe_title}'
 date: '{today}'
 tags: {json.dumps(tags)}
 draft: true
@@ -298,7 +301,7 @@ def create_pr(feature_slug: str, title: str, post_path: Path) -> None:
     pr_result = subprocess.run(
         ["gh", "pr", "create",
          "--base", "main",
-         "--title", f"Blog: {title}",
+         "--title", f"Blog: {sanitize_title_for_cli(title)}",
          "--body", body,
          "--draft"],
         capture_output=True, text=True, cwd=repo_dir,
@@ -330,9 +333,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def sanitize_title_for_cli(title: str) -> str:
+    """Strip characters from an LLM-generated title that could cause shell issues."""
+    sanitized = re.sub(r"[^\w\s\-:.,!?()\'/ ]", "", title)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+    return sanitized or "Untitled"
+
+
 def main() -> None:
     args = parse_args()
     feature_slug = args.feature
+
+    # Validate feature slug to prevent shell injection
+    if not re.match(r"^[a-z0-9][a-z0-9\-]{0,80}$", feature_slug):
+        print(
+            f"Error: Invalid feature slug '{feature_slug}'. "
+            "Must match ^[a-z0-9][a-z0-9-]{{0,80}}$ (lowercase alphanumeric and hyphens only)."
+        )
+        sys.exit(1)
+
     artifacts_dir = Path(args.artifacts_dir)
 
     if not artifacts_dir.exists():
