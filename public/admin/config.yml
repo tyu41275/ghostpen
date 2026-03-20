@@ -1,0 +1,42 @@
+backend:
+  name: github
+  repo: tyu41275/ghostpen
+  branch: main
+
+media_folder: public/static/images
+public_folder: /static/images
+
+collections:
+  - name: blog
+    label: Blog Posts
+    folder: data/blog
+    create: true
+    extension: mdx
+    format: frontmatter
+    fields:
+      - { label: Title, name: title, widget: string }
+      - { label: Publish Date, name: date, widget: datetime, format: 'YYYY-MM-DD', date_format: 'YYYY-MM-DD', time_format: false }
+      - { label: Last Modified, name: lastmod, widget: datetime, format: 'YYYY-MM-DD', date_format: 'YYYY-MM-DD', time_format: false, required: false }
+      - { label: Tags, name: tags, widget: list, default: [] }
+      - { label: Draft, name: draft, widget: boolean, default: false }
+      - { label: AI Generated, name: aiGenerated, widget: boolean, default: false }
+      - { label: Summary, name: summary, widget: text }
+      - { label: Authors, name: authors, widget: list, default: ['default'] }
+      - { label: Images, name: images, widget: list, required: false, default: [] }
+      - { label: Body, name: body, widget: markdown }
+
+  - name: authors
+    label: Authors
+    folder: data/authors
+    create: true
+    extension: mdx
+    format: frontmatter
+    fields:
+      - { label: Name, name: name, widget: string }
+      - { label: Avatar, name: avatar, widget: image, required: false }
+      - { label: Occupation, name: occupation, widget: string, required: false }
+      - { label: Company, name: company, widget: string, required: false }
+      - { label: Email, name: email, widget: string, required: false }
+      - { label: LinkedIn, name: linkedin, widget: string, required: false }
+      - { label: GitHub, name: github, widget: string, required: false }
+      - { label: Body, name: body, widget: markdown }
