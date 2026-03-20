@@ -18,7 +18,7 @@ So I built EcoOrchestra. (The repo is currently private but may be made public i
 
 ## The Pipeline
 
-The core of EcoOrchestra is a persona-based pipeline. Each step is handled by a different "persona" -- an AI agent with a specific role and, critically, a different model than the one before it:
+The core of EcoOrchestra is a persona-based pipeline. Each step is handled by a different "persona" -- an AI agent with a specific role. The pipeline uses a two-tier model strategy: Opus for the reasoning-heavy steps (vision, plan, build) and Sonnet for the fresh-perspective steps (review, QA):
 
 ```
 /vision  ->  /plan  ->  /build  ->  /review  ->  /qa  ->  /ship
@@ -34,7 +34,7 @@ Each persona has a specific job:
 - **QA** takes Playwright screenshots and runs E2E tests. It is the only step that can close GitHub Issues -- the quality gate.
 - **Ship** pushes, creates PRs, and handles last-mile release.
 
-The key design decision was using different models for different roles. The developer uses Opus for strong reasoning. The reviewer uses Sonnet -- a deliberately different model so it does not share the developer's blind spots. This is the same reason you would not have the person who wrote the code also review it.
+The key design decision was a two-tier model system. Vision, plan, and build all use Opus for strong reasoning -- they need to think deeply about architecture and implementation. Review and QA use Sonnet -- a deliberately different model so it does not share the developer's blind spots. This is the same reason you would not have the person who wrote the code also review it.
 
 ## Pipeline Enforcement
 
