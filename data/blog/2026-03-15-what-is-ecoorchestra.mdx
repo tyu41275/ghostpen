@@ -48,36 +48,50 @@ EcoOrchestra enforces the pipeline at three layers:
 
 If I try to edit a file without running `/build` first, the hook blocks it. If the reviewer finds critical issues, it automatically sends the work back to `/build` for fixes. If QA finds problems, same thing -- automatic fix loop back to the developer.
 
-## The War Room Dashboard
+## Where Does This Feature Belong?
 
-I am a visual person. I need to see what is happening, not just read logs. So I built a dashboard -- a pixel-art isometric office where each persona is a character that walks between desks, the meeting table, and a coffee machine based on their activity state.
+One of the problems I kept running into was putting code in the wrong repo. A utility function that starts in one project becomes useful in another. A feature that seems app-specific turns out to be generic. By the time you realize the placement is wrong, the code is entangled with project-specific logic and extracting it is painful.
 
-When `/build` is running, the developer character sits at a desk. When `/review` starts, the developer walks to the meeting table and the reviewer joins. When `/qa` fires, the QA character takes over. It polls state files every 2 seconds and animates the transitions.
+EcoOrchestra addresses this at multiple points in the pipeline:
 
-Is it necessary? No. Does it immediately tell me what the pipeline is doing? Yes. And it has caught bugs -- I once noticed the developer character was still active during a review, which led me to discover that state files were not being cleaned up on handoff.
+**The Vision step asks placement questions explicitly.** Before any planning starts, `/vision` evaluates: does this feature belong in the project the user is thinking of? Is it generic enough to be a shared module? What is the blast radius if the abstraction is wrong? I have had `/vision` redirect features from one repo to another before a single line of code was written -- catching placement mistakes when they are free to fix, not expensive.
 
-## Auto-Discovery
+**The modules registry tracks shared code.** `modules/REGISTRY.md` lists every extracted shared library and candidates for extraction. Before writing new functionality, the developer checks: does a shared module already provide this? If something similar exists, use it or extend it. If you are writing something generic, flag it as an extraction candidate -- do not embed it in a project-specific folder.
 
-EcoOrchestra does not have a hardcoded list of projects. It scans my `REPOS_DIR` directory, reads `pyproject.toml` and `package.json` manifests, and builds a dependency graph automatically. When I create a new repo with a manifest file, EcoOrchestra picks it up within 30 seconds.
+**The Review step checks for boundary violations.** The reviewer looks for code that is generic but lives inside a project-specific folder, duplicated logic across projects, and shared types defined in only one project. When the reviewer spots a shared pattern, it adds the candidate to the modules registry.
 
-It classifies each project by its role in the ecosystem:
+**Auto-discovery classifies projects by role.** EcoOrchestra scans the workspace, reads `pyproject.toml` and `package.json` manifests, and classifies each project:
 
-- **lib** (green) -- shared libraries consumed by other projects
-- **app** (blue) -- applications that depend on libraries
-- **hub** (blue) -- projects that both depend on and are depended on
-- **standalone** (grey) -- projects with no dependencies in either direction
+- **lib** -- shared libraries consumed by other projects
+- **app** -- applications that depend on libraries
+- **hub** -- projects that both depend on and are depended on
+- **standalone** -- projects with no dependencies in either direction
 
-This classification drives the Mermaid dependency graph that gets auto-generated and committed to `docs/ecosystem.md`.
+This classification drives the dependency graph and makes cross-project relationships visible. When a feature touches a dependency, the pipeline creates a handoff task instead of modifying the dependency directly -- respecting repo boundaries.
 
-## Inspiration
+The core principle is: generic code gets planned as a separate module from the start, not extracted after it is entangled. The earlier you make the placement decision, the cheaper it is to get right.
 
-EcoOrchestra did not come out of nowhere. Two projects influenced how I think about AI-assisted development:
+## How EcoOrchestra Differs from gstax and Superpowers
 
-[gstax](https://github.com/gstax/gstax) shaped how I think about structured orchestration -- the idea that AI agents benefit from explicit workflow stages rather than free-form prompting. The separation of concerns between planning, building, and reviewing in EcoOrchestra's pipeline is a direct descendant of patterns I saw in gstax.
+Two projects heavily influenced how I think about AI-assisted development, and it is worth explaining where EcoOrchestra overlaps and diverges.
 
-[Superpowers](https://github.com/obra/superpowers) influenced the methodology side -- particularly the ideas around atomic task decomposition, systematic debugging (reproduce, hypothesize, trace, verify), and test-first development. When I evaluated Superpowers against EcoOrchestra, I realized the two tools are complementary: Superpowers provides methodology, EcoOrchestra provides orchestration. I imported the methodology ideas -- atomic task specs with explicit file paths and verification steps, systematic debugging for fix loops -- without adopting the framework architecture. EcoOrchestra's persona commands already ARE skills, so adding a skills abstraction layer would have been unnecessary indirection.
+### vs gstax
 
-Both projects are worth checking out if you are building your own AI development workflows.
+[gstax](https://github.com/gstax/gstax) shaped my thinking about structured orchestration -- the idea that AI agents benefit from explicit workflow stages rather than free-form prompting. The separation of concerns between planning, building, and reviewing in EcoOrchestra's pipeline is a direct descendant of patterns from gstax.
+
+Where EcoOrchestra diverges: **multi-repo awareness.** gstax operates within a single project context. EcoOrchestra was built specifically for ecosystems -- multiple repos with dependencies between them. The auto-discovery, dependency graphs, modules registry, and cross-repo handoffs are all about managing complexity that only exists when you have multiple projects that need to stay in sync.
+
+### vs Superpowers
+
+[Superpowers](https://github.com/obra/superpowers) influenced the methodology side -- atomic task decomposition, systematic debugging (reproduce, hypothesize, trace, verify), and test-first development. When I evaluated Superpowers against EcoOrchestra, I realized the two are complementary: Superpowers provides methodology, EcoOrchestra provides orchestration.
+
+I imported the methodology ideas -- atomic task specs with explicit file paths and verification steps, systematic debugging for fix loops -- without adopting the framework architecture. EcoOrchestra's persona commands already serve the same role as Superpowers' skills system, so adding a skills abstraction layer would have been unnecessary indirection.
+
+Where EcoOrchestra diverges: **enforcement over guidance.** Superpowers provides best practices that the developer can follow or ignore. EcoOrchestra enforces the workflow with hooks that block non-compliant actions. You cannot edit product code without the developer persona active. You cannot skip the review step. This is a deliberate trade-off -- less flexibility, but the pipeline runs consistently whether I am disciplined or rushing.
+
+### The common thread
+
+All three tools are solving the same problem: how do you get consistent, high-quality output from AI-assisted development? gstax says structure the workflow. Superpowers says improve the methodology. EcoOrchestra says enforce both, across repos, with different models checking each other's work. They are complementary approaches, and I borrowed from both.
 
 ## Conclusion
 
