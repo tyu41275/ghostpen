@@ -1,0 +1,177 @@
+---
+title: 'Guardrails vs Velocity: Two Philosophies for AI-Assisted Development'
+date: '2026-03-20'
+tags: ['ai', 'patterns', 'architecture', 'dev-log']
+draft: true
+summary: 'EcoOrchestra governs every step. Ralph ships every loop. Both work. The question is which failure mode you fear more.'
+aiGenerated: true
+authors: ['default']
+---
+
+## Introduction
+
+I built one of these. I discovered the other.
+
+[EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) is my AI orchestration layer -- a persona pipeline that runs every feature through six roles before it ships. I have been directing it for weeks now, and the [circuit breaker feature](/blog/2026-03-20-building-a-circuit-breaker-across-two-repos) was the most recent thing through the pipeline. Nine issues, two repos, four critical bugs caught in review before a single request hit production.
+
+Then I found [Ralph](https://github.com/snarktank/ralph).
+
+Ralph is an open-source autonomous agent loop. It reads a PRD, spawns a fresh AI instance, implements a user story, runs quality checks, commits, and moves on. When all stories pass, it signals completion. No personas, no review handoffs, no vision gates. Just a bash loop that ships until the work is done.
+
+I spent a few hours reading through Ralph's source code, and I realized something: this is not a worse version of what I built. It is a fundamentally different answer to the same question. Both tools ask "how do you trust AI with your codebase?" They just optimize for opposite failure modes.
+
+This is not a benchmark. It is an architect's reasoning about which risk keeps him up at night.
+
+## The Governance-First Approach
+
+EcoOrchestra runs every change through a pipeline of personas, each with a different role and -- critically -- a different AI model:
+
+```mermaid
+graph LR
+    V["/vision<br/>(opus)"] --> P["/plan<br/>(opus)"]
+    P --> B["/build<br/>(opus)"]
+    B --> R["/review<br/>(sonnet)"]
+    R --> Q["/qa<br/>(sonnet)"]
+    Q --> S["/ship"]
+    R -- "fix loop" --> B
+    Q -- "fix loop" --> B
+```
+
+The reviewer and QA engineer deliberately use a different model than the developer. A Sonnet instance reviewing Opus-generated code catches things that the Opus instance is blind to -- the same reason you would not have the author of a pull request review their own code.
+
+The persona configuration is explicit:
+
+```json
+{
+  "planner": { "model": "opus", "description": "Decomposes features into task specs." },
+  "developer": { "model": "opus", "description": "Implements code from task specs." },
+  "reviewer": {
+    "model": "sonnet",
+    "description": "Fresh perspective catches what familiarity misses."
+  },
+  "qa": { "model": "sonnet", "description": "Visual QA via Playwright screenshots." },
+  "vision": { "model": "opus", "description": "Product thinking -- challenges scope." }
+}
+```
+
+Before any planning begins, a vision gate evaluates whether the feature belongs in the proposed repo, what the blast radius is, and whether the approach is right. That gate writes an approval record with a 7-day expiry:
+
+```json
+{
+  "feature": "anthropic-failover-strategy",
+  "summary": "Approved -- build circuit breaker in llm-router, but instrument error patterns first.",
+  "placement": "llm-router (_ProviderState circuit breaker)",
+  "blast_radius": "low",
+  "status": "approved",
+  "timestamp": "2026-03-19T12:00:00Z",
+  "expires": "2026-03-26"
+}
+```
+
+The planner checks that gate before decomposing anything. No approval? No plan. Expired approval? Re-evaluate. The feature cannot sleepwalk past the architectural checkpoint.
+
+The pipeline is not optional. Edit hooks block code modifications unless the developer persona is active. Bash hooks block shell-based file writes that would bypass the editor hooks. Session hooks clean up stale state so a crashed session cannot leave an open door. If I try to skip `/build` and edit a file directly, the hook stops me. The few times I tried to shortcut the pipeline "just for a quick fix," it caught something I would have shipped.
+
+**When governance-first wins:** long-lived projects with cross-repo dependencies, ecosystems where a wrong abstraction in one repo cascades to three others, and situations where the blast radius of a bad architectural decision is measured in days of rework, not minutes.
+
+## The Velocity-First Approach
+
+[Ralph](https://github.com/snarktank/ralph) takes a different position. Instead of multiple personas reviewing each other's work, it spawns a single AI instance per iteration with completely fresh context:
+
+```mermaid
+graph TD
+    A["Read PRD"] --> B["Spawn fresh AI"]
+    B --> C["Implement"]
+    C --> D["Quality checks"]
+    D --> E["Commit"]
+    E --> F{"All stories pass?"}
+    F -- "Yes" --> G["COMPLETE"]
+    F -- "No" --> H["Next iteration"]
+    H -- "max 10 iterations" --> A
+```
+
+The core loop is a bash script. It pipes a prompt into the AI tool of choice, captures the output, and checks for the completion signal:
+
+```bash
+for i in $(seq 1 $MAX_ITERATIONS); do
+    # Spawn fresh AI with full context
+    cat prompt.md | amp --dangerously-allow-all   # or: claude --print < CLAUDE.md
+
+    # Check for completion
+    if grep -q '<promise>COMPLETE</promise>' output; then
+        exit 0
+    fi
+done
+exit 1  # Max iterations exhausted
+```
+
+Tasks are defined in a PRD JSON file -- user stories with acceptance criteria and a boolean pass/fail flag:
+
+```json
+{
+  "project": "my-app",
+  "branchName": "feature-name",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add database migration",
+      "description": "As a developer, I want...",
+      "acceptanceCriteria": [
+        "Migration creates the new column",
+        "Typecheck passes",
+        "Existing tests still pass"
+      ],
+      "priority": 1,
+      "passes": false
+    }
+  ]
+}
+```
+
+Each iteration gets fresh context. The only memory between runs is `progress.txt` (an append-only log of learnings), the git history, and the PRD itself with updated pass/fail flags. When the AI marks all stories as `passes: true`, the loop emits `<promise>COMPLETE</promise>` and stops.
+
+No personas. No review handoff. No vision gates. Quality comes from the acceptance criteria themselves -- if the tests pass, the typecheck passes, and the acceptance criteria are met, the story ships.
+
+**When velocity-first wins:** greenfield projects with clear acceptance criteria, well-tested codebases where the test suite _is_ the quality gate, standalone repos with no cross-project dependencies, and rapid prototyping where shipping fast and iterating is cheaper than getting it right the first time.
+
+## The Comparison
+
+| Dimension            | EcoOrchestra (Governance)                 | Ralph (Velocity)                                    |
+| -------------------- | ----------------------------------------- | --------------------------------------------------- |
+| **Optimizes for**    | Correctness across a complex ecosystem    | Shipping speed on focused tasks                     |
+| **Context model**    | Long-lived personas, persistent state     | Fresh context every iteration                       |
+| **Quality gates**    | Multi-persona review + visual QA          | Tests + typecheck + acceptance criteria             |
+| **Orchestration**    | Sequential pipeline with fix loops        | Autonomous bash loop                                |
+| **Human role**       | Architect and delegator                   | Task definer                                        |
+| **Memory strategy**  | Vision briefs, standups, review artifacts | progress.txt, AGENTS.md, git history                |
+| **Task granularity** | Atomic specs with file paths              | User stories with acceptance criteria               |
+| **Failure mode**     | Over-governance -- too slow, too cautious | Under-governance -- ships bugs, misses architecture |
+| **Sweet spot**       | Multi-repo ecosystems with dependencies   | Single-repo features with good test coverage        |
+
+Neither column is objectively better. They are responses to different failure modes.
+
+## Why I Chose Governance
+
+Ok. Honest answer.
+
+My ecosystem has six interdependent repos. A Python LLM router that a TypeScript agent depends on. A blog generator that consumes artifacts from the orchestrator. A frame extraction library that the agent imports. When the circuit breaker feature shipped, it touched two repos, nine issues, and the review caught a thundering herd bug that would have caused cascading failures under production load.
+
+That is the bug that made the choice for me. Not a test failure. Not a type error. A concurrency issue in recovery logic that only manifests when a provider's cooldown expires and multiple requests arrive simultaneously. The developer agent did not catch it. Tests did not catch it -- you would need a concurrent test harness specifically designed for that race condition. A separate model reading the code with fresh eyes caught it.
+
+Ralph's loop would have committed that code and moved on. The acceptance criteria would pass -- the circuit breaker _works_ in the happy path. The tests would pass. The typecheck would pass. And then, under load, the half-open probe would get hammered by a thundering herd and the "graceful recovery" would look like a second outage.
+
+That is the failure mode that scares me.
+
+For a standalone project with good test coverage and clear acceptance criteria, Ralph's approach would ship 10x faster and probably be fine. The scope is bounded, the blast radius is small, and iteration speed genuinely matters more than pre-ship review. I am not dismissing that trade-off -- I am saying it is the wrong trade-off for _my_ situation.
+
+## The Philosophical Split
+
+Both philosophies are responses to the same question: how much do you trust AI-generated code before it hits your main branch?
+
+Governance says: "Verify first. Different models catch different blind spots. Enforce the workflow even when you're tempted to skip it."
+
+Velocity says: "Ship and see. Fresh context every iteration. If the tests pass and the acceptance criteria are met, the code is good enough."
+
+The deeper question is what "good enough" means for your project. If a bad abstraction costs you an afternoon to unwind, ship fast. If a bad abstraction cascades across four repos and two languages, maybe run it past a second model first.
+
+I suspect the industry will converge on hybrid approaches -- Ralph-style velocity loops for well-scoped implementation work, with governance gates at architectural boundaries. The speed of autonomous iteration, with guardrails where the blast radius justifies the overhead. Neither philosophy needs to win. They need to know when to hand off to each other.

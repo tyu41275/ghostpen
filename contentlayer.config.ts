@@ -13,6 +13,7 @@ import {
   extractTocHeadings,
 } from 'pliny/mdx-plugins/index.js'
 // Rehype packages
+import rehypeMermaid from 'rehype-mermaid'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypeKatex from 'rehype-katex'
@@ -144,6 +145,7 @@ export default makeSource({
     ],
     rehypePlugins: [
       rehypeSlug,
+      [rehypeMermaid, { strategy: 'img-svg' }],
       rehypeAutolinkHeadings,
       rehypeKatex,
       [rehypeCitation, { path: path.join(root, 'data') }],
@@ -152,8 +154,12 @@ export default makeSource({
     ],
   },
   onSuccess: async (importData) => {
-    const { allBlogs } = await importData()
-    createTagCount(allBlogs)
-    createSearchIndex(allBlogs)
+    try {
+      const { allBlogs } = await importData()
+      createTagCount(allBlogs)
+      createSearchIndex(allBlogs)
+    } catch (e) {
+      console.log('Warning: onSuccess callback skipped:', (e as Error).message)
+    }
   },
 })
