@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-generate_post.py — Single-feature blog post generator for ghostpen.
+generate_post.py — Blog post generator for ghostpen.
 
 Reads EcoOrchestra pipeline artifacts (vision briefs, reviews, standups,
-screenshots, commit history) for a specific feature slug, calls the
-llm-router HTTP API, and generates a draft .mdx blog post.
+screenshots, commit history), calls the llm-router HTTP API, and generates
+draft .mdx blog posts.
 
-Usage:
+Modes:
+  Single feature:
     python scripts/generate_post.py --feature <slug>
     python scripts/generate_post.py --feature <slug> --dry-run
-    python scripts/generate_post.py --feature <slug> --artifacts-dir /path/to/EcoOrchestra
-    python scripts/generate_post.py --feature <slug> --llm-url http://localhost:8321
+
+  Batch backfill:
+    python scripts/generate_post.py --backfill [--max-posts 5] [--dry-run]
+    python scripts/generate_post.py --backfill --max-posts 3 --dry-run
 """
 
 import argparse
@@ -18,9 +21,11 @@ import glob
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -390,17 +395,360 @@ def insert_image_refs(body, image_refs):
 
 
 # ---------------------------------------------------------------------------
+# Backfill — scanning, scoring, and batch generation
+# ---------------------------------------------------------------------------
+def extract_slug_from_brief(filename):
+    """Extract the feature slug from a vision brief filename.
+
+    Vision brief naming convention: YYYY-MM-DD-<slug>.md
+    Returns the slug portion (everything after the date prefix).
+    """
+    basename = os.path.basename(filename)
+    # Strip .md extension
+    name = basename.rsplit(".", 1)[0] if basename.endswith(".md") else basename
+    # Remove YYYY-MM-DD- prefix
+    match = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", name)
+    if match:
+        return match.group(1)
+    return name
+
+
+def get_existing_blog_slugs():
+    """Return a set of slugs that already have a blog post in data/blog/."""
+    slugs = set()
+    if not BLOG_DIR.is_dir():
+        return slugs
+    for entry in os.listdir(BLOG_DIR):
+        if entry.endswith(".mdx") and not entry.endswith(".mdx.disabled"):
+            slug = entry.rsplit(".", 1)[0]
+            slugs.add(slug)
+    return slugs
+
+
+def load_vision_approvals(artifacts_dir):
+    """Load vision-approvals.json and return a dict keyed by feature name.
+
+    Returns {feature_name: {"status": ..., ...}, ...}.
+    """
+    approvals_path = os.path.join(artifacts_dir, "decisions", "vision-approvals.json")
+    if not os.path.isfile(approvals_path):
+        return {}
+    try:
+        with open(approvals_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"Warning: could not load vision-approvals.json: {exc}", file=sys.stderr)
+        return {}
+
+    approvals = {}
+    for entry in entries:
+        feature = entry.get("feature", "")
+        if feature:
+            approvals[feature] = entry
+    return approvals
+
+
+def score_vision_brief(brief_path, slug, artifacts_dir, approvals, existing_slugs):
+    """Score a vision brief for blog-worthiness.
+
+    Scoring heuristic (from issue #18):
+      - Has "approved" status in vision-approvals.json: +3 points
+      - Brief is longer than 500 words (rich content): +2 points
+      - Has associated review files: +2 points
+      - Has associated standup mentions: +1 point
+      - Has associated screenshots: +1 point
+      - Feature was rejected/deferred (interesting decision story): +2 points
+      - Already has a blog post in data/blog/ with matching slug: -999 (skip)
+
+    Returns (score, reasons_list).
+    """
+    score = 0
+    reasons = []
+
+    # Already has a blog post — skip
+    if slug in existing_slugs:
+        return -999, ["already has blog post"]
+
+    # Check approval status
+    # The approval feature name might not exactly match the slug, so check
+    # both the slug and common variations
+    approval = approvals.get(slug) or approvals.get(slug.replace("-", "_"))
+    # Also try partial matching for cases like "anthropic-failover" vs "anthropic-failover-strategy"
+    if not approval:
+        for feat_name, feat_data in approvals.items():
+            if slug in feat_name or feat_name in slug:
+                approval = feat_data
+                break
+
+    if approval:
+        status = approval.get("status", "").lower()
+        if status == "approved":
+            score += 3
+            reasons.append("approved")
+        elif status in ("rejected", "deferred"):
+            score += 2
+            reasons.append(f"{status} (interesting decision)")
+
+    # Brief word count
+    content = read_file(brief_path)
+    word_count = len(content.split()) if content else 0
+    if word_count > 500:
+        score += 2
+        reasons.append("rich brief")
+
+    # Associated reviews
+    reviews = find_reviews(artifacts_dir, slug)
+    if reviews:
+        score += 2
+        reasons.append("has reviews")
+
+    # Associated standups
+    standups = find_standups(artifacts_dir, slug)
+    if standups:
+        score += 1
+        reasons.append("has standups")
+
+    # Associated screenshots
+    screenshots = find_screenshots(artifacts_dir, slug)
+    if screenshots:
+        score += 1
+        reasons.append("has screenshots")
+
+    return score, reasons
+
+
+def scan_and_rank_briefs(artifacts_dir, max_posts):
+    """Scan all vision briefs, score them, and return ranked candidates.
+
+    Returns (candidates, total_briefs) where candidates is a list of
+    (slug, score, reasons, brief_path) tuples, sorted by score descending,
+    limited to max_posts entries. Briefs with score <= 0 are excluded.
+    """
+    briefs_dir = os.path.join(artifacts_dir, "decisions", "vision-briefs")
+    if not os.path.isdir(briefs_dir):
+        print(f"Error: vision briefs directory not found: {briefs_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    brief_files = sorted(glob.glob(os.path.join(briefs_dir, "*.md")))
+    if not brief_files:
+        print("No vision briefs found.", file=sys.stderr)
+        sys.exit(1)
+
+    approvals = load_vision_approvals(artifacts_dir)
+    existing_slugs = get_existing_blog_slugs()
+
+    scored = []
+    for brief_path in brief_files:
+        slug = extract_slug_from_brief(brief_path)
+        score, reasons = score_vision_brief(
+            brief_path, slug, artifacts_dir, approvals, existing_slugs
+        )
+        scored.append((slug, score, reasons, brief_path))
+
+    # Sort by score descending, then alphabetically by slug for ties
+    scored.sort(key=lambda x: (-x[1], x[0]))
+
+    total = len(scored)
+    # Filter out already-has-blog-post entries (score -999) and zero-score
+    candidates = [(s, sc, r, p) for s, sc, r, p in scored if sc > 0]
+
+    return candidates[:max_posts], total
+
+
+def generate_single_post(slug, artifacts_dir, llm_url, dry_run=False):
+    """Generate a single blog post for a given slug.
+
+    Reuses the same artifact collection, prompt building, LLM calling,
+    and MDX generation logic as single-feature mode.
+
+    Returns (success: bool, output_path_or_error: str).
+    """
+    # Gather artifacts
+    vision_briefs = find_vision_briefs(artifacts_dir, slug)
+    if not vision_briefs:
+        return False, f"No vision brief for '{slug}'"
+
+    reviews = find_reviews(artifacts_dir, slug)
+    standups = find_standups(artifacts_dir, slug)
+    screenshots = find_screenshots(artifacts_dir, slug)
+    commit_history = get_commit_history(slug)
+
+    # Build prompt
+    system_prompt = read_file(STYLE_GUIDE)
+    if not system_prompt:
+        return False, f"Could not read style guide at {STYLE_GUIDE}"
+
+    user_prompt = build_prompt(
+        slug, vision_briefs, reviews, standups, screenshots, commit_history
+    )
+
+    if dry_run:
+        return True, f"data/blog/{slug}.mdx (dry run)"
+
+    # Call LLM
+    try:
+        raw_text = call_llm_safe(llm_url, user_prompt, system_prompt, slug)
+    except RuntimeError as exc:
+        return False, str(exc)
+
+    # Parse response
+    try:
+        title, tags, summary, body = parse_llm_response(raw_text)
+    except ValueError as exc:
+        # Save raw response for manual recovery
+        raw_path = BLOG_DIR / f"{slug}.mdx.raw"
+        try:
+            with open(raw_path, "w", encoding="utf-8") as f:
+                f.write(raw_text)
+        except OSError:
+            pass
+        return False, f"Parse error: {exc}"
+
+    # Copy screenshots and insert references
+    image_refs = copy_screenshots(screenshots, slug)
+    if image_refs:
+        body = insert_image_refs(body, image_refs)
+
+    # Generate and write MDX
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    mdx_content = generate_mdx(slug, title, date_str, tags, summary, body)
+
+    output_path = BLOG_DIR / f"{slug}.mdx"
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(mdx_content)
+    except OSError as exc:
+        return False, f"Could not write {output_path}: {exc}"
+
+    return True, str(output_path)
+
+
+def call_llm_safe(llm_url, user_prompt, system_prompt, slug):
+    """Call llm-router and return the response text.
+
+    Like call_llm() but raises RuntimeError instead of sys.exit(),
+    so batch mode can continue on failure.
+    """
+    payload = {
+        "prompt": user_prompt,
+        "system": system_prompt,
+        "max_tokens": 4096,
+        "metadata": {"source": "ghostpen-generator", "feature": slug},
+    }
+    try:
+        status, body = _post_json(f"{llm_url}/route", payload, timeout=120)
+    except (ConnectionError, OSError) as exc:
+        raise RuntimeError(f"llm-router request failed: {exc}")
+
+    if status != 200:
+        raise RuntimeError(f"llm-router returned status {status}: {body[:200]}")
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        raise RuntimeError(f"llm-router returned invalid JSON: {body[:200]}")
+
+    text = data.get("text") or data.get("raw_text") or ""
+    if not text:
+        raise RuntimeError(f"llm-router response has no text content (keys: {list(data.keys())})")
+
+    return text
+
+
+def run_backfill(args):
+    """Run backfill mode: scan, rank, and generate posts for top candidates."""
+    artifacts_dir = args.artifacts_dir
+    llm_url = args.llm_url
+    max_posts = args.max_posts
+
+    # Validate artifacts directory
+    if not os.path.isdir(artifacts_dir):
+        print(f"Error: artifacts directory not found: {artifacts_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    # Scan and rank
+    candidates, total_briefs = scan_and_rank_briefs(artifacts_dir, max_posts)
+
+    if not candidates:
+        print("No backfill candidates found (all vision briefs already have blog posts or scored 0).")
+        sys.exit(0)
+
+    # Print ranked candidate list
+    print(f"\nBackfill candidates (top {len(candidates)} of {total_briefs} vision briefs):")
+    for i, (slug, score, reasons, _) in enumerate(candidates, 1):
+        reason_str = ", ".join(reasons) if reasons else "no signals"
+        print(f"  {i}. [score: {score}] {slug} -- {reason_str}")
+
+    if args.dry_run:
+        print(f"\nDry run complete -- would generate {len(candidates)} post(s).")
+        sys.exit(0)
+
+    # Check llm-router health before starting batch
+    if not check_llm_health(llm_url):
+        print("Error: llm-router is not available. Start it with:", file=sys.stderr)
+        print(f"  cd C:/Repos/llm-router && python -m llm_router.server", file=sys.stderr)
+        sys.exit(1)
+
+    # Generate posts sequentially
+    generated = []
+    failed = []
+
+    for i, (slug, score, reasons, brief_path) in enumerate(candidates, 1):
+        print(f"\n[{i}/{len(candidates)}] Generating: {slug}...")
+
+        success, result = generate_single_post(slug, artifacts_dir, llm_url, dry_run=False)
+
+        if success:
+            generated.append(result)
+            print(f"  OK: {result}")
+        else:
+            failed.append((slug, result))
+            print(f"  FAILED: {result}", file=sys.stderr)
+
+        # Rate-limit delay between LLM calls (skip after last one)
+        if i < len(candidates):
+            time.sleep(2)
+
+    # Print summary
+    print(f"\nBackfill complete:")
+    print(f"  Generated: {len(generated)}/{len(candidates)}")
+    print(f"  Failed:    {len(failed)}")
+    if generated:
+        print(f"  Posts created:")
+        for path in generated:
+            print(f"    - {path}")
+    if failed:
+        print(f"  Failures:")
+        for slug, err in failed:
+            print(f"    - {slug}: {err}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate a draft MDX blog post from EcoOrchestra artifacts.",
+        description="Generate draft MDX blog posts from EcoOrchestra artifacts.",
         epilog="Part of the ghostpen AI content pipeline.",
     )
-    parser.add_argument(
+
+    # Mutually exclusive: --feature (single) vs --backfill (batch)
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
         "--feature",
-        required=True,
         help="Feature slug matching vision brief filename (e.g., 'anthropic-failover')",
+    )
+    mode_group.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Scan all vision briefs, rank by blog-worthiness, and generate top N posts",
+    )
+
+    parser.add_argument(
+        "--max-posts",
+        type=int,
+        default=5,
+        help="Maximum number of posts to generate in backfill mode (default: 5)",
     )
     parser.add_argument(
         "--artifacts-dir",
@@ -419,6 +767,12 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Dispatch to backfill mode
+    if args.backfill:
+        run_backfill(args)
+        return
+
     slug = args.feature
     artifacts_dir = args.artifacts_dir
     llm_url = args.llm_url
