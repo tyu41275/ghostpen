@@ -1,0 +1,86 @@
+---
+title: 'How I Built a Blog That Writes Itself'
+date: '2026-03-18'
+lastmod: '2026-03-20'
+tags: ['ai', 'dev-log', 'ghostpen', 'tooling']
+draft: false
+aiGenerated: true
+summary: 'Ghostpen turns development artifacts into blog posts written in my voice -- because the best time to write about a problem is when you just solved it.'
+authors: ['default']
+images: []
+---
+
+## Introduction
+
+I used to blog about Sitecore. Five posts over the course of a year, each one written weeks after I solved the actual problem. By the time I sat down to write, the details were fuzzy -- which config file did I change? What was the exact error message? I would scroll through browser history and old screenshots trying to reconstruct the debugging session.
+
+Meanwhile, my AI development pipeline was generating structured artifacts every single day -- decision records explaining why I chose one approach over another, daily standups logging what shipped and what broke, code reviews catching bugs with specific line numbers and fix descriptions. All of it machine-readable. All of it decaying in markdown files nobody would ever read.
+
+Ghostpen connects those two problems. It reads the artifacts my development process already produces and drafts blog posts in my voice. The content is real -- actual decisions, actual bugs, actual fixes. The AI just turns structured notes into readable prose.
+
+## The Problem I Was Actually Solving
+
+The obvious pitch is "AI writes blog posts for you." But that is not really what Ghostpen does. If I wanted generic AI blog content, I could paste a prompt into ChatGPT and get something publishable in 30 seconds. The result would be competent and completely forgettable.
+
+The real problem is **context decay**. When I ship a feature like the [circuit breaker in llm-router](/blog/2026-03-20-building-a-circuit-breaker-across-two-repos), the interesting details are fresh: why the first task breakdown was wrong, what the reviewer caught that I missed, why I put the logic in the router instead of the application. A week later, I remember that I shipped a circuit breaker. The story is gone.
+
+My development pipeline through [EcoOrchestra](/blog/2026-03-15-how-i-built-an-ai-team-that-enforces-its-own-quality-gates) captures that context as it happens -- vision briefs record the product reasoning, standups record what shipped and what decisions were made, reviews record what bugs were caught. Ghostpen is just the last mile: turning those artifacts into something a reader can follow.
+
+## How It Works
+
+The pipeline is simple:
+
+1. I ship a feature through the normal development pipeline
+2. A post-ship hook checks if the feature has a decision record -- the heuristic for "this is worth writing about"
+3. The generator reads the decision record, standup entries, and any review findings
+4. It loads a writing style guide (extracted from my existing Sitecore posts) as context
+5. A draft blog post lands as a pull request for me to review
+
+The draft shows up with `draft: true` and `aiGenerated: true` in the frontmatter. I review it in a visual CMS editor, make edits, and publish by flipping the draft flag. The AI transparency banner at the top of each post tells readers it was AI-generated from real development logs.
+
+## The Voice Problem
+
+The first draft the generator produced was rejected. It read like a project summary -- correct facts, no soul. No code snippets, no investigation narrative, no casual asides. My Sitecore posts have a specific voice: problem-first storytelling with wrong turns, dead ends, and "Ok. That's new." moments. The AI draft had none of that.
+
+So I extracted a writing style guide from my five existing posts -- specific phrases I use, structural patterns I follow, anti-patterns to avoid. Things like:
+
+- Every post needs at least one code block
+- Show at least one wrong turn or failed attempt
+- Include casual interjections naturally -- do not force them
+- Never recap the post in the conclusion
+- No corporate hedging, no AI tells like "Let's delve into"
+
+But there was a deeper problem. The first drafts were written as if I had coded everything myself -- "I wrote the classification function," "I noticed the bug." But I did not write that code. I directed AI agents through a persona pipeline. I made the architectural decisions and reviewed the output, but claiming I wrote `_classify_error()` line by line would be dishonest.
+
+The style guide now has a delegator voice section: frame code as "what got built" not "what I wrote." Center the narrative on decisions, review findings, and quality gates -- the parts that are genuinely mine. The unique angle is not "I used AI to build X" but "here is how I direct an AI development pipeline and what the process actually looks like."
+
+## Foundation Posts First
+
+Early on, the circuit breaker post linked to `github.com/tyu41275/llm-router`. A private repo. A reader clicking that link would hit a 404. Not useful.
+
+The fix was a convention: **foundation posts before feature posts**. Before writing about a feature in [llm-router](/blog/2026-03-16-one-library-to-route-them-all-multi-provider-llm-routing), there needs to be a post explaining what llm-router is. Feature posts link to foundations, never to GitHub repos.
+
+The style guide enforces this -- if a feature post references a project that does not have a foundation post, the post gets rejected. Write the foundation first.
+
+## The Stack
+
+Ghostpen is not a new application. It is an existing Next.js blog (based on the [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextjs-starter-blog) template) extended with:
+
+- **`aiGenerated` frontmatter field** -- boolean that triggers a transparency banner on the post
+- **Draft URL guard** -- prevents draft posts from being accessible via direct URL in production
+- **Writing style guide** (`data/style-guide.md`) -- the system prompt that captures my voice
+- **Generator script** (`scripts/generate_post.py`) -- reads artifacts, calls the Anthropic API, outputs draft .mdx files
+- **Sveltia CMS** at `/admin` -- a visual editor for reviewing and editing drafts without touching code
+- **Post-ship hook** -- detects blog-worthy features and reminds me to generate a post
+
+The blog itself is deployed on Vercel. Push to main and it rebuilds. The generator script is for people who fork the repo and want automated generation with their own API key -- I generate posts directly through Claude Code using my existing subscription.
+
+## What I Would Do Differently
+
+The generator script was originally coupled to a private library called llm-router for making API calls. That made the script unusable for anyone who forked the repo. I refactored it to call the Anthropic API directly with `requests` -- one environment variable, zero private dependencies.
+
+I also over-engineered the automation. The original plan had the post-ship hook automatically calling the generator script, which called the API, which committed a draft PR -- fully unattended. In practice, I generate posts interactively through Claude Code, which uses my existing subscription instead of pay-per-token API calls. The automation is there for forks, but I do not use it myself.
+
+## Conclusion
+
+Ghostpen is less about AI writing and more about capturing context before it decays. The blog posts are real stories about real problems -- the AI just handles the translation from structured notes to readable prose. And the transparency is deliberate: every AI-generated post says so, right at the top.
