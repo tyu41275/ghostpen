@@ -89,10 +89,10 @@ yarn analyze    # Bundle analysis — sets ANALYZE=true to generate @next/bundle
 
 ### Mermaid diagrams
 
-- `rehype-mermaid` renders ` ```mermaid ` code blocks to inline SVG at build time — crisp vector diagrams with no client-side JS
-- Configured in `contentlayer.config.ts` rehypePlugins with `{ strategy: 'img-svg' }` — produces `<img>` tags with embedded SVG data URIs
-- Uses Playwright (already a dev dependency) as the headless browser for rendering — no separate Puppeteer install needed
-- First used in the "Guardrails vs Velocity" post for pipeline flow diagrams
+- Client-side rendering via the `mermaid` npm package — diagrams render in the browser, no build-time dependencies
+- `components/Mermaid.tsx` handles rendering with dark mode support via `next-themes` and error fallback to raw code
+- `components/MDXComponents.tsx` intercepts ` ```mermaid ` code blocks via a `pre` override and routes them to the Mermaid component — all other code blocks pass through normally
+- Previously used `rehype-mermaid` (build-time SVG) but switched to client-side because Vercel's build environment lacks Chromium
 
 ### Code style
 
