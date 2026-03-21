@@ -1,0 +1,43 @@
+{
+  "display_name": "ghostpen",
+  "aliases": ["ghost-pen"],
+  "cross_deps": [],
+  "components": [
+    {
+      "id": "app",
+      "name": "App",
+      "type": "module",
+      "description": "Next.js pages and API routes \u2014 site entry points and routing"
+    },
+    {
+      "id": "content",
+      "name": "Content Layer",
+      "type": "module",
+      "description": "Blog content pipeline — contentlayer config (contentlayer.config.ts), MDX post content (data/blog/), and Next.js blog routes (app/blog/)"
+    },
+    {
+      "id": "components",
+      "name": "UI Components",
+      "type": "module",
+      "description": "Shared React components \u2014 layout, navigation, cards, social icons"
+    },
+    {
+      "id": "layouts",
+      "name": "Layouts",
+      "type": "module",
+      "description": "Page layout templates for posts, lists, and author pages"
+    },
+    {
+      "id": "scripts",
+      "name": "Scripts",
+      "type": "module",
+      "description": "Build-time generators \u2014 post scaffolding, RSS, post-build tasks"
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "type": "module",
+      "description": "Site metadata, navigation links, project listings, author profiles"
+    }
+  ]
+}
