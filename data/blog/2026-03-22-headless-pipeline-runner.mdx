@@ -8,7 +8,7 @@ tags:
   - headless
   - pipeline
   - runner
-draft: false
+draft: true
 aiGenerated: true
 summary: While working on [EcoOrchestra](https://blog.timyu.dev/what-is-ecoorchestra) Phase 3, I had a realization that changed how I think about my own role in the development process. What started as "I n...
 authors:
@@ -46,7 +46,7 @@ Everything else already exists.
 
 ## The Architecture That Emerged
 
-```
+```plain
 [Trigger Source]              →  [WorkerLoop]              →  [Traffic Cop]        →  [Provider]
 GitHub webhook / REST poll /     Receives work items           Routes per persona       Claude API
 Telegram bot / cron /            Validates & queues them        CLI or API dispatch      Gemini API
@@ -65,13 +65,11 @@ That last point is crucial. The worker doesn't brainstorm or triage — it execu
 
 ## The Three Deployment Patterns
 
-1. **Tunnel to local** (cheapest, ~10 min) — Cloudflare Tunnel from VPS to local Workbench API. VPS triggers, local machine dispatches. Requires local machine running.
-
+1. **Tunnel to local** (cheapest, \~10 min) — Cloudflare Tunnel from VPS to local Workbench API. VPS triggers, local machine dispatches. Requires local machine running.
 2. **Deploy server to VPS** (recommended) — `server.py` + Traffic Cop run on Hetzner directly. Gemini personas work immediately via API dispatch (free tier). Claude personas need CLI on VPS or Anthropic API dispatch.
+3. **Add Anthropic API dispatch** (\~50 lines, mirrors `api_dispatch.py`) — Removes all CLI requirements. Per-token billing. Best for lightweight tasks.
 
-3. **Add Anthropic API dispatch** (~50 lines, mirrors `api_dispatch.py`) — Removes all CLI requirements. Per-token billing. Best for lightweight tasks.
-
-For cost, the real expense is API tokens (~$0.50-$3.00/run), not compute. A €4/month Hetzner CX22 (2 vCPU / 4 GB) handles single-threaded pipeline execution just fine.
+For cost, the real expense is API tokens (\~$0.50-$3.00/run), not compute. A €4/month Hetzner CX22 (2 vCPU / 4 GB) handles single-threaded pipeline execution just fine.
 
 ## Implementation Details: Wrapper Script, Not Claude Daemon
 
@@ -97,7 +95,7 @@ Multiple workers polling the same issue list need coordination to avoid duplicat
 
 The solution: `worker:claimed` label as a claim lock. Zero infrastructure, visible in GitHub UI.
 
-```
+```plain
 Worker polls → finds top-priority unclaimed issue → adds worker:claimed label →
 creates branch → runs pipeline → creates PR → removes label (or replaces with worker:done)
 ```
@@ -110,10 +108,10 @@ Here's the bigger realization. With groomed-issues-only enforcement, the user's 
 
 Auto-merge policy reflects this:
 
-| Repo                          | Auto-merge?                     |
-| ----------------------------- | ------------------------------- |
-| Obsidian, config-only changes | Yes                             |
-| Everything else               | **No** — user is the merge gate |
+| Repo | Auto-merge? |
+| --- | --- |
+| Obsidian, config-only changes | Yes |
+| Everything else | **No** — user is the merge gate |
 
 The user reviews and merges manually. Bad PRs are caught by /review and /qa gates — nothing ships unchecked. But a misbehaving worker creates noise (junk branches, bad PRs, spurious issue comments). Contained by the pipeline but not free to undo.
 
