@@ -1,0 +1,168 @@
+---
+title: 'Vision Brief: Headless Pipeline Runner'
+date: '2026-03-22'
+tags: ['ai', 'dev-log', 'headless', 'pipeline', 'runner']
+draft: true
+aiGenerated: true
+summary: 'While working on [EcoOrchestra](https://blog.timyu.dev/what-is-ecoorchestra) Phase 3, I had a realization that changed how I think about my own role in the development process. What started as "I n...'
+images: []
+authors: ['default']
+---
+
+While working on [EcoOrchestra](https://blog.timyu.dev/what-is-ecoorchestra) Phase 3, I had a realization that changed how I think about my own role in the development process. What started as "I need a Ductor worker on my VPS" evolved into something much more fundamental: a headless pipeline runner that could execute the full persona pipeline remotely, without human intervention.
+
+The bigger insight was that this wasn't just about remote execution — it was about redefining who does what. The user becomes the product architect. The worker becomes the engineering team.
+
+## The Evolution from "Ductor Worker" to "Headless Pipeline Runner"
+
+Originally, I was thinking too small. Issue #258 was scoped as a "Ductor worker" — something that would pick up bug issues and fix them autonomously on a Hetzner VPS. But that framing was wrong for several reasons:
+
+- **Ductor-coupled** — locked to one trigger service's task model
+- **Bug-only** — scoped to `bug`-labeled issues, not general pipeline execution
+- **CLI-dependent** — assumed Claude Code CLI everywhere, no API dispatch path
+- **Not a module** — a deployment recipe, not reusable infrastructure
+
+The insight came from the Workbench/Traffic Cop work I'd been doing. We already had:
+
+- `TrafficCop.dispatch()` — routes to CLI or API based on config
+- `server.py` — REST API that wraps the Traffic Cop
+- `api_dispatch.py` — Gemini API dispatch (no CLI needed, free tier)
+- Dispatch mode toggle — UI + backend for switching CLI/API per persona
+
+A remote worker is just **another consumer of this same infrastructure**. It doesn't need its own dispatch logic or provider routing. It needs three things:
+
+1. A way to receive work (trigger source)
+2. A way to run the pipeline (Traffic Cop)
+3. A way to report results (back to trigger source)
+
+Everything else already exists.
+
+## The Architecture That Emerged
+
+```
+[Trigger Source]              →  [WorkerLoop]              →  [Traffic Cop]        →  [Provider]
+GitHub webhook / REST poll /     Receives work items           Routes per persona       Claude API
+Telegram bot / cron /            Validates & queues them        CLI or API dispatch      Gemini API
+file watcher / anything          Runs persona pipeline          Health-aware failover    Claude CLI
+                                 Reports results back                                    Gemini CLI
+```
+
+The design follows a clean separation:
+
+- **Trigger sources are pluggable** — ship GitHub webhook, community can add Telegram, Discord, cron
+- **Dispatch via Traffic Cop** — reuse existing routing infrastructure
+- **Auth middleware on server.py** — Bearer token via `WORKBENCH_AUTH_TOKEN` env var
+- **Groomed issues only** — the worker executes specs, never triages
+
+That last point is crucial. The worker doesn't brainstorm or triage — it executes. `/vision` and `/plan` happen before issue creation. This constraint is what makes autonomous execution reliable.
+
+## The Three Deployment Patterns
+
+1. **Tunnel to local** (cheapest, ~10 min) — Cloudflare Tunnel from VPS to local Workbench API. VPS triggers, local machine dispatches. Requires local machine running.
+
+2. **Deploy server to VPS** (recommended) — `server.py` + Traffic Cop run on Hetzner directly. Gemini personas work immediately via API dispatch (free tier). Claude personas need CLI on VPS or Anthropic API dispatch.
+
+3. **Add Anthropic API dispatch** (~50 lines, mirrors `api_dispatch.py`) — Removes all CLI requirements. Per-token billing. Best for lightweight tasks.
+
+For cost, the real expense is API tokens (~$0.50-$3.00/run), not compute. A €4/month Hetzner CX22 (2 vCPU / 4 GB) handles single-threaded pipeline execution just fine.
+
+## Implementation Details: Wrapper Script, Not Claude Daemon
+
+One key realization: Claude Code sessions aren't long-running daemons. The worker uses a **wrapper script** that loops externally, spawning fresh Claude sessions per issue:
+
+```bash
+run-worker.sh (long-running):
+  while true:
+    issue = poll_and_claim()           # gh issue list + worker:claimed label
+    if issue:
+      ECO_MODE=worker claude -p "implement issue #N: <spec>"
+      mark_done(issue)                 # worker:claimed → worker:done
+    else:
+      run_blog_scorer()                # idle task
+      sleep $POLL_INTERVAL
+```
+
+Claude doesn't know it's a "worker." Each invocation is just "implement this issue." The `ECO_MODE=worker` env var changes hook behavior (suppress standup, never auto-merge).
+
+## Multi-Worker Coordination: Label-Based Claim Lock
+
+Multiple workers polling the same issue list need coordination to avoid duplicate work. GitHub issue assignment requires bot accounts — unnecessary overhead.
+
+The solution: `worker:claimed` label as a claim lock. Zero infrastructure, visible in GitHub UI.
+
+```
+Worker polls → finds top-priority unclaimed issue → adds worker:claimed label →
+creates branch → runs pipeline → creates PR → removes label (or replaces with worker:done)
+```
+
+Race conditions are negligible at 2-3 workers (seconds between poll cycles). Stale claim sweep on startup handles crashed workers by removing `worker:claimed` from issues with no branch/PR after 60 minutes.
+
+## The Role Evolution
+
+Here's the bigger realization. With groomed-issues-only enforcement, the user's role fundamentally changes. You become the **product architect** — brainstorming, grooming, reviewing PRs. The worker becomes the **engineering team**. The personas were always meant to be the team. The user was always meant to be the manager.
+
+Auto-merge policy reflects this:
+
+| Repo                          | Auto-merge?                     |
+| ----------------------------- | ------------------------------- |
+| Obsidian, config-only changes | Yes                             |
+| Everything else               | **No** — user is the merge gate |
+
+The user reviews and merges manually. Bad PRs are caught by /review and /qa gates — nothing ships unchecked. But a misbehaving worker creates noise (junk branches, bad PRs, spurious issue comments). Contained by the pipeline but not free to undo.
+
+## The Implementation
+
+The `WorkerLoop` class in `eco_orchestra/worker.py` handles the core orchestration:
+
+```python
+class WorkerLoop:
+    def __init__(self, trigger_source: TriggerSource,
+                 traffic_cop: TrafficCop, poll_interval: int = 30):
+        self.trigger_source = trigger_source
+        self.traffic_cop = traffic_cop
+        self.poll_interval = poll_interval
+```
+
+Trigger sources implement a simple interface:
+
+```python
+class TriggerSource:
+    def get_next_work_item(self) -> Optional[WorkItem]:
+        """Return the next work item, or None if no work available"""
+        pass
+```
+
+The worker builds prompts with full context — issue number, branch, repo, spec, and fix loop history — so the headless agent has everything it needs without external state.
+
+## What Worked Well
+
+The review found the implementation architecturally sound. Key strengths:
+
+- **Clean separation of concerns** — WorkerLoop consumes TriggerSource and TrafficCop without duplicating routing logic
+- **Graceful signal handling** — SIGTERM/SIGINT set a threading.Event checked between pipelines
+- **Proper claim/unclaim semantics** — finally blocks guarantee issues never get stuck with `worker:claimed`
+- **Thread-safe webhook handling** — constant-time signature verification with `hmac.compare_digest`
+- **Comprehensive test coverage** — 54 new tests including real threading validation
+
+The fix loop semantics are particularly important. The worker allows `max_retries + 1` total attempts (one original plus N retries), with fix context properly scoped per failure type (build stderr vs review/qa stdout).
+
+## VPS Deployment
+
+The feature is complete for VPS deployment. All must-haves shipped:
+
+- Provider-agnostic dispatch (Claude + Gemini)
+- Pluggable trigger sources (GitHub poll + webhook)
+- Multi-worker coordination (label-based claim locks)
+- Dynamic provider routing (reads `personas.json`)
+- Dependency checking (parses "Blocked by #N")
+- Auth middleware (Bearer token)
+
+The workflow is: groomed issues get `worker:ready` labels, the worker picks them up in priority order (project board position → label priority → FIFO), executes the pipeline, creates a PR, and waits for user review.
+
+## The Meta-Story
+
+The interesting story isn't "I built a worker." The story is recognizing when each layer of the system should make decisions vs execute decisions. The worker doesn't architect — it implements. The user doesn't code — they direct. The personas are the development team. The Traffic Cop is the build system. The worker is the deployment pipeline.
+
+Everyone writes "I used AI to build X." Almost nobody writes "Here is how I direct an AI development pipeline — what I delegate, what I review, what decisions I still make myself."
+
+That delegation story — the meta-story of orchestrating AI agents — is what's actually interesting here.
