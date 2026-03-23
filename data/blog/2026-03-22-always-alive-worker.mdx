@@ -1,0 +1,125 @@
+---
+title: 'Vision Brief: Always-Alive Autonomous Worker'
+date: '2026-03-22'
+tags: ['ai', 'dev-log', 'always', 'alive', 'worker']
+draft: true
+aiGenerated: true
+summary: 'While working with EcoOrchestra, I noticed something: I had built an effective AI development team (/vision, /plan, /build, /review, /qa, /ship), but there was still a human bottleneck. Me. I was t...'
+images: []
+authors: ['default']
+---
+
+While working with EcoOrchestra, I noticed something: I had built an effective AI development team (/vision, /plan, /build, /review, /qa, /ship), but there was still a human bottleneck. Me. I was the one reading GitHub issues, deciding which ones to tackle, and manually typing `/build` to start the pipeline.
+
+The personas were good at their jobs — /review caught bugs I would have shipped, /qa found edge cases I missed, the whole thing worked. But every workflow still started with me opening Claude Code and typing a command. So I asked myself: what if it didn't have to?
+
+## The Problem
+
+Here's what my workflow looked like before this feature:
+
+1. GitHub notification arrives
+2. I read the issue
+3. I assess if it's actionable (usually it is, because I write my own issues)
+4. I open Claude Code
+5. I type `/build` and reference the issue number
+6. I wait for the pipeline to complete
+7. I review the PR and merge if it looks good
+
+Steps 4-7 are pure mechanical work. The decision-making happened in steps 1-3, and even that was mostly automatic — if I wrote the issue, it's groomed by definition.
+
+The insight was this: **what if every GitHub issue is a fully-groomed spec before it gets created?** No triage, no clarification needed, no human judgment required. Just: issue exists → worker picks it up → pipeline runs → PR appears.
+
+## The Architecture Decision
+
+My first thought was to extend Ductor, the Discord bot I use for orchestrating tasks. Ductor already handles webhooks, has memory management, knows about my ecosystem. It would be straightforward to add a GitHub webhook handler there.
+
+But then I realized: that would be stacking orchestrators. Ductor orchestrates conversations and task queues. EcoOrchestra orchestrates development workflows. I'd be making Ductor responsible for both, which violates the single responsibility principle.
+
+Instead, I designed it as a decoupled system:
+
+```
+[Trigger Layer]              →  [Execution Layer]              →  [Pipeline]
+Ductor / Discord bot /          run-pipeline.sh in Docker         /build → /review → /qa → /ship
+Slack bot / GH Action /         + EcoOrchestra configs
+cron / anything                 + cloned target repo
+```
+
+The trigger layer's only job: receive a GitHub webhook, extract three values (repo URL, issue number, issue body), and call a shell script. The execution layer handles everything else — clone, install dependencies, create branch, invoke Claude Code with the persona pipeline.
+
+This keeps the contract simple and replaceable. If I want to swap Ductor for a GitHub Action tomorrow, I only have to change the trigger. The execution layer doesn't care where the work came from.
+
+## The Real Innovation: Groomed-Issues-Only
+
+The worker itself is just plumbing. The architectural insight that makes autonomous execution possible is the **groomed-issues-only mandate**.
+
+Every GitHub issue that gets created must already be a complete specification. This means:
+
+- /vision and /plan have already run before the issue exists
+- The issue includes: problem statement, expected behavior, approach, affected files
+- No triage step, no label-gating, no human review required
+- Every issue is actionable the moment it appears
+
+This workflow change was more significant than the worker code. I had to restructure how I think about issue creation. Instead of "file bug report → investigate → plan fix," the flow becomes "investigate → plan fix → file implementation spec."
+
+GitHub issue templates enforce the required sections. An incomplete issue gets rejected before it can trigger the worker.
+
+## Two-Environment Model
+
+I ended up with a split setup:
+
+| Environment             | Purpose                    | What runs                                                         |
+| ----------------------- | -------------------------- | ----------------------------------------------------------------- |
+| **Local (Windows)**     | Interactive development    | Workbench UI, Traffic Cop, manual `/build` when I want to iterate |
+| **Hetzner VPS (Linux)** | Autonomous background work | Ductor webhook + execution script in Docker                       |
+
+These environments are independent. The VPS doesn't need my Workbench. My local machine doesn't need Ductor. They share: EcoOrchestra persona configs (cloned from git), Claude Code CLI (separate auth), and GitHub (webhook source + PR target).
+
+## VPS Resource Reality
+
+The VPS specs were interesting to figure out. The AI inference runs in Anthropic's cloud — the VPS just runs:
+
+- Claude Code CLI (Node.js process, ~200MB RAM)
+- Git clone and dependency installation
+- Test execution
+- Docker container overhead
+
+A single pipeline run uses about 1-2GB of RAM and takes 5-30 minutes depending on complexity. Most of that time is spent waiting for API responses, not burning CPU.
+
+I started with a Hetzner CX32 (4 vCPU / 8 GB) that handles 2 concurrent runs comfortably. The monthly cost is €8, which is negligible compared to API spend — a single pipeline run costs $0.50-$3.00 in tokens.
+
+## Trust Boundaries
+
+The worker can create noise if something goes wrong — junk branches, bad PRs, spurious issue comments. But it can't ship unchecked code. The /review and /qa gates still apply to autonomous runs. Every change gets reviewed by Claude before it reaches main.
+
+This containment strategy made me comfortable with autonomous operation. Bad PRs are caught, not merged. The worst-case scenario is cleanup work, not production incidents.
+
+## The Implementation
+
+The execution contract is a shell script that takes three arguments:
+
+```bash
+run-pipeline.sh <repo_url> <issue_number> <issue_body_file>
+```
+
+The script:
+
+1. Clones the target repository
+2. Clones EcoOrchestra for persona configurations
+3. Detects package manager (npm, pip, etc.)
+4. Installs dependencies
+5. Creates a feature branch
+6. Invokes Claude Code with `/build` and the issue context
+
+The Docker container includes Claude Code CLI, git, Node.js, Python, and standard build tools. It's portable across any Linux host.
+
+Ductor receives the GitHub webhook, extracts the three values, and calls the script. Total webhook handler: about 30 lines of Python.
+
+## The Result
+
+I've been running this for two weeks. When I file an issue in any of my repos, a PR appears within 20 minutes without me touching anything. The quality is identical to manually-triggered pipelines — same personas, same review gates, same output.
+
+The workflow change was more impactful than the automation. Requiring every issue to be pre-groomed forces me to think through problems more carefully upfront. The issues are better specifications, which means better implementations.
+
+My theory is that the constraint (groomed-issues-only) enabled the automation, not the other way around. You can't automate judgment calls, but you can eliminate the need for them by doing the thinking up front.
+
+The worker is just what happens when you remove the human trigger from a process that was already systematic. That's the interesting part — it wasn't a new capability, it was the removal of an unnecessary step.
