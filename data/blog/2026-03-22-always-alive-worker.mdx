@@ -1,12 +1,19 @@
 ---
 title: 'Vision Brief: Always-Alive Autonomous Worker'
-date: '2026-03-22'
-tags: ['ai', 'dev-log', 'always', 'alive', 'worker']
-draft: true
+date: 2026-03-22
+lastmod: ''
+tags:
+  - ai
+  - dev-log
+  - always
+  - alive
+  - worker
+draft: false
 aiGenerated: true
 summary: 'While working with EcoOrchestra, I noticed something: I had built an effective AI development team (/vision, /plan, /build, /review, /qa, /ship), but there was still a human bottleneck. Me. I was t...'
+authors:
+  - default
 images: []
-authors: ['default']
 ---
 
 While working with EcoOrchestra, I noticed something: I had built an effective AI development team (/vision, /plan, /build, /review, /qa, /ship), but there was still a human bottleneck. Me. I was the one reading GitHub issues, deciding which ones to tackle, and manually typing `/build` to start the pipeline.
@@ -37,7 +44,7 @@ But then I realized: that would be stacking orchestrators. Ductor orchestrates c
 
 Instead, I designed it as a decoupled system:
 
-```
+```plain
 [Trigger Layer]              →  [Execution Layer]              →  [Pipeline]
 Ductor / Discord bot /          run-pipeline.sh in Docker         /build → /review → /qa → /ship
 Slack bot / GH Action /         + EcoOrchestra configs
@@ -67,10 +74,10 @@ GitHub issue templates enforce the required sections. An incomplete issue gets r
 
 I ended up with a split setup:
 
-| Environment             | Purpose                    | What runs                                                         |
-| ----------------------- | -------------------------- | ----------------------------------------------------------------- |
-| **Local (Windows)**     | Interactive development    | Workbench UI, Traffic Cop, manual `/build` when I want to iterate |
-| **Hetzner VPS (Linux)** | Autonomous background work | Ductor webhook + execution script in Docker                       |
+| Environment | Purpose | What runs |
+| --- | --- | --- |
+| **Local (Windows)** | Interactive development | Workbench UI, Traffic Cop, manual `/build` when I want to iterate |
+| **Hetzner VPS (Linux)** | Autonomous background work | Ductor webhook + execution script in Docker |
 
 These environments are independent. The VPS doesn't need my Workbench. My local machine doesn't need Ductor. They share: EcoOrchestra persona configs (cloned from git), Claude Code CLI (separate auth), and GitHub (webhook source + PR target).
 
@@ -78,7 +85,7 @@ These environments are independent. The VPS doesn't need my Workbench. My local 
 
 The VPS specs were interesting to figure out. The AI inference runs in Anthropic's cloud — the VPS just runs:
 
-- Claude Code CLI (Node.js process, ~200MB RAM)
+- Claude Code CLI (Node.js process, \~200MB RAM)
 - Git clone and dependency installation
 - Test execution
 - Docker container overhead
