@@ -40,6 +40,67 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
+# Known project names mapped to their display names for foundation post matching.
+# When a foundation post like "what-is-ecoorchestra.mdx" exists, the generator
+# injects a mandatory link reference so the LLM weaves it into the narrative.
+# Maps project keys to (display_name, foundation_slug_override).
+# Override is used when the foundation post slug doesn't contain the project key
+# (e.g., Ghostpen's foundation post is "how-i-built-a-blog-that-writes-itself").
+FOUNDATION_PROJECTS: dict[str, tuple[str, str | None]] = {
+    "ecoorchestra": ("EcoOrchestra", None),
+    "llm-router": ("LLM Router", None),
+    "autoagent": ("AutoAgent", None),
+    "ghostpen": ("Ghostpen", "how-i-built-a-blog-that-writes-itself"),
+    "streamwatcher": ("StreamWatcher", None),
+    "frame-intelligence": ("Frame Intelligence", None),
+    "myoojik": ("Myoojik", None),
+}
+
+
+def build_foundation_registry() -> str:
+    """Scan data/blog/ for foundation posts and build a link registry.
+
+    Returns a markdown section to inject into the generation prompt,
+    instructing the LLM to link to foundation posts on first mention
+    of each project. This enforces the style guide rule that feature
+    posts must reference foundation posts, never GitHub repos.
+    """
+    if not BLOG_DIR.exists():
+        return ""
+
+    # Build set of available slugs from blog directory
+    available_slugs: dict[str, str] = {}  # slug -> blog_path
+    for post_file in sorted(BLOG_DIR.glob("*.mdx")):
+        name = post_file.stem
+        slug = "-".join(name.split("-")[3:])
+        available_slugs[slug.lower()] = f"/blog/{slug}"
+
+    registry: list[str] = []
+    for project_key, (display_name, override_slug) in FOUNDATION_PROJECTS.items():
+        # Check override slug first (for non-standard foundation post names)
+        if override_slug and override_slug.lower() in available_slugs:
+            blog_path = available_slugs[override_slug.lower()]
+            registry.append(f"- {display_name} -> [{display_name}]({blog_path})")
+            continue
+        # Fall back to matching project key in slug
+        for slug, blog_path in available_slugs.items():
+            if project_key in slug:
+                registry.append(f"- {display_name} -> [{display_name}]({blog_path})")
+                break
+
+    if not registry:
+        return ""
+
+    lines = [
+        "\n## Foundation Post Links (MANDATORY)",
+        "When mentioning these projects, you MUST link to their foundation post on first mention.",
+        "Never link to GitHub repos — always use these internal blog links.\n",
+    ]
+    lines.extend(registry)
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Core functions
 # ---------------------------------------------------------------------------
@@ -148,6 +209,11 @@ def generate_post(artifacts: dict, style_guide: str) -> str:
 
     if artifacts["screenshots"]:
         parts.append(f"\n(There are {len(artifacts['screenshots'])} screenshots available for this feature.)\n")
+
+    # Inject foundation post links so the LLM references them on first mention
+    foundation_section = build_foundation_registry()
+    if foundation_section:
+        parts.append(foundation_section)
 
     parts.append(
         "\nGenerate ONLY the markdown body of the blog post (no frontmatter). "
