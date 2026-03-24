@@ -109,9 +109,9 @@ One line. $57 lesson learned. I updated every bootstrapping document in the proj
 
 ## The Deliberation Engine: Three Providers Debating
 
-Traffic Cop enabled something I hadn't originally planned: multi-provider deliberation. Instead of one model analyzing a feature request, three models debate it.
+Traffic Cop enabled something I hadn't originally planned: [multi-provider deliberation](/blog/what-is-ultravision). Instead of one model analyzing a feature request, three models debate it.
 
-The `/ultravision` command dispatches the same prompt to Claude (analyst), Gemini (critic), and OpenAI (critic). Claude analyzes. The critics challenge independently. Claude responds to the critiques. Then Claude synthesizes the strongest arguments from all three into a final position.
+The [`/ultravision`](/blog/what-is-ultravision) command dispatches the same prompt to Claude (analyst), Gemini (critic), and OpenAI (critic). Claude analyzes. The critics challenge independently. Claude responds to the critiques. Then Claude synthesizes the strongest arguments from all three into a final position.
 
 The first real deliberation was about whether research tickets should auto-create implementation issues. Claude proposed a prose-parsing heuristic. Gemini argued it was brittle — the real cost of spam is attention erosion, not the time to close issues. Claude conceded. The synthesis adopted structured YAML output with a confidence gate. A better decision than any single model would have made alone.
 
