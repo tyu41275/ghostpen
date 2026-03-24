@@ -1,0 +1,59 @@
+---
+title: 'The Workbench Was Spec''d UI-First. That Was the Wrong Order.'
+date: '2026-03-24'
+tags: ['automation', 'ai', 'ductor']
+draft: true
+aiGenerated: true
+summary: 'Four Workbench issues approved, all four proceeding — but I flipped the build order to Python-first after realizing the deliberation spec was being designed for a WebSocket consumer instead of a callable Python module.'
+---
+
+The Workbench is a visual control panel for the [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline — provider dropdowns, model selectors per persona, a deliberation panel where Claude and Gemini argue about a prompt and synthesize a brief from the disagreement. Four issues on the board: #179 (WebSocket server), #180 (Next.js scaffold), #181 (output panel + provider controls), #182 (Super Vision deliberation). All approved from the vision gate.
+
+The specs were well-written. My first instinct was to start with the Next.js scaffold and work backward.
+
+Then I asked a question that should have been obvious from the start: can I do any of this from the terminal?
+
+Provider swap — swap the reviewer persona from Gemini to Claude mid-session. Model selection — run the vision persona on Haiku instead of Opus for a quick sanity check. Multi-provider deliberation — have Claude and Gemini debate an architecture call and synthesize a brief from the disagreement. If these capabilities only exist inside a running WebSocket server, I have a Workbench that cannot be tested, scripted, or called from a cron task. That is a problem.
+
+I opened `traffic_cop.py` to check. `set_override()` was already there. `get_provider()`, `get_model()`, `resolve_provider()` with health-aware failover, `dispatch()` with API/CLI routing. Everything the Workbench provider dropdown would call was already implemented at the Python layer. CLI parity for provider swaps and model selection: already solved, just missing a thin entry point.
+
+Deliberation was a different story. It did not exist anywhere.
+
+The spec for #182 added a `deliberate()` method to TrafficCop plus a new `eco_orchestra/deliberation.py` for round management. Good instinct on the placement. But the feature was described in terms of WebSocket streaming — how rounds would be pushed to the client, how the UI would animate each exchange. The natural path was to build it where the WebSocket context lived.
+
+So, now what?
+
+My first thought: start with `server.py`. It is already async. The WebSocket infrastructure is right there. Build the Workbench as planned, then extract a clean Python interface after the feature is working.
+
+I have made that mistake before. The WebSocket version of `deliberate()` accumulates async patterns, HTTP request objects, and streaming assumptions. Extracting it after the fact means untangling framework internals from the actual logic. That refactor is not impossible — it is just more expensive than getting the layering right from the start.
+
+The cheaper path: validate CLI parity before touching any UI. Three Python statements in a terminal:
+
+```python
+from eco_orchestra.traffic_cop import TrafficCop
+tc = TrafficCop()
+
+# Provider swap — already works
+tc.set_override("reviewer", provider="claude", model="claude-sonnet-4-20250514")
+print(tc.get_provider("reviewer"), tc.get_model("reviewer"))
+
+# Mock deliberation — two sequential dispatches, round 2 sees round 1 output
+round1 = tc.dispatch("vision", "Analyze: build a notification system")
+tc.set_override("vision", provider="gemini", model="gemini-2.5-pro")
+round2_prompt = (
+    f"Previous analysis:\n{round1.stdout}\n\n"
+    "Critique this. You must cite the specific claim you're disputing and explain why it's wrong."
+)
+round2 = tc.dispatch("vision", round2_prompt)
+print(f"Round 1: {len(round1.stdout)} chars, Round 2: {len(round2.stdout)} chars")
+```
+
+If that works, the Workbench is pure visualization. If it doesn't, no React component fixes it.
+
+The reorder for the four issues: `deliberation.py` (pure Python, zero server dependencies) → CLI entry point → WebSocket server (#179) wrapping TrafficCop → frontend (#180, #181) → DeliberationPanel (#182). One constraint added to all four: no new capability logic in `server.py` or any Workbench component. The server is a consumer. The frontend is a consumer. Capabilities live at the Python layer first.
+
+One flag I left open: the provider dropdowns in #181 hardcode the model list (opus/sonnet/haiku for Claude, pro/flash for Gemini). That list should come from `personas.json`, not from a JSX file. When a new model shows up, the right place to update it is the config — not a React component.
+
+Cool. All four issues proceeding, in the right order.
+
+Deliberation is the only net-new capability in the batch. It goes first because that is when getting the abstraction wrong is cheapest to fix — before the WebSocket layer has made assumptions about it, before the React panel has been built around it. The specs were solid. The architecture was sound. The only risk was build order.
