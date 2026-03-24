@@ -115,3 +115,19 @@ ghostpen is part of the EcoOrchestra ecosystem. It consumes AI-generated content
 
 - **llm-router** (`C:/Repos/llm-router`): HTTP API for LLM calls — ghostpen's generator script is a consumer, not a direct dependency
 - **EcoOrchestra** (`C:/Repos/EcoOrchestra`): Orchestration layer — provides the persona pipeline, planning, and artifact storage that feeds content generation
+
+## Context Scoping
+
+**For blog post content** -> `data/blog/` — MDX posts with YAML frontmatter
+**For AI post generation** -> `scripts/generate_post.py` — reads EcoOrchestra artifacts, calls llm-router, writes MDX
+**For writing style** -> `data/style-guide.md` — AI generators MUST follow this guide
+**For content schema** -> `contentlayer.config.ts` — defines frontmatter fields, computed fields, content processing
+**For page routing / layouts** -> `app/` (Next.js app directory) + `layouts/` (page layout components)
+**For UI components** -> `components/` — shared React components (Tag, SearchButton, navigation, etc.)
+**For styling** -> `css/` + `tailwind.config.js` — Tailwind CSS configuration and global styles
+**For site metadata** -> `data/siteMetadata.js` — title, URL, analytics, search, comments config
+**For build scripts** -> `scripts/postbuild.mjs` + `scripts/rss.mjs` — RSS generation, post-build tasks
+
+**Ignore**: `node_modules/`, `.next/`, `.contentlayer/`, `yarn.lock`, `.claude/worktrees/`
+
+**When to escalate**: Use MCP cross-project tools when debugging the content generation pipeline (involves `llm-router` HTTP API and `EcoOrchestra` artifacts). For blog styling, layout, content, or Next.js issues, stay local.

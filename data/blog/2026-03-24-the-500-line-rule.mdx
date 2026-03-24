@@ -1,0 +1,126 @@
+---
+title: 'The 500-Line Rule: How Big Is Too Big for AI-Assisted Code?'
+date: '2026-03-24'
+lastmod: '2026-03-24'
+tags: ['ai', 'ecoorchestra', 'research', 'developer-experience']
+draft: false
+summary: 'I challenged my own assumption about file size limits by putting three AI providers in a room to debate it, then backed up the winner with published research.'
+images: []
+authors: ['default']
+---
+
+I wanted a guardrail. Something that would stop files from growing into 1,500-line monsters that make every AI edit a coin flip. My instinct was simple: 500 lines, hard limit, enforced by a hook. If a file crosses the threshold, the edit gets blocked.
+
+But before building it, I did something I have been doing more often with [EcoOrchestra](/blog/what-is-ecoorchestra) -- I put the idea through a multi-provider deliberation. Three AI providers (Claude, OpenAI, Gemini) debating the same feature independently, challenging each other, then synthesizing the strongest arguments.
+
+What came out surprised me. The 500-line number I picked? It is a ceiling, not a target. The actual optimal zone is closer to 300.
+
+## The deliberation
+
+The `/ultravision` command dispatches a feature proposal to all three providers. Claude analyzes first, then OpenAI and Gemini independently critique, then Claude responds to the critiques, and finally a synthesis merges the strongest arguments.
+
+Here is how it played out:
+
+**Claude** proposed a `PostToolUse` hook -- one that fires _after_ the edit lands and warns if the file is too long. The logic was: "You cannot know the resulting line count before the edit happens."
+
+**Gemini** disagreed. Hard. The critique pointed out that a `PreToolUse` hook _can_ do the math before the edit:
+
+```
+estimated_final = current_lines - lines(old_string) + lines(new_string)
+```
+
+For an `Edit` operation, Claude Code sends both the old text and the new text. The arithmetic is deterministic -- not estimated, not approximate. For a `Write` operation, the entire file content is in the tool input. You can count the lines directly.
+
+Gemini argued: "Why force the AI to make a mistake and then tell it to fix it, when we can just prevent the mistake from ever happening?"
+
+**Claude conceded.** The response was direct: "My original claim was false. I was thinking about this as a filesystem problem when it is actually a patch arithmetic problem."
+
+**OpenAI** caught something different. The critique was not about _how_ to enforce the limit -- it was about _where_. A 500-line rule is not like "don't use absolute paths" or "don't ship without docs." It is a codebase-specific design constraint. Different repos have different tolerances. Generated code, test fixtures, migration files -- they all have different natural sizes. Making it a global rule would be the kind of guardrail that trains people to ignore guardrails.
+
+The synthesis landed on: PreToolUse blocking hook (Gemini), repo-opt-in via config file (OpenAI), with the planner persona catching it upstream before code is written (Claude). Three providers, three different valuable perspectives.
+
+## But is 500 the right number?
+
+I did not want to ship a threshold based on gut feel. So I ran a research task: what does the evidence actually say about LLM performance degradation with file size?
+
+The findings were more dramatic than I expected.
+
+### The "Lost in the Middle" problem
+
+A [2024 TACL paper](https://aclanthology.org/2024.tacl-1.9/) demonstrated that LLMs exhibit a U-shaped performance curve. Accuracy is highest when relevant information sits at the beginning or end of the context. When it is in the middle? A 20+ percentage point drop. GPT-3.5-Turbo actually performed _worse_ than having no context at all when the relevant information was buried in the middle of a long input.
+
+### Every model degrades. Every single one.
+
+[Chroma Research](https://www.trychroma.com/research/context-rot) tested 18 frontier models with 194,480 API calls. The results: all 18 models degrade at every context length increment. A model with a 200K token capacity shows "significant degradation at 50K tokens." Position-based accuracy drops from ~75% at the start to ~45-55% in the middle. That is a 30% hit just from _where_ the code sits in context.
+
+### Adobe proved it is not a retrieval problem
+
+This is the one that changed my mental model. [Adobe Research (2025)](https://arxiv.org/html/2510.05381v1) showed that even when a model can perfectly retrieve all evidence -- 100% exact match recitation -- performance _still_ degrades as input length increases. Eleven of twelve models dropped below 50% of baseline performance at just 32K tokens.
+
+The degradation is not because the model cannot _find_ the relevant code. It is because longer contexts make the model worse at _reasoning about_ the code it found. That is a fundamentally different problem, and one that file-size limits actually help with.
+
+### The industry already converged on this
+
+The practical evidence lines up with the research:
+
+- **Cursor "500 Rule"** -- keep files under 500 lines. Their community consensus puts optimal at 300-350.
+- **Aider creator**: "Every model gets confused past ~25-30K tokens. They stop obeying their system prompts."
+- **GitHub Copilot** pulls only 60 relevant lines from each open file for completions. Users report degraded suggestions past 1,000 lines.
+- **Cline** enforces a 300KB hard limit and recommends the "effective window" is 50-70% of advertised capacity.
+
+Converting tokens to lines (at ~35 tokens/line average), the critical threshold is around 700-900 lines. But the _optimal_ zone -- where all models perform reliably -- is 300-350 lines, or roughly 10K tokens.
+
+## The signal-to-noise math
+
+Here is the number that made me rethink the threshold entirely. In a typical 20,000-token code context, only about 500 tokens are the relevant code. That is a 2.5% signal ratio. The model effective attention is diluted by **40x** compared to a curated, minimal context.
+
+A 300-line file at 10K tokens keeps the signal-to-noise ratio manageable. A 500-line file at 17K tokens is still safe _in isolation_ -- but a file is never the only thing in context. System prompts, conversation history, other referenced files, tool definitions -- they all compete for the same attention budget.
+
+## What shipped
+
+The config schema for `.file-limits.json` now supports per-path overrides:
+
+```json
+{
+  "max_lines": 300,
+  "warn_at": 200,
+  "exclude_patterns": ["*.generated.*", "*.min.*", "*.lock"],
+  "overrides": {
+    "tests/**": { "max_lines": 450, "warn_at": 300 },
+    "*.md": { "max_lines": 0 },
+    "*.json": { "max_lines": 0 }
+  }
+}
+```
+
+`max_lines: 0` disables enforcement for that pattern. Markdown and JSON are content and config -- the research on code comprehension does not apply the same way.
+
+Test files get a 1.5x multiplier (450 lines) because they tend to be more repetitive -- setup/teardown patterns, similar assertion structures -- which means better signal-to-noise even at higher line counts. But complex integration tests are as vulnerable as source files, so 450 is not generous.
+
+The hook itself is a `PreToolUse` blocker with the grandfathering formula from the deliberation:
+
+```bash
+# Only block when a file CROSSES the threshold
+# (current < limit) AND (estimated > limit)
+# Files already over the limit are grandfathered
+```
+
+This is the key insight from the deliberation. You do not nag every time someone touches a large file. You prevent _new_ files from crossing the threshold. Existing large files are tech debt -- they get addressed through planned refactoring, not mid-task interruptions.
+
+## The model-specific angle
+
+One finding I did not expect: Claude degrades more gracefully than GPT or Gemini. When Claude hits the limits of its effective context, it tends to abstain -- refuse or hedge -- rather than hallucinate. GPT, by contrast, generates confident but incorrect code. Gemini has the highest output variability.
+
+For an automated pipeline like [EcoOrchestra](/blog/what-is-ecoorchestra), this matters. A refusal is detectable. A confident hallucination is not. Claude behavior means the pipeline fails visibly (the QA step catches it), rather than silently shipping wrong code.
+
+## What I learned
+
+My original instinct -- 500 lines, hard limit -- was in the right ballpark but for the wrong reasons. I was thinking about code organization. The research says the real constraint is attention mechanics: how transformer models allocate reasoning capacity across context.
+
+The deliberation process earned its keep here. Claude initial analysis was wrong about the enforcement mechanism (PostToolUse vs PreToolUse), and would have shipped a weaker design if Gemini had not challenged it. OpenAI caught the scope problem that would have made the rule annoying to adopt. Three perspectives, three different failure modes caught.
+
+The research turned a gut-feel number into an evidence-backed one. 300 is optimal. 500 is the ceiling. 700+ is where things start to fall apart for every model tested.
+
+My [EcoOrchestra](/blog/what-is-ecoorchestra) repo has six files over 500 lines right now. That is tech debt I now know is actively degrading the quality of AI-generated code in those files. The hook will not fix the existing files, but it will stop new ones from getting there. The planner will catch the rest.
+
+Thanks for reading.
