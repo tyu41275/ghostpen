@@ -71,7 +71,7 @@ Traffic Cop reads `personas.json` at startup. Each persona declares its provider
 When a slash command invokes a persona, Traffic Cop resolves the provider, picks the right dispatch path (CLI subprocess or HTTP API), and handles the response. Three dispatch paths, zero shared code between them:
 
 1. **Claude CLI** — `claude -p --output-format stream-json` subprocess. Authenticates via your subscription.
-2. **Gemini API** — Direct HTTP to `generativelanguage.googleapis.com`. Free tier at 15 RPM.
+2. **Gemini API** — Direct HTTP to `generativelanguage.googleapis.com`. Free tier at 5 RPM.
 3. **OpenAI API** — HTTP to `api.openai.com/v1/chat/completions`. Pay-per-token.
 
 The fallback chain is automatic. If Gemini API returns a 429 (rate limited), Traffic Cop retries via Gemini CLI. If the reviewer's Gemini dispatch hits a refusal ("I can't access files"), it falls back to Claude CLI. No manual intervention.
@@ -119,14 +119,12 @@ The first real deliberation was about whether research tickets should auto-creat
 
 The dispatch mode inference in the deliberation engine has a subtle bug. When resolving which dispatch mode to use for a provider, it collects modes from all personas using that provider and picks "api" if any persona uses API mode. This "API wins" precedence is wrong for providers where most personas use CLI. It hasn't caused a real bug yet, but it's a latent issue.
 
-I'd also separate the pr-poller and issue-poller into independent cron jobs earlier. Running both through the same `poll.py` with N=2 parallelism caused duplicate review tasks before the deduplication guards were in place. The split is planned now, but I burned several hours debugging duplicate spawns first.
+I'd also separate the pr-poller and issue-poller into independent cron jobs earlier. Running both through the same `poll.py` with N=2 parallelism caused duplicate review tasks before the deduplication guards were in place. The split shipped in PR #764, but I burned several hours debugging duplicate spawns first.
 
 ## Where It Stands
 
 Traffic Cop handles about 50-100 dispatches per day across the persona pipeline. Claude gets the reasoning-heavy work (developer, planner, vision, QA). Gemini gets the read-heavy analysis (reviewer, researcher). OpenAI is available but rarely used — it's there for deliberation rounds.
 
 The personas don't know or care which provider runs them. The slash command prompts are identical regardless of provider. Traffic Cop handles the routing, the fallback, the health checks, and the output normalization. The pipeline just works.
-
-Cool!
 
 If you're building multi-agent systems and running into single-provider constraints, the takeaway is: not all agents need the same model. Match the capability to the task. Your reviewer doesn't need the same reasoning depth as your code writer. And check your environment variables — that billing surprise is real.
