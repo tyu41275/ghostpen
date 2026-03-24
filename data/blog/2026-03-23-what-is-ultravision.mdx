@@ -1,0 +1,98 @@
+---
+title: 'What Is Ultravision? Multi-Provider AI Deliberation'
+date: '2026-03-23'
+lastmod: '2026-03-24'
+tags: ['ai', 'dev-log', 'ecoorchestra', 'ultravision']
+draft: false
+aiGenerated: true
+summary: 'How I built a system where three AI providers debate feature decisions before any code is written, and why the disagreements produce better designs than any single model.'
+authors: ['default']
+images: []
+---
+
+I kept catching the same pattern. I would run `/vision` through [EcoOrchestra](/blog/what-is-ecoorchestra) to vet a feature idea, get back a solid analysis from Claude, start building -- and then three days later realize the analysis missed something obvious. Not wrong, exactly. Just... incomplete. One model's blind spots are invisible until a different model points at them.
+
+So I started doing it manually. I would take Claude's vision output, paste it into Gemini, ask "what did this miss?" -- and almost every time, Gemini would catch something real. A scope issue. An architectural assumption that did not hold. An edge case that would have blown up in production.
+
+Honestly, the manual version worked fine. But I was spending 20 minutes copy-pasting between providers for every feature decision. That is the kind of friction that makes you skip the step when you are in a hurry, which is exactly when you need it most.
+
+## The deliberation flow
+
+`/ultravision` is a structured adversarial debate between providers. Not a vote. Not a consensus mechanism. A debate where the critics are _required_ to disagree.
+
+Here is the round structure:
+
+```
+Round 1: Claude (analyst)     -- initial analysis
+Round 2: OpenAI (critic)      -- independent critique
+Round 3: Gemini (critic)      -- independent critique
+Round 4: Claude (respondent)  -- responds to all critiques
+Round 5: Gemini (synthesizer) -- merges strongest arguments
+```
+
+Provider[0] (Claude) gets the feature proposal and produces the initial analysis -- same thing `/vision` would normally do. Then each remaining provider gets the original proposal _and_ Claude's analysis, with an explicit instruction: find what is wrong with it. They must disagree on at least one substantive point or the round gets rejected and re-run.
+
+After the critiques come in, Claude gets a chance to respond. It can concede points, push back, or add nuance. This is where it gets interesting -- watching an AI model admit it was wrong is weirdly satisfying. And it happens more often than you would expect.
+
+Finally, a synthesis provider (currently Gemini) reads all the rounds and merges the strongest arguments into a final recommendation. The synthesis is not allowed to introduce new arguments -- it can only select and combine from what was already debated.
+
+## The architecture
+
+The whole thing is a pure Python module. No web framework, no queue, no external dependencies beyond the API clients that [Traffic Cop](/blog/2026-03-24-building-a-traffic-cop-for-ai-agents) already manages.
+
+The key trick is temporary provider overrides. The `/vision` persona normally routes to Claude. During a deliberation round, the code temporarily overrides that routing to send the same persona slot through a different provider:
+
+```python
+tc.set_override("vision", provider=critic_provider,
+                model=provider_model, dispatch_mode=inferred_dispatch_mode)
+result = tc.dispatch("vision", prompt_text, working_dir=working_dir)
+tc.clear_override("vision")
+```
+
+Each round is a standard Traffic Cop dispatch. The deliberation module just orchestrates _which_ provider handles each round and what context it receives. This means every provider gets the same prompt engineering, the same output format expectations, the same timeout handling. The only thing that changes is who is answering.
+
+(The repo is currently private but may be made public in the future.)
+
+## A real example: the file-length deliberation
+
+The best way to explain why this works is to show a deliberation that changed the outcome. On 2026-03-24, I put a simple idea through `/ultravision`: enforce a 500-line file limit with a hook.
+
+**Claude** proposed a `PostToolUse` hook. The reasoning: you cannot know the final line count until after the edit lands, so fire the hook post-edit and warn if the file is too long.
+
+Sounds reasonable, right? I would have shipped that.
+
+**Gemini** disagreed. Hard. The critique pointed out that a `PreToolUse` hook _can_ calculate the final line count before the edit happens:
+
+```
+estimated_final = current_lines - lines(old_string) + lines(new_string)
+```
+
+For an `Edit` operation, Claude Code sends both the old text and the new text in the tool input. The arithmetic is deterministic. For a `Write`, the entire file content is right there -- just count the lines. Why let the AI make a mistake and then tell it to fix it, when you can prevent the mistake from ever happening?
+
+**Claude conceded.** And the concession was specific: "I was thinking about this as a filesystem problem when it is actually a patch arithmetic problem." That is the kind of reframing that does not happen when you only ask one model.
+
+**OpenAI** caught something entirely different. The critique was not about _how_ to enforce the limit but _where_. A 500-line rule is a codebase-specific design constraint. Generated code, test fixtures, migration files -- they all have different natural sizes. Making it a global rule would be the kind of guardrail that trains people to ignore guardrails.
+
+The synthesis landed on three pieces: PreToolUse blocking hook (Gemini's architecture), repo-opt-in via config file (OpenAI's scoping), and planner integration to catch it upstream before code is written (Claude's recovery). Three providers, three different valuable contributions, a better design than any one of them produced alone.
+
+The full writeup of that deliberation is here: [The 500-Line Rule](/blog/2026-03-24-the-500-line-rule).
+
+## Graceful degradation
+
+Not everyone has three API keys sitting around. The deliberation checks for available providers at startup:
+
+- Three providers available: full 5-round deliberation (analyst, two critics, respondent, synthesizer)
+- Two providers available: compressed deliberation (analyst, one critic, respondent, synthesis by the critic)
+- One provider available: falls back to standard `/vision` with no deliberation
+
+This was a pragmatic decision. I did not want the feature to be unusable for someone who only has a Claude subscription and an OpenAI key but no Gemini. Two-provider mode still catches blind spots -- you just get one perspective instead of two. And single-provider mode is just... `/vision`. No degradation, no error, just the normal behavior.
+
+## What makes this different
+
+I want to be clear about what this is not. It is not an ensemble. It is not majority voting. It is not "ask three models and pick the most common answer." Those approaches optimize for agreement, and agreement is exactly what you do not want when you are trying to find blind spots.
+
+The critics _must_ disagree. That is a hard constraint in the prompt. If a critic comes back with "I agree with everything," the round gets flagged and re-run with stronger adversarial framing. The value of multi-provider deliberation is entirely in the disagreements.
+
+Each provider has different training data, different failure modes, different tendencies. Claude tends to be conservative -- it will suggest the safe approach even when a bolder one is warranted. OpenAI tends to be confident -- it will commit to a position and defend it even when the evidence is thin. Gemini catches structural issues that the other two gloss over. These are not bugs. They are features, but only if you set up a structure that forces the differences to surface.
+
+The best feature decisions I have shipped came from the rounds where Claude had to admit it was wrong. That is the whole point.

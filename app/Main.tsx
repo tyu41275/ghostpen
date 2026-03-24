@@ -45,7 +45,13 @@ export default function Home({ posts }) {
               </Link>
             </div>
             <p className="text-sm text-gray-400 dark:text-gray-500">
-              AI posts written by{' '}
+              <Link
+                href="/tags/ai"
+                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+              >
+                AI
+              </Link>{' '}
+              posts written by{' '}
               <Link
                 href="https://github.com/tyu41275/ghostpen"
                 className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"

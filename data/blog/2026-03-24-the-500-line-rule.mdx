@@ -7,18 +7,17 @@ draft: false
 summary: 'I challenged my own assumption about file size limits by putting three AI providers in a room to debate it, then backed up the winner with published research.'
 images: []
 authors: ['default']
-aiGenerated: true
 ---
 
 I wanted a guardrail. Something that would stop files from growing into 1,500-line monsters that make every AI edit a coin flip. My instinct was simple: 500 lines, hard limit, enforced by a hook. If a file crosses the threshold, the edit gets blocked.
 
-But before building it, I did something I have been doing more often with [EcoOrchestra](/blog/what-is-ecoorchestra) -- I put the idea through a multi-provider deliberation. Three AI providers (Claude, OpenAI, Gemini) debating the same feature independently, challenging each other, then synthesizing the strongest arguments.
+But before building it, I did something I have been doing more often with [EcoOrchestra](/blog/what-is-ecoorchestra) -- I put the idea through a [multi-provider deliberation](/blog/what-is-ultravision). Three AI providers (Claude, OpenAI, Gemini) debating the same feature independently, challenging each other, then synthesizing the strongest arguments.
 
 What came out surprised me. The 500-line number I picked? It is a ceiling, not a target. The actual optimal zone is closer to 300.
 
 ## The deliberation
 
-The `/ultravision` command dispatches a feature proposal to all three providers. Claude analyzes first, then OpenAI and Gemini independently critique, then Claude responds to the critiques, and finally a synthesis merges the strongest arguments.
+The [`/ultravision`](/blog/what-is-ultravision) command dispatches a feature proposal to all three providers. Claude analyzes first, then OpenAI and Gemini independently critique, then Claude responds to the critiques, and finally a synthesis merges the strongest arguments.
 
 Here is how it played out:
 
