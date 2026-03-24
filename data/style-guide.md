@@ -192,7 +192,9 @@ Feature posts MUST NOT link to external GitHub repos for projects in the ecosyst
 
 ### Required foundation posts
 
-Every ecosystem project referenced in a feature post must have a foundation post:
+Foundation posts are required for two categories: **projects** (full codebases) and **concepts** (significant features or architectural ideas within a project). Both use the same convention — a "What is X" post that explains architecture, reasoning, and tradeoffs, not just a description.
+
+#### Projects
 
 | Project      | Foundation post slug                    | Purpose                    |
 | ------------ | --------------------------------------- | -------------------------- |
@@ -201,16 +203,35 @@ Every ecosystem project referenced in a feature post must have a foundation post
 | AutoAgent    | `what-is-autoagent`                     | VOD analysis agent         |
 | Ghostpen     | `how-i-built-a-blog-that-writes-itself` | AI-powered blog generator  |
 
+#### Concepts
+
+A concept needs a foundation post when 2 or more of these signals fire:
+
+| Signal | Description |
+| ------ | ----------- |
+| Referenced in 2+ feature posts | Same concept explained inline in multiple posts |
+| Requires inline explanation each time | Readers can't understand the feature post without the concept |
+| Has its own architecture | Distinct data flow, round structure, or component design |
+| Readers would search for it | "What is X" would be a natural discovery query |
+
+| Concept     | Foundation post slug    | Parent project | Status          |
+| ----------- | ----------------------- | -------------- | --------------- |
+| Ultravision | `what-is-ultravision`   | EcoOrchestra   | Post exists     |
+| Traffic Cop | `what-is-traffic-cop`   | EcoOrchestra   | Needed          |
+| War Room    | `what-is-war-room`      | EcoOrchestra   | Needed when ready |
+
 ### Enforcement rules
 
-1. **Before generating a feature post**, check if all referenced projects have foundation posts in `data/blog/`. If a foundation post is missing, write it first.
+1. **Before generating a feature post**, check if all referenced projects and concepts have foundation posts in `data/blog/`. If a foundation post is missing, write it first.
 2. **Never link to GitHub repos** for ecosystem projects in post body text. Link to the foundation blog post instead. GitHub links belong in the foundation posts only.
 3. **Foundation posts are dated earlier** than the feature posts that reference them, so they appear first chronologically.
 4. **Cross-link between foundation posts** where projects depend on each other (e.g., AutoAgent's foundation post links to llm-router's).
 
-### Adding new projects
+### Adding new projects or concepts
 
-When a new project joins the ecosystem, add it to the table above and write a foundation post before any feature post references it.
+When a new project joins the ecosystem, add it to the projects table above and write a foundation post before any feature post references it.
+
+When a new concept accumulates 2+ of the signals above, add it to the concepts table and write a foundation post. `generate_post.py` will warn when a recurring concept lacks one.
 
 ### Strict linking rule
 

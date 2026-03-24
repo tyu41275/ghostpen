@@ -57,6 +57,15 @@ FOUNDATION_PROJECTS: dict[str, tuple[str, str | None]] = {
     "myoojik": ("Myoojik", None),
 }
 
+# Known concepts (significant features/architectural ideas) that may need foundation posts.
+# Maps concept_key (used for slug matching) to (display_name, foundation_slug_override).
+# Keep in sync with the "Concepts" table in data/style-guide.md.
+FOUNDATION_CONCEPTS: dict[str, tuple[str, str | None]] = {
+    "ultravision": ("Ultravision", "what-is-ultravision"),
+    "traffic-cop": ("Traffic Cop", "what-is-traffic-cop"),
+    "war-room": ("War Room", "what-is-war-room"),
+}
+
 
 def build_foundation_registry() -> str:
     """Scan data/blog/ for foundation posts and build a link registry.
@@ -102,6 +111,92 @@ def build_foundation_registry() -> str:
     lines.extend(registry)
     lines.append("")
     return "\n".join(lines)
+
+
+def scan_for_unlinked_concepts(content: str) -> None:
+    """Scan draft post content for recurring concepts that lack foundation posts.
+
+    For each concept in FOUNDATION_CONCEPTS that appears in the draft, checks
+    whether a foundation post exists and whether the concept is mentioned in 2+
+    existing blog posts. Prints an advisory warning for concepts that meet both
+    conditions — advisory only, never blocks post generation.
+    """
+    if not BLOG_DIR.exists():
+        return
+
+    _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
+
+    # Build set of existing slugs
+    available_slugs: set[str] = set()
+    for post_file in BLOG_DIR.glob("*.mdx"):
+        name = post_file.stem
+        m = _DATE_PREFIX_RE.match(name)
+        slug = m.group(1) if m else name
+        available_slugs.add(slug.lower())
+
+    # Read all existing post bodies for cross-reference counting
+    all_post_contents: list[str] = []
+    for post_file in BLOG_DIR.glob("*.mdx"):
+        try:
+            all_post_contents.append(post_file.read_text(encoding="utf-8").lower())
+        except OSError:
+            continue
+
+    content_lower = content.lower()
+    warnings: list[str] = []
+
+    # Also collect backtick-quoted terms from the draft as candidate concept names
+    backtick_terms: set[str] = {
+        m.group(1).lower().lstrip("/")
+        for m in re.finditer(r"`([^`]+)`", content)
+        if 2 <= len(m.group(1)) <= 40
+    }
+
+    for concept_key, (display_name, override_slug) in FOUNDATION_CONCEPTS.items():
+        concept_lower = display_name.lower()
+        concept_slug_term = concept_key.lower()
+
+        # Check if the concept appears in the draft content or as a backtick term
+        in_draft = (
+            concept_lower in content_lower
+            or concept_slug_term in content_lower
+            or concept_lower.replace(" ", "-") in backtick_terms
+            or concept_slug_term in backtick_terms
+        )
+        if not in_draft:
+            continue
+
+        # Check if a foundation post already exists for this concept
+        has_foundation = False
+        if override_slug and override_slug.lower() in available_slugs:
+            has_foundation = True
+        if not has_foundation:
+            for slug in available_slugs:
+                if concept_slug_term in slug:
+                    has_foundation = True
+                    break
+        if has_foundation:
+            continue
+
+        # Count existing posts that mention this concept
+        mention_count = sum(
+            1 for post_body in all_post_contents
+            if concept_lower in post_body or concept_slug_term in post_body
+        )
+
+        if mention_count >= 2:
+            warnings.append(
+                f"  '{display_name}' — referenced in {mention_count} post(s) without a dedicated explainer."
+            )
+
+    if warnings:
+        print("\nAdvisory — consider writing foundation post(s) before publishing:")
+        for w in warnings:
+            print(w)
+        print(
+            "  These are advisory only. Add foundation posts to FOUNDATION_CONCEPTS in generate_post.py\n"
+            "  and data/style-guide.md once they are written.\n"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +588,9 @@ def main() -> None:
     if not content:
         print("Error: LLM returned empty content.")
         sys.exit(1)
+
+    # 5a. Advisory: warn about recurring concepts that lack foundation posts
+    scan_for_unlinked_concepts(content)
 
     # 6. Derive title from vision brief, first research doc, or feature slug
     title = feature_slug.replace("-", " ").title()
