@@ -8,7 +8,7 @@ tags:
   - always
   - alive
   - worker
-draft: true
+draft: false
 aiGenerated: true
 summary: 'While working with EcoOrchestra, I noticed something: I had built an effective AI development team (/vision, /plan, /build, /review, /qa, /ship), but there was still a human bottleneck. Me. I was t...'
 authors:
@@ -74,10 +74,10 @@ GitHub issue templates enforce the required sections. An incomplete issue gets r
 
 I ended up with a split setup:
 
-| Environment | Purpose | What runs |
-| --- | --- | --- |
-| **Local (Windows)** | Interactive development | Workbench UI, Traffic Cop, manual `/build` when I want to iterate |
-| **Hetzner VPS (Linux)** | Autonomous background work | Ductor webhook + execution script in Docker |
+| Environment             | Purpose                    | What runs                                                         |
+| ----------------------- | -------------------------- | ----------------------------------------------------------------- |
+| **Local (Windows)**     | Interactive development    | Workbench UI, Traffic Cop, manual `/build` when I want to iterate |
+| **Hetzner VPS (Linux)** | Autonomous background work | Ductor webhook + execution script in Docker                       |
 
 These environments are independent. The VPS doesn't need my Workbench. My local machine doesn't need Ductor. They share: EcoOrchestra persona configs (cloned from git), Claude Code CLI (separate auth), and GitHub (webhook source + PR target).
 

@@ -8,7 +8,7 @@ tags:
   - headless
   - pipeline
   - runner
-draft: true
+draft: false
 aiGenerated: true
 summary: While working on [EcoOrchestra](https://blog.timyu.dev/what-is-ecoorchestra) Phase 3, I had a realization that changed how I think about my own role in the development process. What started as "I n...
 authors:
@@ -108,10 +108,10 @@ Here's the bigger realization. With groomed-issues-only enforcement, the user's 
 
 Auto-merge policy reflects this:
 
-| Repo | Auto-merge? |
-| --- | --- |
-| Obsidian, config-only changes | Yes |
-| Everything else | **No** — user is the merge gate |
+| Repo                          | Auto-merge?                     |
+| ----------------------------- | ------------------------------- |
+| Obsidian, config-only changes | Yes                             |
+| Everything else               | **No** — user is the merge gate |
 
 The user reviews and merges manually. Bad PRs are caught by /review and /qa gates — nothing ships unchecked. But a misbehaving worker creates noise (junk branches, bad PRs, spurious issue comments). Contained by the pipeline but not free to undo.
 
