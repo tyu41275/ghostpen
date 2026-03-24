@@ -39,6 +39,7 @@ BLOG_IMAGES_DIR = BLOG_ROOT / "public" / "static" / "images"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+LLM_ROUTER_URL = os.environ.get("LLM_ROUTER_URL", "http://localhost:8321")
 
 # Known project names mapped to their display names for foundation post matching.
 # When a foundation post like "what-is-ecoorchestra.mdx" exists, the generator
@@ -69,10 +70,12 @@ def build_foundation_registry() -> str:
         return ""
 
     # Build set of available slugs from blog directory
+    _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
     available_slugs: dict[str, str] = {}  # slug -> blog_path
     for post_file in sorted(BLOG_DIR.glob("*.mdx")):
         name = post_file.stem
-        slug = "-".join(name.split("-")[3:])
+        m = _DATE_PREFIX_RE.match(name)
+        slug = m.group(1) if m else name
         available_slugs[slug.lower()] = f"/blog/{slug}"
 
     registry: list[str] = []
