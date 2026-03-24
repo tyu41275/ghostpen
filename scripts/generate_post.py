@@ -39,6 +39,7 @@ BLOG_IMAGES_DIR = BLOG_ROOT / "public" / "static" / "images"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+LLM_ROUTER_URL = os.environ.get("LLM_ROUTER_URL", "http://localhost:8321")
 
 # Known project names mapped to their display names for foundation post matching.
 # When a foundation post like "what-is-ecoorchestra.mdx" exists, the generator
