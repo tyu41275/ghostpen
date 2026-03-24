@@ -1,0 +1,130 @@
+---
+title: 'Building a Traffic Cop for AI Agents'
+date: '2026-03-24'
+lastmod: '2026-03-24'
+tags: ['ai', 'dev-log', 'multi-provider', 'architecture']
+draft: false
+aiGenerated: true
+summary: 'How I built a multi-provider dispatch router that sends different AI personas to different LLM providers and the $57 billing surprise that proved it was worth it.'
+images: []
+authors: ['default']
+---
+
+I've been running an AI persona pipeline through [EcoOrchestra](/blog/what-is-ecoorchestra) for a few weeks now. Six personas — developer, planner, vision, reviewer, QA, researcher — each with a specific job in the `/build → /review → /qa → /ship` chain. All of them were running on Claude.
+
+Then I hit the rate limit.
+
+## The Problem
+
+Twenty-something sub-agents in a single interactive session, all burning Claude tokens. The developer needs opus for code. The planner needs opus for reasoning. Vision needs opus for product thinking. But the reviewer? The researcher? They're read-only. They produce a markdown file and move on. Running them on the same provider as the developer felt like overkill.
+
+The question wasn't "should we split providers?" — it was "how do we split providers without breaking the pipeline?"
+
+## The First Approach Was Wrong
+
+My first instinct was to build a provider abstraction layer. A clean interface where every persona routes through a unified dispatch, and the layer figures out whether to call Claude, Gemini, or OpenAI.
+
+The review caught something I missed: every slash command in [EcoOrchestra](/blog/what-is-ecoorchestra) uses Claude Code's Agent tool to spawn sub-agents. The Agent tool runs in-process — the spawned agent shares conversation context with the parent. It can see files the parent read, decisions it made, handoff notes it wrote. A CLI subprocess dispatch would lose all of that.
+
+So, now what?
+
+## The Insight: Not All Personas Need Context
+
+The developer absolutely needs shared context. When `/build` spawns and the developer reads the issue spec, it benefits from everything the planner already established in the conversation. Same for vision and QA.
+
+But the reviewer? It reads code files from disk, writes a review markdown, and flags issues. It doesn't need to know what the planner was thinking. The researcher? It investigates APIs and writes findings to `research/`. Pure input-output.
+
+The plan called for a conditional dispatch: Claude personas stay on the Agent tool (shared context, fast). Non-Claude personas route through a new component — Traffic Cop — which shells out to the appropriate CLI or API.
+
+```python
+# In traffic_cop.py — the routing decision
+if provider == "gemini" and dispatch_mode == "api":
+    result = dispatch_api(prompt, model_id, timeout=timeout_seconds)
+elif provider == "openai":
+    result = dispatch_openai(prompt, model_id, api_base=api_base, timeout=timeout_seconds)
+else:
+    # Default: CLI dispatch (claude or gemini CLI subprocess)
+    return self._dispatch_cli(provider, model_id, prompt, ...)
+```
+
+## Traffic Cop: The Design
+
+Traffic Cop reads `personas.json` at startup. Each persona declares its provider, model, fallback, and dispatch mode:
+
+```json
+{
+  "reviewer": {
+    "model": "gemini-2.5-pro",
+    "provider": "gemini",
+    "fallback": "claude",
+    "dispatch_mode": "api"
+  },
+  "developer": {
+    "model": "sonnet",
+    "provider": "claude",
+    "fallback": "gemini",
+    "dispatch_mode": "cli"
+  }
+}
+```
+
+When a slash command invokes a persona, Traffic Cop resolves the provider, picks the right dispatch path (CLI subprocess or HTTP API), and handles the response. Three dispatch paths, zero shared code between them:
+
+1. **Claude CLI** — `claude -p --output-format stream-json` subprocess. Authenticates via your subscription.
+2. **Gemini API** — Direct HTTP to `generativelanguage.googleapis.com`. Free tier at 5 RPM.
+3. **OpenAI API** — HTTP to `api.openai.com/v1/chat/completions`. Pay-per-token.
+
+The fallback chain is automatic. If Gemini API returns a 429 (rate limited), Traffic Cop retries via Gemini CLI. If the reviewer's Gemini dispatch hits a refusal ("I can't access files"), it falls back to Claude CLI. No manual intervention.
+
+## The Rate Limit Trick That Changed Everything
+
+The original plan was Claude-only — flat subscription, no billing surprises. But the rate limit problem forced the split. Here's the budget analysis that made the decision obvious:
+
+| Persona    | Provider   | Why                                  |
+| ---------- | ---------- | ------------------------------------ |
+| developer  | Claude     | Writes code, needs context           |
+| planner    | Claude     | Decomposes tasks, needs reasoning    |
+| vision     | Claude     | Product thinking, needs conversation |
+| qa         | Claude     | Runs Playwright, needs local tools   |
+| reviewer   | **Gemini** | Read-only, self-contained output     |
+| researcher | **Gemini** | Read-heavy, 1M context window        |
+
+Removing 2 of 6 personas from the Claude token stream gave meaningful headroom. The reviewer runs maybe 5 times a day, the researcher 2-3 times. Well within Gemini's free tier.
+
+## The $57 Billing Surprise
+
+Ok. That's new.
+
+A few weeks in, I noticed $57.65 on my Anthropic API dashboard. All under a "Traffic Cop" API key. But Traffic Cop routes Claude to the CLI — it doesn't call the Anthropic API. What happened?
+
+Turns out, `ANTHROPIC_API_KEY` was set as a Windows environment variable. The Claude CLI prefers the API key over subscription auth when both are present. Every single CLI dispatch was silently billing against the API instead of using my Max subscription.
+
+The fix was embarrassingly simple:
+
+```powershell
+[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', '', 'User')
+```
+
+One line. $57 lesson learned. I updated every bootstrapping document in the project to warn against this: CLI is the default, API key is optional, never set it as a system env var if you have a subscription.
+
+## The Deliberation Engine: Three Providers Debating
+
+Traffic Cop enabled something I hadn't originally planned: multi-provider deliberation. Instead of one model analyzing a feature request, three models debate it.
+
+The `/ultravision` command dispatches the same prompt to Claude (analyst), Gemini (critic), and OpenAI (critic). Claude analyzes. The critics challenge independently. Claude responds to the critiques. Then Claude synthesizes the strongest arguments from all three into a final position.
+
+The first real deliberation was about whether research tickets should auto-create implementation issues. Claude proposed a prose-parsing heuristic. Gemini argued it was brittle — the real cost of spam is attention erosion, not the time to close issues. Claude conceded. The synthesis adopted structured YAML output with a confidence gate. A better decision than any single model would have made alone.
+
+## What I'd Do Differently
+
+The dispatch mode inference in the deliberation engine has a subtle bug. When resolving which dispatch mode to use for a provider, it collects modes from all personas using that provider and picks "api" if any persona uses API mode. This "API wins" precedence is wrong for providers where most personas use CLI. It hasn't caused a real bug yet, but it's a latent issue.
+
+I'd also separate the pr-poller and issue-poller into independent cron jobs earlier. Running both through the same `poll.py` with N=2 parallelism caused duplicate review tasks before the deduplication guards were in place. The split shipped in PR #764, but I burned several hours debugging duplicate spawns first.
+
+## Where It Stands
+
+Traffic Cop handles about 50-100 dispatches per day across the persona pipeline. Claude gets the reasoning-heavy work (developer, planner, vision, QA). Gemini gets the read-heavy analysis (reviewer, researcher). OpenAI is available but rarely used — it's there for deliberation rounds.
+
+The personas don't know or care which provider runs them. The slash command prompts are identical regardless of provider. Traffic Cop handles the routing, the fallback, the health checks, and the output normalization. The pipeline just works.
+
+If you're building multi-agent systems and running into single-provider constraints, the takeaway is: not all agents need the same model. Match the capability to the task. Your reviewer doesn't need the same reasoning depth as your code writer. And check your environment variables — that billing surprise is real.
