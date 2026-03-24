@@ -69,10 +69,12 @@ def build_foundation_registry() -> str:
         return ""
 
     # Build set of available slugs from blog directory
+    _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
     available_slugs: dict[str, str] = {}  # slug -> blog_path
     for post_file in sorted(BLOG_DIR.glob("*.mdx")):
         name = post_file.stem
-        slug = "-".join(name.split("-")[3:])
+        m = _DATE_PREFIX_RE.match(name)
+        slug = m.group(1) if m else name
         available_slugs[slug.lower()] = f"/blog/{slug}"
 
     registry: list[str] = []
