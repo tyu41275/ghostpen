@@ -142,7 +142,7 @@ def blog_post_exists(feature_slug: str) -> bool:
 def gather_artifacts(feature_slug: str, artifacts_dir: Path) -> dict:
     """Gather all available artifacts for a feature."""
     artifacts: dict = {"feature": feature_slug, "vision_brief": None,
-                       "standups": [], "reviews": [], "screenshots": []}
+                       "standups": [], "reviews": [], "research": [], "screenshots": []}
 
     # 1. Vision brief
     briefs = list(
@@ -177,7 +177,20 @@ def gather_artifacts(feature_slug: str, artifacts_dir: Path) -> dict:
             except OSError:
                 continue
 
-    # 4. Screenshots
+    # 4. Research docs — scan research/ for files matching the feature slug (up to 3)
+    research_dir = artifacts_dir / "research"
+    if research_dir.exists():
+        matched_research = [
+            f for f in sorted(research_dir.glob("*.md"))
+            if feature_slug in f.name.lower()
+        ]
+        for research_file in matched_research[:3]:
+            try:
+                artifacts["research"].append(research_file.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+
+    # 5. Screenshots
     screenshots_dir = artifacts_dir / "screenshots"
     if screenshots_dir.exists():
         for img in screenshots_dir.glob(f"*{feature_slug}*"):
@@ -206,6 +219,11 @@ def generate_post(artifacts: dict, style_guide: str) -> str:
         parts.append("## Review Findings\n")
         for i, review in enumerate(artifacts["reviews"][:3], 1):
             parts.append(f"### Review {i}\n{review}\n")
+
+    if artifacts.get("research"):
+        parts.append("## Research Documents\n")
+        for i, doc in enumerate(artifacts["research"][:3], 1):
+            parts.append(f"### Research {i}\n{doc}\n")
 
     if artifacts["screenshots"]:
         parts.append(f"\n(There are {len(artifacts['screenshots'])} screenshots available for this feature.)\n")
@@ -428,11 +446,21 @@ def main() -> None:
         print(f"Error: Artifacts directory not found: {artifacts_dir}")
         sys.exit(1)
 
-    # 1. Check blog-worthiness (vision brief must exist)
+    # 1. Check blog-worthiness: vision brief must exist OR standalone research docs match
     feature_info = find_blogworthy_feature(feature_slug, artifacts_dir)
     if not feature_info:
-        print(f"No vision brief found for '{feature_slug}' — not blog-worthy")
-        sys.exit(0)
+        # Fallback: standalone research docs can trigger blog generation without a vision brief
+        research_dir = artifacts_dir / "research"
+        standalone_research = (
+            list(research_dir.glob(f"*{feature_slug}*.md"))
+            if research_dir.exists()
+            else []
+        )
+        if not standalone_research:
+            print(f"No vision brief or research docs found for '{feature_slug}' — not blog-worthy")
+            sys.exit(0)
+        print(f"No vision brief for '{feature_slug}', but {len(standalone_research)} research doc(s) found — proceeding via research trigger path.")
+        feature_info = {"feature": feature_slug, "brief_path": None}
 
     # 2. Check if post already exists
     if blog_post_exists(feature_slug):
@@ -447,6 +475,7 @@ def main() -> None:
     print(f"  Vision brief: {len(brief_lines)} lines")
     print(f"  Standup entries: {len(artifacts['standups'])}")
     print(f"  Reviews: {len(artifacts['reviews'])}")
+    print(f"  Research docs: {len(artifacts['research'])}")
     print(f"  Screenshots: {len(artifacts['screenshots'])}")
 
     # 4. Load style guide
@@ -462,10 +491,17 @@ def main() -> None:
         print("Error: LLM returned empty content.")
         sys.exit(1)
 
-    # 6. Derive title from vision brief or feature slug
+    # 6. Derive title from vision brief, first research doc, or feature slug
     title = feature_slug.replace("-", " ").title()
     if artifacts["vision_brief"]:
         for line in artifacts["vision_brief"].split("\n"):
+            line = line.strip()
+            if line.startswith("# "):
+                title = line.lstrip("# ").strip()
+                break
+    elif artifacts.get("research"):
+        # No vision brief — derive title from first research document heading
+        for line in artifacts["research"][0].split("\n"):
             line = line.strip()
             if line.startswith("# "):
                 title = line.lstrip("# ").strip()
