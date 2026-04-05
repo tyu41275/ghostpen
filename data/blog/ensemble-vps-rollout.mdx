@@ -1,0 +1,76 @@
+---
+title: 'Deploying Ensemble to a VPS by Talking to a Telegram Bot'
+date: '2026-04-05'
+tags: ['automation', 'ai', 'ductor']
+draft: true
+aiGenerated: true
+summary: 'I needed to deploy Ensemble to a remote VPS, and instead of SSHing in like a normal person, I tried to make a browser automation agent navigate Telegram Web and tell my bot to do it.'
+---
+
+I already had the [always-alive worker](/blog/2026-03-22-always-alive-worker) running on a Hetzner VPS — a cron-based poller that picks up GitHub issues and runs the [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline autonomously. That part was working. But the bootstrap process to get it there was manual: SSH in, clone repos, run `bootstrap.sh`, configure environment variables, pray nothing exploded.
+
+Every time I needed to redeploy or update the VPS instance, I was back in a terminal doing the same 15-step ritual. That's the kind of thing I build tools to avoid.
+
+## The Idea
+
+I have a Telegram bot on that VPS that already accepts commands — it's my main interface for orchestration tasks. And I have a browser automation agent with a `BrowserExecutor` that can navigate web UIs and take screenshots. So the thought was: what if the browser agent opens Telegram Web, sends a deploy command to the bot, and watches the output via screenshots?
+
+Recursive self-bootstrapping. The AI tells the AI to set up the AI. Cool.
+
+## The First Wrong Turn
+
+My initial instinct was to build a new executor type — a `TelegramExecutor` that talks to the Telegram Bot API directly. Skip the browser entirely. Programmatically reliable, no UI flakiness.
+
+But that misses the point. The whole value of this approach is testing the _production UX_. If the bot's command interface is broken, or if a bootstrap step produces confusing output, a direct API call won't catch that. The browser-based path tests what a human user would actually experience.
+
+So, no new executor. The existing `BrowserExecutor` handles this.
+
+## The Cheapest Experiment
+
+Before committing to the three-phase plan, I needed to know if Telegram Web would even cooperate with an automated browser. Some web apps aggressively block headless Chromium — fingerprinting, CAPTCHAs, WebSocket authentication that assumes a real browser session.
+
+The cheapest experiment: one test case.
+
+```bash
+# Phase 1 PoC: navigate to Telegram Web, send /status to the bot, screenshot the response
+python3 -m computer_agent.run \
+  --executor browser \
+  --task "Open web.telegram.org, find the HetznerAlwaysOnDev1 bot, send /status, screenshot the response"
+```
+
+If this fails — if Telegram Web blocks the automated browser or the login state doesn't persist between runs — the whole approach is dead and I pivot to SSH-based deployment immediately. No point building phases 2 and 3 on a broken foundation.
+
+## The Three Phases
+
+Assuming the PoC passes, the plan breaks into three gates:
+
+**Phase 1: Telegram Web navigation.** BrowserExecutor logs into Telegram Web, finds the bot chat, sends `/status`, screenshots the response. This validates that automated browser + Telegram Web + bot commands all work end-to-end. Cookie persistence between runs is the open question — if sessions expire, every run needs a fresh login flow.
+
+**Phase 2: Bootstrap observation.** The agent sends a deploy command to the bot, then watches via periodic screenshots as the bootstrap runs. If a step fails, the agent sees the error output in the chat and can report back. This replaces me staring at a terminal.
+
+**Phase 3: Test fixture verification.** Create test issues and PRs to verify that the cron poller picks them up, the pipeline runs, and PRs appear. This is the acceptance test for the full autonomous workflow — not just "did it deploy" but "does the deployed thing actually work."
+
+Each phase gates the next. If Phase 1 fails, I fall back to SSH. If Phase 2 reveals bootstrap issues, Phase 3 waits.
+
+## The Risk I'm Watching
+
+Telegram Web changes its UI without notice. Screenshot-based navigation is inherently brittle — a button moves, a class name changes, and the agent can't find the chat. This isn't a theoretical concern. I've seen web UIs break automation setups after minor frontend deploys.
+
+The mitigation is that SSH deployment remains available as a fallback. The browser-based path is the _preferred_ path because it validates the real UX, but it's not the _only_ path. If Telegram changes something that breaks the agent, I lose convenience, not capability.
+
+```json
+{
+  "blast_radius": "medium",
+  "fallback": "SSH-based deployment",
+  "real_risk": "test fixture issues could pollute the real project board",
+  "mitigation": "use a test repo or enforce cleanup"
+}
+```
+
+## What's Next
+
+Phase 1 is the validation gate. If the browser agent can successfully navigate Telegram Web and interact with the bot, the rest is orchestration work — which is exactly what [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) is built for. If it can't, I'll know within one test run, and the fallback is the SSH workflow I'm already using.
+
+My theory is that the browser-based approach will work but be fragile enough that I'll end up maintaining both paths. And honestly, that's fine. The SSH path is the reliable workhorse. The Telegram Web path is the proof of concept that the whole stack — from browser automation to bot commands to VPS bootstrap — can close the loop without a human touching a terminal.
+
+Thanks for reading!
