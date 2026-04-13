@@ -69,7 +69,7 @@ Artifacts are structured files your development process produces. Ghostpen was b
 
 ### Configuring the artifacts directory
 
-By default, the generator looks for artifacts in `C:/Repos/EcoOrchestra` (the development pipeline this blog was built with). Set the `ECOORCHESTRA_DIR` environment variable to point to your own artifacts directory, or modify `scripts/generate_post.py` to read from your preferred source.
+By default, the generator looks for artifacts in the directory specified by the `ECOORCHESTRA_DIR` environment variable. Set this to point to your Ensemble (formerly EcoOrchestra) artifacts directory, or modify `scripts/generate_post.py` to read from your preferred source.
 
 ## Customizing your voice
 
@@ -78,7 +78,7 @@ Replace `data/style-guide.md` with a style guide based on your own existing writ
 ## Editing posts
 
 - **Code:** Edit `.mdx` files directly in `data/blog/`
-- **CMS:** Navigate to `/admin` on the deployed site for a visual editor powered by [Sveltia CMS](https://github.com/sveltia/sveltia-cms) -- a git-backed editor that commits changes directly to your repo (requires one-time GitHub OAuth setup via a Cloudflare Worker)
+- **CMS:** Navigate to the `/admin` page on the deployed site for a visual editor powered by [Sveltia CMS](https://github.com/sveltia/sveltia-cms) -- a git-backed editor that commits changes directly to your repo (requires one-time GitHub OAuth setup via a Cloudflare Worker)
 
 ## Writing a post manually
 
@@ -98,19 +98,19 @@ images: []
 ---
 ```
 
-Images go in `public/static/images/<post-slug>/`.
+Images go in `public/static/images/<slug>/` where `<slug>` matches the `.mdx` filename.
 
 ## Stack
 
 - **[Next.js](https://nextjs.org/) 14** -- React framework with App Router
 - **[Tailwind CSS](https://tailwindcss.com/)** -- Utility-first CSS
 - **[contentlayer2](https://github.com/timlrx/contentlayer2)** -- MDX content processing with type-safe frontmatter
-- **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** -- Git-backed visual editor at `/admin`
+- **[Sveltia CMS](https://github.com/sveltia/sveltia-cms)** -- Git-backed visual editor (see `public/admin/`)
 - **[Vercel](https://vercel.com/)** -- Hosting with automatic deploys on push
 
 ## Dependencies
 
-Ghostpen has a strong dependency on [EcoOrchestra](https://github.com/tyu41275/EcoOrchestra), which produces the structured artifacts the generator reads (decision records, daily standups, code reviews).
+Ghostpen has a strong dependency on [Ensemble](https://github.com/tyu41275/Ensemble) (formerly EcoOrchestra), which produces the structured artifacts the generator reads (decision records, daily standups, code reviews).
 
 EcoOrchestra is currently a private repository but may be made public in the future. If you are forking Ghostpen, you will need to either:
 
