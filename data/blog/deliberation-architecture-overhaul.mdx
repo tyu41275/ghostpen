@@ -1,0 +1,89 @@
+---
+title: 'Overhauling Deliberation: From Broken Provider Dispatch to Auto-PR Transcripts'
+date: '2026-05-03'
+tags: ['ai', 'automation', 'ductor', 'dev-log']
+draft: true
+aiGenerated: true
+summary: 'A deliberation session silently failed because the health check was hitting the wrong endpoint. Fixing that one bug turned into a five-part architecture overhaul covering provider dispatch, transcript persistence, and orchestrator handoff.'
+authors: ['default']
+images: []
+---
+
+## Introduction
+
+I kicked off a deliberation session last week — three providers arguing about whether to extract a shared config module — and got back... nothing. No synthesis, no transcript, just a timeout after 90 seconds of silence. The workbench showed "deliberation in progress" but no rounds were completing.
+
+Ok. That's new.
+
+Deliberation had been working fine for months. Three models debate a question in rounds, reach synthesis, and I get a structured transcript. But somewhere between provider config changes and a Windows CLI fix I had shipped earlier, the whole thing broke silently. No error, no crash. Just providers that were supposedly "healthy" but not actually responding.
+
+## The Investigation
+
+My first instinct was wrong. I assumed the issue was in the deliberation orchestrator itself — maybe the round dispatch was hanging on a stuck subprocess. I added debug logging to `deliberation_dispatch.py` and re-ran the session:
+
+```python
+logger.debug("Dispatching round %d to %s via %s", round_num, provider, route)
+```
+
+The log showed dispatch happening correctly, but the provider health check was returning `true` for a provider that was clearly down. So the orchestrator was faithfully sending rounds to a dead endpoint.
+
+The health check was using the generic `/health` path, but the actual provider endpoints had moved to `/v1/models` for validation. The check was passing because the base URL responded with a 200 on `/health` — it just was not the LLM service anymore.
+
+```python
+# Before: checked the wrong thing
+async def _check_health(provider_url: str) -> bool:
+    resp = await client.get(f"{provider_url}/health")
+    return resp.status_code == 200
+
+# After: validates actual model availability
+async def _check_health(provider_url: str, model: str) -> bool:
+    resp = await client.get(f"{provider_url}/v1/models")
+    if resp.status_code != 200:
+        return False
+    models = resp.json().get("data", [])
+    return any(m["id"] == model for m in models)
+```
+
+Once that was fixed, rounds started completing again. But while I was in the code, I noticed four other problems that had been accumulating.
+
+## The Full Overhaul
+
+What started as one bug fix turned into five changes. The plan called for:
+
+**1. Model mapping mismatch.** The deliberation config referenced model names like `"claude"` but the actual dispatch expected route strings like `"claude_account:cli"`. The config file at `config/deliberation.json` now maps providers to explicit routes with fallbacks:
+
+```json
+{
+  "provider_defaults": {
+    "claude": { "route": "claude_account:cli", "fallback_route": "claude:api", "enabled": true },
+    "gemini": { "route": "gemini:api", "fallback_route": "gemini_account:cli", "enabled": true }
+  }
+}
+```
+
+**2. Windows CLI argument limit.** On Windows, the command line was exceeding the 8191-character limit when passing long deliberation prompts via `-p`. The fix was to write the prompt to a temp file and pass `--file` instead. Not glamorous, but necessary.
+
+**3. Scoping deliberation to Ensemble-only.** Deliberation was available as a general tool, but it only made sense in the context of [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra)'s multi-persona architecture. The first approach was to gate it behind a feature flag. But that felt wrong — it was not a feature to toggle, it was a boundary to enforce. The scope was narrowed at the entrypoint instead: deliberation only activates when the working directory is within an Ensemble instance.
+
+**4. Transcript persistence as markdown with auto-PR.** This was the most interesting change. Previously, deliberation transcripts vanished when the session ended. Now `deliberation_persistence.py` creates an isolated git worktree, writes the full transcript to `research/deliberations/YYYY-MM-DD-<slug>.md`, commits, pushes, and opens a draft PR — all without touching the working branch:
+
+```python
+def persist_deliberation_transcript(*, prompt, deliberation_result, ensemble_root):
+    slug = _slugify_prompt(prompt)
+    branch_name = f"deliberation/{today}-{slug}"
+    worktree_dir = tempfile.mkdtemp(prefix="eco-deliberation-")
+    _run_git(ensemble_root, ["worktree", "add", "-B", branch_name, worktree_dir, "origin/main"])
+    # write markdown, commit, push, create PR
+```
+
+**5. Post-deliberation orchestrator handoff.** After synthesis completes, the orchestrator now detects which project the deliberation was about — simple ecosystem string matching against known project names — and hands off to `/plan` + `/build` with the target project pre-filled. No more manual "ok, the deliberation said X, now let me go run `/plan` in that repo."
+
+## What I Learned
+
+The silent failure was the real lesson. The health check was passing. The orchestrator was dispatching. Everything looked correct at every layer. The bug lived in the gap between "the URL responds" and "the service is actually available." That gap exists in every system that does health checking — you have to validate the thing you actually care about, not a proxy for it.
+
+## Conclusion
+
+The maximize toggle for output panels was the smallest change in this batch and somehow the one I use most. Deliberation transcripts are long. Being able to expand a panel to full width while reading synthesis turned out to matter more than I expected. The architectural changes are the important ones, but the UX detail is what I notice every session.
+
+Thanks for reading!
