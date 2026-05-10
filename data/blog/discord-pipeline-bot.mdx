@@ -1,0 +1,69 @@
+---
+title: 'The Discord Bot Was the Easy Part'
+date: '2026-05-10'
+tags: ['automation', 'ai', 'ductor']
+draft: true
+aiGenerated: true
+summary: 'I asked an AI deliberation whether to build a Discord bot to replace my 3-minute poll cycle. The deliberation crashed three different ways — and that failure was more useful than the answer would have been.'
+---
+
+The poll cycle on my [always-alive worker](/blog/2026-03-22-always-alive-worker) is 3 minutes. I file a GitHub issue, then I wait up to three minutes for the cron on my Hetzner box to notice. Most of the time that's fine — background work, no rush. But when I want to dispatch a run from my phone while I'm out, or watch the pipeline stream progress instead of refreshing GitHub Actions, polling is the wrong shape for the interaction.
+
+I have a Discord server I lurk in all day. The bot would live on the same VPS. So the natural shape of the feature: slash commands and GitHub webhooks instead of cron, sub-second latency, one thread per pipeline run, queue managed by the bot itself. Roughly 500 lines of TypeScript on top of the existing trigger contract from the [headless pipeline runner](/blog/2026-03-22-headless-pipeline-runner) brief.
+
+Or that's what I told myself. The deliberation surfaced something different.
+
+## What I Asked For
+
+I ran `/ultravision` (the [multi-provider deliberation](/blog/2026-03-23-what-is-ultravision) command) against a vision brief titled "Discord Pipeline Bot (Autonomous Trigger Layer)." The prompt was straightforward: build a Discord bot that replaces my Ductor-based polling trigger, deploys to the same VPS, and streams progress back to threads. Separate repo, `discord.js` + TypeScript, max two concurrent workers, no HA needed.
+
+The deliberation runs three rounds — an analyst makes the case, three critics from different providers try to break it, and a synthesizer reconciles. I expected pushback on Discord-as-queue or on adding Node.js next to the Python that already runs on the box. What I got was something else.
+
+## The Deliberation Failed in Useful Ways
+
+All three critic rounds errored out before producing a substantive critique:
+
+```
+Gemini:  CLI character limit exceeded (known issue, commit b328533)
+OpenAI:  Model mapping bug — sent "opus" to OpenAI's API
+Local:   Connection refused — no local API server running
+```
+
+Ok. That's new.
+
+Three different providers, three different failure modes, and exactly zero of them had anything to do with whether a Discord bot is a good idea. They were dispatch-layer infrastructure bugs. The thing meant to evaluate a new trigger surface for my pipeline couldn't even finish its job because the trigger surfaces I already had were leaky.
+
+You can't get a multi-provider second opinion on "should I add another trigger to my [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline?" when the existing trigger paths can't reliably make an API call. The answer was already in the failure logs.
+
+## The Real Blocker
+
+The synthesizer connected the dots and surfaced the actual problem. The Discord bot is ~500 lines of TypeScript wrapping a contract that doesn't exist as a standalone artifact yet. `run-pipeline.sh` is described in the [headless pipeline runner](/blog/2026-03-22-headless-pipeline-runner) brief, but in practice the execution logic is still embedded in `worker.py` — reachable only through the Ductor poll cycle. Build the bot first and I'd be developing against a spec instead of a real interface. That always ships integration bugs.
+
+So the decision came back as approved-with-sequencing:
+
+| Phase | Work | Estimate |
+| ----- | ---- | -------- |
+| 0 | Extract `run-pipeline.sh` + Dockerfile from `worker.py` | ~3 days |
+| 0.5 | Fix Traffic Cop model mappings (the OpenAI failure above) | <1 day |
+| 1 | Scaffold `ensemble-discord`, gateway connection, `/ping` | ~1 day |
+| 2 | `/run`, `/status`, `/queue`, `/cancel` + GitHub webhook receiver | ~2 days |
+| 3 | Progress streaming via JSON-lines log tail | ~1-2 days |
+
+Phase 0 is the real investment. The bot is plumbing on top of it.
+
+## Trade-Offs I Accepted
+
+A few decisions I made explicit in the brief:
+
+- **No HA, no serverless.** Single systemd process; if it crashes, systemd restarts it. Missed webhooks get retried by GitHub or caught by the 3-minute poll fallback. For a personal-use bot this is the right shape.
+- **Max two concurrent workers.** The CX32 (4 vCPU / 8 GB) handles two pipeline runs comfortably. A third blows out memory. The bot enforces the cap via PID manifest — no separate queue infrastructure, just an in-memory list and a `#queue` channel.
+- **Polling stays during the transition.** `poll.py` keeps running until the bot is verifiably reliable. Belt and suspenders.
+- **Discord threads for run isolation.** One thread per pipeline run keeps the channel clean and lets me inspect any run independently. Also avoids channel-level rate limits — important when the build persona is loud.
+
+## What's Next
+
+Phase 0 is what I'd already been deferring as "I'll do it eventually." The deliberation made it impossible to keep deferring — the bot can't exist without it, and the dispatch failures the critics hit were a preview of what happens when you keep stacking surfaces on a foundation that hasn't been hardened.
+
+My theory is that most of the value of this particular deliberation came from the failures, not the synthesis. If all three critics had answered cleanly, I'd have gotten a polished argument for or against the bot. Instead I got a list of things broken in the layer underneath, which is genuinely more useful. Sometimes the system telling you it can't think is the most informative thing it can say.
+
+`ensemble-discord` is approved. It's just not next.
