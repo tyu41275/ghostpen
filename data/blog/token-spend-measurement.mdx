@@ -1,0 +1,50 @@
+---
+title: 'I Had No Idea What a Pipeline Run Cost. Now I Do.'
+date: '2026-07-12'
+tags: ['automation', 'ai', 'ductor']
+draft: true
+aiGenerated: true
+summary: 'Every cost-reduction experiment I wanted to run — prompt optimization, cheaper model routing, stripped-down prompt variants — was uncalibrated because nothing measured per-run token spend. The fix was a measurement layer, and the load-bearing decision turned out to be the schema, not the capture point.'
+---
+
+I wanted to run an experiment: take the verbose system prompts my agents use, swap in a stripped-down variant, and see if quality held while cost dropped. Simple A/B. Then I tried to write down the baseline and realized I couldn't. I had no number for what a single pipeline run cost me. Not a wrong number — no number.
+
+Every provider bills differently, every persona in the [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline runs on a different model, and the token counts were sitting in provider response envelopes that got parsed for streaming and then thrown away. Every cost experiment I had queued up — prompt optimization, model routing, the stripped-down variant test — was uncalibrated. So the experiment went on hold and a measurement layer went on the board instead.
+
+My first instinct on the capture point was the Python worker runtime. That's where pipeline runs live, that's where the big spend is, and it already writes structured records per run. The plan was heading that way until I traced what the runtime actually sees. Pipeline dispatches, yes. Direct chat with the bots — never touches Python. Half my spend would have been invisible, and worse, invisibly missing: the totals would look complete while quietly excluding every conversational turn.
+
+Ok. That's new.
+
+The capture point moved to the dispatch subprocess parser in the bot framework — the one place both pipeline workers and direct chat already flow through. The parser was already holding the provider's usage envelope in its hands to drive streaming; capturing it was about thirty lines per provider (PR #827, issue #825).
+
+The second wrong turn was storage. The tempting design was a dedicated `cost.jsonl`, joined to the existing audit log on the run's correlation ID. Clean separation, its own file. I rejected it in review with a note that joins on correlation IDs are a bug factory — every consumer has to do the join, and every consumer does it slightly differently. The cost fields went onto the existing audit events instead, additive-only, so old consumers ignore them and the data is never half-present.
+
+But the decision that actually mattered wasn't where to capture or where to store. It was the schema. `{tokens, cost}` alone is a vanity metric. The question every downstream experiment asks is cost per *success*, sliced by persona, repo, and prompt variant:
+
+```json
+{
+  "correlationId": "1c96435c",
+  "repo": "tyu41275/ensemble-chatter",
+  "persona": "reviewer",
+  "provider": "chatgpt_account",
+  "model": "gpt-5.5",
+  "prompt_variant": null,
+  "usage": { "input": 1115422, "output": 14511, "cache_read": 1038464 },
+  "cost": { "usd": 0.41, "rate_version": "2026-05" }
+}
+```
+
+The `prompt_variant` field is the one doing the heavy lifting. It gets tagged at dispatch time, which turns the A/B comparison I originally wanted into a one-liner over the log instead of a forensic reconstruction. Without those dimensions pinned before anything shipped, I'd have collected weeks of numbers that couldn't answer the only question I cared about.
+
+The surface is CLI-first, because that's where I actually live:
+
+```
+/cost today
+/cost run <correlationId>
+/cost persona reviewer --since 7d
+/cost compare --baseline main --candidate variant-x
+```
+
+Daily digests and an anomaly threshold on the heartbeat followed (PR #829), then enrichment of the prompt-optimizer's eval records so it can compute cost-per-success natively (PR #832). Cool.
+
+The variant experiment that started all this is still pending — but now it's pending on my time, not on missing instrumentation. My theory is that most "we should optimize costs" conversations stall exactly here: not on the optimization being hard, but on nobody being able to say what anything costs today.
