@@ -1,0 +1,60 @@
+---
+title: 'The Deployment Loop That Stopped One Step Too Early'
+date: '2026-07-19'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'Two blocking container bugs proved that my autonomous development pipeline could fix a deployment while preserving an issue and PR trail. They also exposed one stubborn manual gap between a merged fix and the next rebuild.'
+---
+
+I was deploying a Matrix communication bot when the container build hit two blocking bugs. I filed issues #182 and #183, added the `worker:ready` label, and let the cron workers pick them up.
+
+The pipeline did exactly what I had designed it to do. It claimed the issues, created branches, built the fixes, ran review and QA, and opened PRs. PR #186 resolved #183, and PR #187 resolved #182. Both merged.
+
+Then the deployment sat there waiting for me to rebuild the image.
+
+Ok. That's new. I had automated the development work, but the deployment still depended on me noticing that the development work had finished.
+
+## The Problem
+
+The workflow looked autonomous when I viewed each part separately:
+
+```text
+deploy -> find bug -> file issue -> fix -> review -> QA -> merge
+```
+
+But that wasn't really a loop. After `merge`, I still had to trigger the image rebuild, continue the deployment, run the next smoke test, and file another issue if the next bug appeared. The system could fix a problem without being able to resume the job that discovered it.
+
+So, now what?
+
+## The Investigation
+
+My first instinct was to skip the machinery and fix the container directly. That would have been faster for one bug. It also would have left the fix on a server or in my terminal history instead of in a tracked issue, reviewed PR, and tested change on `main`. Quick patches have a habit of evaporating before the next deployment.
+
+I also considered collecting every failure in a dry run and fixing them as a batch. That saves rebuild time, but only catches build and smoke-test failures. It doesn't find the problems that appear after the container starts talking to Matrix.
+
+The more interesting idea was to let the bot fix itself. A service that notices its own runtime failure, files an issue, and sends that issue through [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) is appealing. It had one fairly obvious problem: a bot that cannot start cannot operate its own repair pipeline. Ominous, but useful. The self-referential version belongs in Phase 2, after startup is reliable.
+
+But then, I noticed something. I didn't need another project or a new repair system. The pieces already existed: GitHub issues, Ductor's cron workers, the [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) persona pipeline, Docker builds, and the deployment smoke test. The missing feature was simply continuation.
+
+## The Solution
+
+The deployment orchestrator should watch the blocking issues and resume after they merge:
+
+```bash
+deploy
+smoke_test || file_blocking_issue
+wait_for_merge
+confirm_rebuild
+docker compose build
+docker compose up -d
+smoke_test
+```
+
+I am keeping one human checkpoint: after all blocking issues resolve and before the rebuild. Everything around it can be mechanical. A merge should wake the deployment, request confirmation, rebuild, redeploy, and test again. If the test finds another bug, the same process starts over.
+
+That design also preserves the part I care about most: the permanent artifact trail. Issues #182 and #183 explain what failed. PRs #186 and #187 show what changed. Review and QA show why the changes were accepted. The next deployment gets the fixes from `main` instead of rediscovering a clever patch that only existed on one machine. Cool!
+
+## Conclusion
+
+My theory is that useful autonomy comes from connecting reliable stages, not inventing a larger agent. Once auto-continuation is in place, the next experiment is letting the running bot handle its own runtime issues. Thanks for reading!
