@@ -9,15 +9,13 @@ authors: ['default']
 images: []
 ---
 
-## Introduction
-
 I kicked off a deliberation session last week — three providers arguing about whether to extract a shared config module — and got back... nothing. No synthesis, no transcript, just a timeout after 90 seconds of silence. The workbench showed "deliberation in progress" but no rounds were completing.
 
 Ok. That's new.
 
 Deliberation had been working fine for months. Three models debate a question in rounds, reach synthesis, and I get a structured transcript. But somewhere between provider config changes and a Windows CLI fix I had shipped earlier, the whole thing broke silently. No error, no crash. Just providers that were supposedly "healthy" but not actually responding.
 
-## The Investigation
+## Chasing the Wrong Layer
 
 My first instinct was wrong. I assumed the issue was in the deliberation orchestrator itself — maybe the round dispatch was hanging on a stuck subprocess. I added debug logging to `deliberation_dispatch.py` and re-ran the session:
 
@@ -46,7 +44,7 @@ async def _check_health(provider_url: str, model: str) -> bool:
 
 Once that was fixed, rounds started completing again. But while I was in the code, I noticed four other problems that had been accumulating.
 
-## The Full Overhaul
+## One Bug, Five Changes
 
 What started as one bug fix turned into five changes. The plan called for:
 
@@ -78,12 +76,8 @@ def persist_deliberation_transcript(*, prompt, deliberation_result, ensemble_roo
 
 **5. Post-deliberation orchestrator handoff.** After synthesis completes, the orchestrator now detects which project the deliberation was about — simple ecosystem string matching against known project names — and hands off to `/plan` + `/build` with the target project pre-filled. No more manual "ok, the deliberation said X, now let me go run `/plan` in that repo."
 
-## What I Learned
+## The Gap Between "Responds" and "Works"
 
 The silent failure was the real lesson. The health check was passing. The orchestrator was dispatching. Everything looked correct at every layer. The bug lived in the gap between "the URL responds" and "the service is actually available." That gap exists in every system that does health checking — you have to validate the thing you actually care about, not a proxy for it.
 
-## Conclusion
-
-The maximize toggle for output panels was the smallest change in this batch and somehow the one I use most. Deliberation transcripts are long. Being able to expand a panel to full width while reading synthesis turned out to matter more than I expected. The architectural changes are the important ones, but the UX detail is what I notice every session.
-
-Thanks for reading!
+Four of the five changes above only exist because I went looking for one bug and stayed to read the surrounding code. None of them were on a roadmap. My theory is that a silent failure is worth more than a loud one precisely because of this: a crash sends you straight to the stack trace and out again, while a system that lies to you makes you re-read the layer you had stopped questioning.
