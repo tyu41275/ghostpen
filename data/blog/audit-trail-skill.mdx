@@ -1,0 +1,69 @@
+---
+title: 'The Pipeline Run I Could See but Could Not Follow'
+date: '2026-07-26'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'A pipeline run spent more than 50 minutes in a fix loop while its useful status was scattered across logs and GitHub. An AuditEmitter subscription now turns each run into a live chat thread, with archival in v1 and hierarchical grouping deferred.'
+---
+
+One of my development pipeline runs recently spent more than 50 minutes in its first fix loop. The local model was hitting 600-second timeouts, and the run looked stuck. I could see that *something* was happening, but answering a simple question — “What is this run doing right now?” — meant checking the worker, the issue, the PR, and several logs.
+
+Ok. That's new. I had plenty of audit data and still did not have a useful audit trail.
+
+## The Problem
+
+The pipeline already emitted lifecycle events as it moved through build, review, QA, and ship. A typical sequence looked something like this:
+
+```text
+pipeline.started
+build.started
+build.fix_loop.started
+build.turn_timeout
+build.fix_loop.retrying
+```
+
+Those events were useful after the fact. They did not give me one place to watch the run unfold while I was already talking to the system in chat. The strange part was that the visibility gap was not caused by missing data. It was caused by putting the data somewhere I was not looking.
+
+So, now what?
+
+## The Investigation
+
+My first instinct was to poll GitHub. The original plan called for a cron job that would run `gh issue view` and `gh pr list` every 30 seconds, diff the results, and post changes into a thread.
+
+```bash
+gh issue view 435 --json state,labels,comments
+gh pr list --search "435" --json number,state,statusCheckRollup
+```
+
+That worked as a cheap experiment, but it had a problem. GitHub only showed the artifacts that reached GitHub. It could not explain that a model turn had timed out, that review had started, or that QA had sent the work back through a fix loop. Polling faster would add rate-limit pressure without making those internal transitions appear. I was asking an external system to reconstruct state the pipeline already knew.
+
+I also liked the idea of organizing every run under Discord Categories or Matrix Spaces. Nice and tidy. Unfortunately, the transport abstraction only knew how to create a flat thread. Categories, Spaces, and Telegram topics all have different APIs and permission models. Extending every transport before proving the visibility pattern felt like paying for the filing cabinet before deciding whether the files were useful.
+
+But then, I noticed something. The pipeline already published every meaningful transition through `AuditEmitter`. The skill did not need to discover runs at all. It could subscribe to them.
+
+## The Solution
+
+The v1 design auto-tracks every pipeline run. When `AuditEmitter` publishes a start event, the skill creates a flat chat thread, correlates later events by run ID, and renders the lifecycle there in real time.
+
+```ts
+auditEmitter.subscribe((event) => {
+  if (event.type === "pipeline.started") {
+    return auditTrail.start(event.correlationId, event);
+  }
+
+  return auditTrail.append(event.correlationId, event);
+});
+```
+
+No command to remember. No 30-second blind spot. No duplicate source of truth.
+
+Archival stays in v1 because completed runs should not leave a wall of active threads behind. The skill calls each platform API directly to archive a Discord thread, make a Matrix room read-only, or close a Telegram topic. It is not a beautiful universal abstraction, but it keeps the first version honest and useful.
+
+Hierarchical grouping can wait for v2. That work belongs at the transport boundary and deserves its own design rather than three platform-specific concepts wearing the same method name.
+
+Cool! The chat thread becomes the live view, while the underlying audit stream remains the durable record.
+
+## Conclusion
+
+My theory is that operational visibility works best when it follows the operator, not when it asks the operator to visit one more dashboard. The next test is whether flat, automatically archived threads stay useful once several pipelines are running at the same time. Thanks for reading!
