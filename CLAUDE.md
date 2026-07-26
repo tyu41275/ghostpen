@@ -15,7 +15,7 @@ app/                    # Next.js 14 app directory (pages, layouts, API routes)
 data/
   blog/                 # .mdx blog posts (YAML frontmatter + MDX body)
   authors/              # Author profiles (default.mdx = Tim Yu)
-  style-guide.md        # Writing style extracted from existing posts — AI generators MUST follow this
+  style-guide.md        # Writing style extracted from existing posts — AI generators MUST follow this. Read the "Anti-Formula Rules" section as binding over the example lists above it: the "Characteristic phrases" list and the rejection criteria describe RANGE, and a generator optimising against them as a checklist produces six near-identical posts (#67-#75; #74 used 7 of the 8 example catchphrases in the guide's own order, against 0-2 for the human posts). The rules cap catchphrase reuse at two, ban the templated Problem/Investigation/Solution/Conclusion header set, and set the length target from the published corpus.
   siteMetadata.js       # Site-wide config (title, URL, analytics, search, comments)
   projectsData.ts       # Projects page content
   headerNavLinks.ts     # Navigation links
