@@ -7,19 +7,17 @@ aiGenerated: true
 summary: 'I wanted the Pipeline tab to chew through a chain of planned issues instead of making me click them one by one. The tempting answer was parallel sessions, but the March 23 state lessons made serial mode the right thing to ship first.'
 ---
 
-## Introduction
-
-One of the stranger moments in [EcoOrchestra](/blog/what-is-ecoorchestra) lately was realizing the Pipeline tab had finally become useful right when I needed to be more conservative with it.
+One of the stranger moments in [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) lately was realizing the Pipeline tab had finally become useful right when I needed to be more conservative with it.
 
 PR #354 had just landed with an issue queue endpoint and dependency resolution. The UI could finally see a stack of `worker:ready` issues and understand `Blocked by #NNN` chains instead of treating everything as a flat list. A few days earlier, though, I had been staring at the aftermath of the March 23 parallel pipeline experiment: duplicate PRs from the N=2 path before the post-claim re-verify fix landed, plus the more ominous detail that the dashboard still revolved around a shared `state-developer.json`. Ok. That's new.
 
 The immediate use case was simple. `/plan` had created a chain of child issues. I wanted to process them from the local UI instead of waiting for the VPS poller to get around to them. One click per issue worked, technically, but it felt silly. So, now what?
 
-## The Problem
+## The Question That Actually Mattered
 
 My first instinct was to jump straight to parallel mode. If the Pipeline tab can see three unblocked issues, why not spawn three sessions, give each one a worktree, and let them run? Cool. But the real problem was not "how do I start more builds?" It was "how do I preserve the same dependency guarantees and session isolation the poller already relies on, while adding a local UI on top?" The second question is the one that decides whether you wake up to a weird PR.
 
-## The Investigation
+## What the Plumbing Told Me
 
 I walked through the obvious alternatives first. One option was to do nothing and let the autonomous poller handle it. That works, but it defeats the point of having a local control surface. Another option was to shove all the issue numbers into one `/build` invocation. I did not like that at all. That turns a dependency-ordered queue into one giant context blob.
 
@@ -37,7 +35,7 @@ state-developer-{session_id}.json
 pipeline_session_id
 ```
 
-## The Solution
+## Serial First, Parallel Second
 
 That is why the feature was approved with sequencing: serial mode first, parallel mode second.
 
@@ -45,6 +43,6 @@ Serial mode is basically a UI-driven local poller. Same dependency rules. Same u
 
 Parallel can come later, but only after the state files stop being global persona files and start being session-scoped artifacts. Until then, "spawn more sessions" is a throughput feature sitting on top of correctness debt. That's not a trade I wanted.
 
-## Conclusion
+## Where This Goes
 
 My guess is that most multi-issue orchestration features should start this way. Reliability first, concurrency second. Once the state files are properly namespaced by session ID, parallel mode will be worth revisiting. Until then, boring serial execution is doing exactly what I need it to do.
