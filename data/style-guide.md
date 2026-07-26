@@ -129,6 +129,37 @@ A generated post MUST be rejected and rewritten if any of these conditions apply
 
 6. **Conclusion recaps the post.** If the conclusion summarizes what was already covered ("In this post, we looked at..."), reject. Conclusions should state a theory, a forward-looking remark, or a brief takeaway.
 
+## Anti-Formula Rules — These Override the Example Lists Above
+
+The "Characteristic phrases" and "Rejection criteria" sections describe RANGE, not a
+checklist. Six consecutive generated drafts (ghostpen #67-#75) satisfied the criteria
+mechanically and read as the same post with the nouns swapped: `#74` used seven of the
+eight example catchphrases, `#75` used six, both in the same order, under the same four
+headers. Tim's own posts use zero to two. So:
+
+1. **Catchphrase ceiling: two per post, maximum.** Use one only where it genuinely
+   fits the moment. `guardrails-vs-velocity` and
+   `building-a-circuit-breaker-across-two-repos` use NONE and are the two strongest
+   posts in the corpus. Never open with "Ok. That's new." as a reflex.
+
+2. **The header set `## The Problem` / `## The Investigation` / `## The Solution` /
+   `## Conclusion` is banned.** It is the narrative arc, not a template. Write headers
+   that name this post's specifics, or use no headers at all — several of the best
+   posts have none.
+
+3. **Vary the opening.** Not every post begins with a one-sentence scene-set followed
+   by a reaction fragment.
+
+4. **Length: 900-1300 words** for an AI-category post. The published corpus runs
+   700-1400. A 550-word post reads as a summary of work, not an account of it.
+
+5. **Two code blocks minimum, showing REAL artifacts** — actual error text, a real
+   config snippet, a genuine diff. Invented pseudo-code (`deploy` / `smoke_test ||
+   file_blocking_issue`) is a tell.
+
+6. **Earn the sign-off.** "Thanks for reading!" belongs on a post that taught
+   something, not on every post by default.
+
 ## AI Category Adaptations
 
 Posts in the AI category differ from Sitecore posts in these ways:
