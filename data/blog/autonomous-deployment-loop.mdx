@@ -1,0 +1,106 @@
+---
+title: 'The Pipeline Fixed My Deployment Bugs, Then Waited for Me to Deploy Them'
+date: '2026-08-09'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'Two Docker failures went from GitHub issues to reviewed, merged fixes without me patching the server. The experiment also exposed the last manual handoff in the loop: rebuilding the container after the merge.'
+---
+
+The first Docker build of my Matrix bot failed before the bot had a chance to connect to Matrix. That was frustrating, but not especially surprising. This was an 18-stage image containing Node, Python, git, SSH, and the tooling needed to run an AI development pipeline inside a container. There were plenty of seams available to split.
+
+What surprised me was what happened after the failures. I filed two GitHub issues, added `worker:ready`, and let the [EcoOrchestra pipeline](/blog/2026-03-15-what-is-ecoorchestra) pick them up through my [always-alive cron worker](/blog/2026-03-22-always-alive-worker). Both fixes were merged in about ten minutes.
+
+Then everything stopped.
+
+The pull requests were green. `main` was fixed. The container on the VPS was still built from the broken code.
+
+Not exactly autonomous.
+
+## The Build Failed in Two Different Layers
+
+Issue #182 was almost comically small. Both `Dockerfile` and `Dockerfile.fat` copied `tsconfig.json`, while `.dockerignore` excluded the same file. Docker failed while calculating the build context:
+
+```text
+failed to calculate checksum of ref: "/tsconfig.json": not found
+```
+
+The worker produced PR #187. The entire production fix was this genuine diff:
+
+```diff
+diff --git a/.dockerignore b/.dockerignore
+@@ -7,7 +7,6 @@ dist/
+ *.md
+ caddy/
+ *.service
+-tsconfig.json
+ vitest.config.ts
+ standups/
+ reviews/
+```
+
+Issue #183 was less tidy. The Compose file mounted the pipeline source at `/opt/ensemble:ro`, which was the right default for a container that only needed to read it. The entrypoint, however, attempted an editable install from that mount. It also tried to write packages into a virtual environment created by root while the running process was `appuser`.
+
+The restart loop alternated between two real errors:
+
+```text
+error: Cannot update time stamp of directory 'eco_orchestra.egg-info'
+
+OSError: [Errno 13] Permission denied:
+'/opt/venv/lib/python3.12/site-packages/websockets'
+```
+
+PR #186 fixed both ownership boundaries. `Dockerfile.fat` gave `appuser` ownership of `/opt/venv`, and `scripts/docker-entrypoint-fat.sh` copied the read-only source into a temporary directory before installing it non-editably. The worker also added regression coverage in `src/docker-fat.test.ts`.
+
+At 20:15 UTC, #183 was claimed; PR #186 merged at 20:21. Issue #182 was claimed at 20:20; PR #187 merged at 20:25. The pipeline had branched, built, reviewed, run QA, merged, and closed both issues while I stayed out of the implementation.
+
+That part worked better than the deployment.
+
+## Why I Did Not Patch the VPS
+
+My first instinct was to fix both files in the deployment checkout and rebuild. It would have been faster for these particular bugs. In fact, I already had local fix commits, and the standup records what happened to them: I rebased onto `origin/main` and skipped them because PRs #186 and #187 had superseded the same changes.
+
+That detour clarified the value of the experiment. A patch made directly on the VPS disappears into shell history. The two issues did not. They contain the reproduction commands, the exact errors, the proposed fixes, and links to the merged pull requests. When I deploy the same fat container somewhere else, the fix comes along with the repository.
+
+I considered batching the failures too: run a dry build, collect everything broken, file all the issues, and rebuild once. That is efficient for build-context problems like #182. It does nothing for the bugs that only appear after the container starts, authenticates, joins the Docker network, and begins a Matrix sync. A deployment is not one test. It is a sequence of increasingly realistic tests.
+
+The most tempting idea was to have the Matrix bot process its own issues. That would be a nice recursive demo, but it fails at the exact moment I needed it here. A bot stuck before startup cannot dispatch the issue that repairs its startup. Self-repair only makes sense for runtime behavior after the process is healthy. I pushed that to Phase 2.
+
+## The Missing Arrow After Merge
+
+After both fixes landed, I manually rebuilt the 18-stage image. The container started, connected to Synapse at `http://matrix-synapse:8008`, logged in as `@ensemble-chatter-bot:matrix.hungryvps1.com`, and loaded the `ping` and `status` skills. Good result, awkward handoff.
+
+The loop I thought I had was:
+
+```text
+deploy -> find bug -> file issue -> claim -> build -> review -> QA -> merge
+   ^                                                                  |
+   +------------------------- rebuild and test ------------------------+
+```
+
+In reality, the bottom arrow ended at a notification. Someone still had to pull `main`, rebuild, restart, and decide whether the next failure deserved another issue.
+
+Issue #209 captured that gap. PR #211 added a host-side `scripts/auto-rebuild.sh`, a cron task under `cron_tasks/container-rebuild/`, and 347 lines of tests in `src/deploy/auto-rebuild.test.ts`. The task runs every minute:
+
+```json
+{
+  "name": "container-rebuild",
+  "title": "Docker Container Auto-Rebuild",
+  "schedule": "* * * * *",
+  "model": "haiku",
+  "quiet_start": 0,
+  "quiet_end": 0
+}
+```
+
+The script asks GitHub for the current `main` SHA and compares it with `memory/deploy-state.json`. On a new commit, it pulls, builds, and runs `docker compose up -d`. A PID lock prevents overlapping builds. Success persists the deployed SHA; failure writes the build log and files another bug issue with the last 3,000 characters of output.
+
+There was no dramatic review battle on this part. PR #211 changed four files, passed `pipeline/review-qa`, and merged at 22:29 UTC. The architecture decision was more important than the shell: this had to run on the host, not inside the container that it might need to replace.
+
+## Where the Loop Still Stops
+
+The next day's re-evaluation made the claim more precise. This was not yet a self-healing deployment platform. It was continuous integration triggered by deployment. Application bugs such as a broken command fit the loop well; UID mismatches, authentication mounts, and volume ownership still needed human context. A bad autonomous rebuild could also kill the very bot expected to report the next problem.
+
+So I kept the checkpoint at the risky boundary and treated self-referential repair as a later phase. The useful result was not a container that can magically recover from anything. It was a deployment where every discovered code defect leaves a permanent trail, every merge can continue into a rebuild, and the remaining human interventions are visible instead of hiding between two automated systems.
+
+My theory is that autonomous systems become trustworthy at their handoffs, not at their most impressive individual steps. The next improvement is a canary and a real health check—not another agent confidently restarting itself.
