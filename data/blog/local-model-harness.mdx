@@ -1,0 +1,121 @@
+---
+title: 'My Local Model Was Not Failing. The Harness Was Sending It the Wrong Error.'
+date: '2026-08-16'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'A local coding model burned through 50 turns reviewing a file split and returned nothing, so I rebuilt its agent harness around bash, context compaction, and mid-turn reminders. The first real test then exposed a more useful problem: the pipeline was giving the model the wrong failure to investigate.'
+---
+
+I switched every Obsidian instance to my local-model theme and sent Ensemble issue #752 through the Matrix bot. The task was unremarkable: split `eco_orchestra/server.py`, then 775 lines, into smaller state, broadcast, and runner modules. It was exactly the kind of bounded refactor I wanted local hardware to handle while I kept cloud models available for harder work.
+
+The builder did handle it. The reviewer did not.
+
+Across eight attempts on #752, the local reviewer completed zero times. QA completed 25 percent of the time. The other runs consumed the full 50-turn budget and produced little or no usable output. One failure reached GitHub looking like this:
+
+```text
+### Worker pipeline failed
+
+Step: ship
+Attempts: 4/4
+
+Deterministic QA failed:
+
+pytest failed (exit 1):
+Command timed out after 300s
+```
+
+The same qwen3-coder-next family could build changes in 7 to 21 turns. It could inspect code and find real defects in direct tool-use experiments. Put it behind the reviewer persona in my [EcoOrchestra pipeline](/blog/2026-03-15-what-is-ecoorchestra), however, and it wandered until the clock ran out.
+
+That made the model an easy suspect. It was also the wrong place to start.
+
+## The Fifteen-Line Escape Hatch
+
+My initial vision brief proposed three phases. Phase 1 would skip review and QA whenever the resolved provider was local. It was about 15 lines, immediately stopped the wasted compute, and left deterministic tests as the quality gate. Phase 2 would take a week to build a better harness. Phase 3 would run real issues until review and QA exceeded an 80 percent completion threshold—or establish that those jobs should stay frontier-only.
+
+Issue #826 captured the skip. I nearly shipped it first, then reversed the order. Skipping the failing step would unblock the pipeline, but it would also remove the experiment I needed to learn whether this was a model ceiling or a harness problem. I closed #826 with a short note: test #823, #824, and #825 first; only revive the fallback if they fail.
+
+That call mattered because there were already hints that the wrapper was fighting the model. A 31K review prompt had produced a one-turn rubber stamp with zero tools. Reviewer and QA personas had ignored text saying they were read-only until PR #807 removed write tools structurally. A SWE-bench-tuned model kept trying to work in `/testbed` until `_select_preamble()` began injecting the actual working directory.
+
+These were not code-quality failures. They were interface failures.
+
+## Make the Harness Look Familiar
+
+The design borrowed mini-swe-agent's most useful constraint: bash first. My local adapter exposed custom `read_file`, `grep_file`, `list_files`, and `write_file` tools, each with its own schema and rules. That sounds helpful. For a model trained to solve repository tasks through a shell, it is extra vocabulary and extra decisions.
+
+PR #827 removed about 185 net lines and reduced the choice to three tools for builders and two for read-only personas. The real diff in `eco_orchestra/providers/local_adapter.py` was almost suspiciously small:
+
+```diff
+elif read_only:
+-    tools = [
+-        _DEFAULT_READ_FILE_TOOL,
+-        _DEFAULT_GREP_FILE_TOOL,
+-        _DEFAULT_LIST_FILES_TOOL,
+-        _READONLY_BASH_TOOL,
+-        TASK_COMPLETE_TOOL,
+-    ]
++    tools = [_READONLY_BASH_TOOL, TASK_COMPLETE_TOOL]
+else:
+-    bash_tool = _RESTRICTED_BASH_TOOL if has_impl_steps else _DEFAULT_BASH_TOOL
+-    tools = [
+-        _DEFAULT_READ_FILE_TOOL,
+-        _DEFAULT_GREP_FILE_TOOL,
+-        _DEFAULT_LIST_FILES_TOOL,
+-        _DEFAULT_WRITE_FILE_TOOL,
+-        bash_tool,
+-    ]
+-    if has_impl_steps:
+-        tools.insert(2, _DEFAULT_EDIT_FILE_TOOL)
+-    tools.append(TASK_COMPLETE_TOOL)
++    tools = [_DEFAULT_BASH_TOOL, _DEFAULT_EDIT_FILE_TOOL, TASK_COMPLETE_TOOL]
+```
+
+PR #828 added rule-based compaction in `eco_orchestra/local_dispatch.py`. Above 80 percent of the resolved context window, old tool results longer than 500 characters collapse to their first three and last three lines. The system prompt and most recent five messages remain untouched. No summarization model, no new dependency, just removal of old terminal noise.
+
+PR #830 addressed instruction fade-out. Every ten turns, the loop added a persona-specific user message; at 80 percent of the budget, it added an urgent stop-and-finish instruction:
+
+```python
+if turn > 0 and turn % 10 == 0:
+    if persona in ("reviewer", "qa"):
+        reminder = (
+            f"REMINDER: You are {persona}. Do NOT modify any files. "
+            f"Call task_complete with your report. {remaining} turns remaining."
+        )
+    messages.append({"role": "user", "content": reminder})
+```
+
+All three changes passed their focused suites: 62 tests for bash-first tooling, 51 for compaction, and 69 for reminders and adapter routing. Nice numbers. They still did not answer whether #752 would finish.
+
+## The Harness Worked, and the Run Still Failed
+
+The first rerun gave me a more interesting result than a clean pass. All 23 tool calls were bash. The turn-10 reminder appeared. Compaction never triggered because the model exhausted its turns before context pressure became the problem.
+
+Then the transcript showed that the model had correctly diagnosed a failing assertion. `deterministic_qa.py` recovered that output but labeled the whole run `Command timed out after 300s`. `worker_runtime_pipeline.py` saw the word “timeout” and generated advice about hanging processes. The builder followed that advice into a timeout investigation and made zero edits.
+
+So the harness improvements were mechanically working while the handoff prompt sent the agent on a wild goose chase. Issues #842 and #843 fixed the classification and added a separate assertion-failure guidance path; both landed in PR #849. The test also uncovered 28 tests already broken on `main`, a 48,100-line test suite larger than the 42,591-line application, and a container missing `pytest-timeout`. Local models had become a rather expensive observability tool.
+
+The next #752 run finally produced a substantive review in 15 turns. QA rejected it for concrete reasons: `server.py` was still 566 lines, `ARCHITECTURE.md` lacked the three new module entries, and the required decision record was absent. That rejection was progress. The agent was now failing the work instead of failing to speak.
+
+## One Line, Three Pull Requests
+
+The strangest blocker came next. Issue #856 needed max-turn exhaustion copied into `DispatchResult.stderr` so the pipeline would not mistake silent failure for “already resolved.” The first build made the correct change. Its fix loop then reverted production behavior to satisfy an outdated assertion that expected empty stderr. PR #857 merged a cosmetic result with the actual fix undone.
+
+PR #858 restored the one line and changed the test:
+
+```diff
+ return DispatchResult(
+     exit_code=0,
+     stdout=summary or "(no final answer — check git log for committed work)",
+-    stderr="",
++    stderr=fallback_msg,
+ )
+
+-assert result.stderr == ""
++assert "max_turns" in result.stderr
+```
+
+It also taught the fix-loop prompt to decide whether behavior intentionally changed before “fixing” production code to match an old test. A non-fast-forward push failure forced another claim and PR #859 before the blocker cleared. Three PRs to preserve one meaningful line is not an argument for a smarter model. It is an argument for better feedback semantics.
+
+By May 3, pipeline run `539f43bc` on issue #1087 gave the direction some credibility: qwen3-coder-next approved review in 13 turns and about 70 seconds, then passed QA in four turns and about 52 seconds. That is one successful run, not an 80 percent completion rate, so Phase 3 remains measurement rather than victory language.
+
+My theory is that local-model capability is easiest to misjudge at the boundary between two tools. If the agent receives the wrong error, a larger context window only gives it more room to be wrong. The next useful harness improvement is not automatically more autonomy; it is making every handoff tell the truth.
