@@ -1,0 +1,95 @@
+---
+title: 'The Audit Trail Needed Flat Threads Before It Needed Perfect Organization'
+date: '2026-08-23'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'A manual Matrix deployment left me creating six audit rooms just to follow two fixes, so I designed lifecycle visibility into chat itself. The useful version came from cutting hierarchy, keeping archival, and discovering that even a 30-second poller can race its own history.'
+---
+
+I knew the Matrix deployment was complete because I had assembled the evidence by hand.
+
+On April 12, two Docker bugs blocked the first [ensemble-chatter](/blog/discord-pipeline-bot) image: issue #182 excluded `tsconfig.json` through `.dockerignore`, and issue #183 tried to install Ensemble through a read-only mount into a root-owned virtual environment. The pipeline fixed both, PRs #187 and #186 merged, and the bot eventually connected to Synapse. None of that progress appeared as one coherent conversation, though. I created a Matrix Space and six child rooms manually, then copied resolution summaries into the two bug rooms.
+
+This was the actual structure recorded in the standup and in ensemble-chatter issue #188:
+
+```text
+Space/Category: ensemble-chatter-matrix-deploy
+  ├── #deploy-audit
+  ├── #bug-182-dockerignore
+  ├── #bug-183-readonly-mount
+  ├── #bug-189-ssh
+  ├── #test-ping
+  └── #test-dispatch
+```
+
+It looked organized after the fact. During the deployment, I was still bouncing between GitHub, pipeline output, and Matrix to answer basic questions: Had a worker claimed the issue? Was there a PR? Did review reject it? Had the merge actually happened? The rooms were an archive I had curated, not visibility while the work was moving.
+
+That deployment became the scenario for an audit-trail skill: every pipeline run would get a chat thread, issue and PR transitions would appear there in real time, and the thread would close itself when the work reached a terminal state. The trigger had to be automatic. In my [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline, runs can begin through a webhook, a command, a schedule, or the Machine API. Teaching four entry points to remember the audit trail would guarantee that one eventually forgot. The approved contract subscribed once to `AuditEmitter`'s `pipeline.dispatch` event instead.
+
+## The abstraction I thought I had
+
+My first design was basically the manual Matrix layout, automated: Discord Categories, Matrix Spaces, and Telegram supergroups, with per-issue rooms underneath. It was visually satisfying and architecturally fictional. That sounded clean. It wasn't.
+
+The vision review opened `src/transport/types.ts` and found the boundary I had skipped over. `Transport` exposed `createThread`, but no `createCategory`, `createSpace`, `createChannel`, `archiveThread`, or `setReadOnly`. Worse, Matrix's `createThread` created a disconnected private room with no parent-child relationship. The proposal's claim that the transport abstraction already handled native hierarchy was simply false.
+
+Adding a generic container method would not have been a harmless interface change. Discord Categories, Matrix Spaces, and Telegram Forum Topics have different membership and permission semantics. Every adapter would need to pretend they were the same before I had proven that anyone cared about the grouping.
+
+The vision verdict on issue #188 was “approved with conditions.” Hierarchical grouping moved to v2. Version one became one issue, one flat thread, one poller. That cut the attractive part of the mockup and kept the part I actually needed: lifecycle visibility. Fair enough.
+
+Archival did not get cut. My first scope pass treated cleanup as operational polish for later, but I challenged that decision. A feature that automatically creates a thread for every run and never closes one produces more noise than the GitHub tabs it replaces. The compromise was deliberately uneven: no generic transport extension, just direct platform calls in `skills/audit-trail/archive.ts`. Discord archives and locks a thread; Matrix raises `events_default` to 50; Telegram closes a forum topic. If archival becomes a shared Chatter capability, it can earn a proper abstraction later.
+
+## The 30-second timer that was not a small detail
+
+The plan explicitly required `croner`, persisted state, shutdown hooks, and rate-limit documentation. The first integration still landed in PR #206 with `setInterval`. It worked on the happy path, but it ignored one of the approval conditions and had no rate-limit backoff. PR #213, closing issue #195, replaced the timer with the real scheduler and a five-minute backoff:
+
+```diff
+-const activePollers = new Map<string, ReturnType<typeof setInterval>>();
++const activePollers = new Map<string, Cron>();
+
+-const timer = setInterval(() => void poll(), intervalMs);
+-timer.unref();
+-activePollers.set(entry.id, timer);
++const job = new Cron(cronExpression, { name: `audit-${entry.id}` }, () => void poll());
++activePollers.set(entry.id, job);
+```
+
+The arithmetic in `skills/audit-trail/poller.ts` made the limit concrete: two GitHub API calls every 30 seconds is 240 calls per hour per issue, which puts the authenticated 5,000-call ceiling around 20 concurrent trackers. A vague “handle rate limits” requirement became behavior I could reason about.
+
+Archival had its own correction. PR #200 implemented Discord and Matrix, then issue #197 was closed because the revision required Telegram too. Replacement issue #199 and PR #201 added `closeForumTopic` plus an audit warning for unknown transports. That looked like a small omission. It was actually a useful test of the scope rule: platform-specific archival was v1 even when a platform adapter did not exist yet; hierarchical organization was still v2.
+
+Then, four months later, a necessity review found the worse poller bug.
+
+`startPoller()` performs an immediate `void poll()` and also schedules the 30-second cron. If `gh` takes longer than 30 seconds, the cron starts another fetch. Both calls read and write `lastSnapshot`. Whichever finishes last wins, so the audit trail can duplicate a transition or silently swallow it. Ominous for a tool whose entire job is preserving transitions.
+
+The first fix in PR #2772 added an in-flight boolean. Review returned `FIX_REQUIRED`: stop and restart created a second closure while the old `gh` request could still land. Round two added generation ownership, but missed invalidation when a poller stopped without restarting. Round three found three tests that passed even against the unfixed code. The final guard in `skills/audit-trail/poller-manager.ts` is small; proving its ownership rules was not:
+
+```typescript
+if (pollInFlight) {
+  log("info", "audit-trail.poller.skipped_in_flight", {
+    id: entry.id,
+    issueRef: entry.issueRef,
+  });
+  return;
+}
+pollInFlight = true;
+try {
+  const snapshot = await fetchIssueSnapshot(
+    entry.owner,
+    entry.repo,
+    entry.issueNumber,
+  );
+  if (!isCurrentPollerGeneration(entry.id, generation)) return;
+  // Diff, emit, and persist only while this poll still owns the entry.
+} finally {
+  pollInFlight = false;
+}
+```
+
+The decisive regression test held one fetch open and drove the captured cron tick directly. Without the guard, three concurrent fetches started instead of one. The full run finished with 7,248 passing tests, but the more valuable fact was that each new overlap test had been observed failing against the corresponding mutation.
+
+## Flat threads are enough to learn from
+
+The useful shape of this feature is less ambitious than the first diagram. `AuditEmitter` is the single start signal. Persisted entries restore watchers after restart. A croner job diffs GitHub snapshots into issue, PR, review, and check events. Terminal work receives a summary and becomes read-only through the platform's own API. Manual `track`, `stop`, and `list` commands remain for exceptions and inspection.
+
+I still want Spaces and Categories. I just no longer want to design the transport hierarchy while guessing how people will use it. Flat threads can tell me whether I read these timelines, whether 30 seconds is useful, and whether automatic archival keeps the channel livable. Version two should be shaped by that evidence. My theory is that hierarchy is valuable only after the lifecycle underneath it is boringly trustworthy.
