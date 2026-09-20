@@ -1,0 +1,97 @@
+---
+title: 'One Container, Many Isolated Ensemble Instances'
+date: '2026-09-20'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'I moved Ensemble configuration and artifacts into an Obsidian-backed instance registry without multiplying containers. The hard part was resolving isolation per work item, then finding the few jobs that actually needed a view across every instance.'
+---
+
+On June 26, the cron behind [ghostpen's automated blog pipeline](/blog/2026-03-18-how-i-built-a-blog-that-writes-itself) inside [Ensemble, the orchestration system I originally introduced as EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra), was running normally. It had credentials, it could read the registry, and it found one approved feature worth turning into a post.
+
+There were actually nineteen.
+
+Not exactly a rounding error.
+
+The container was scoped to `personal-comms`, so it saw that instance's one `blog_worthy` approval and stopped there. Sixteen more were in `personal-infra`, with one each in the Scribe and streaming instances. [Ensemble issue #2231](https://github.com/tyu41275/Ensemble/issues/2231) described the result accurately: 18 features were silently stranded.
+
+That looked like a cron bug, but it exposed the most interesting part of the multi-instance design. The registry was isolating data exactly as intended. The cron was asking the wrong question.
+
+## Three designs that did not survive vision
+
+Ensemble had accumulated configuration and artifacts inside its own repo: personas, GitHub project settings, vision decisions, reviews, research, and standups. That was manageable while everything meant "my projects." It stopped making sense once the same installation needed to work on publishing, gaming, communications, and client repos without blending their identities or records.
+
+The April 18 vision brief did not arrive at the registry immediately. It records three rejected rounds first.
+
+The first grouped work by domain, such as infrastructure or publishing. That still required somebody to classify new repos manually, which worked against discovery-driven automation. The second used a flat directory per project. It improved separation but made scanning inefficient and did not create a meaningful client boundary. The third was conventional multi-tenancy: set `ENSEMBLE_INSTANCE` at startup and run a container per instance.
+
+That third version was the closest and still wrong. I did not want a publishing Ensemble and an infrastructure Ensemble. I wanted one install and one container whose poller could discover work everywhere. The instance had to be resolved for each work item, after the poller knew which repo owned the issue.
+
+The approved design made the Obsidian repo the registry. These are real manifests from the current registry. First, `ensemble/personal-instances/personal-infra/instance.json`:
+
+```json
+{
+  "repos": ["tyu41275/Ensemble", "tyu41275/Relay"],
+  "github_owner": "tyu41275"
+}
+```
+
+And `ensemble/personal-instances/personal-publishing/instance.json`:
+
+```json
+{
+  "repos": ["tyu41275/ghostpen"],
+  "github_owner": "tyu41275"
+}
+```
+
+The poller unions the repo lists, but a worker resolves only the instance that owns its repo. `ghostpen` gets publishing personas and publishing artifacts. `Ensemble` gets infrastructure decisions and reviews. Client repos can have their own owner, configuration, and history without another Ensemble deployment.
+
+## Two worktrees inside one worker
+
+Resolving the right directory solved identity, not contention. Multiple workers could still write reviews or standups into the same Obsidian checkout at the same time. A shared git working tree would eventually produce a locked index, mixed staging area, or a commit containing somebody else's artifact.
+
+The answer reused a pattern Ensemble already trusted for project code: one git worktree per worker. Each run gets a project worktree for the code change and an Obsidian worktree for its instance artifacts. The implementation in `eco_orchestra/instance_worktree.py` creates a unique branch from `origin/main`:
+
+```python
+branch_name = f"artifacts/{instance_name}/{os.getpid()}"
+worktree_dir = tempfile.mkdtemp(
+    prefix=f"eco-obsidian-wt-{instance_name}-",
+    dir=worktree_base_dir(),
+)
+
+result = _run_git(
+    instances_root,
+    ["worktree", "add", "-B", branch_name, worktree_dir, "origin/main"],
+    timeout=60,
+)
+```
+
+The worker writes into that checkout, commits, rebases onto Obsidian `main`, pushes, and cleans up. Different instances naturally touch different directories; most artifacts within an instance are new files. Contention did not disappear, but it moved from one shared mutable checkout to an ordinary git integration step.
+
+## Passing tests did not prove the paths were right
+
+The foundation looked clean. Issue [#665](https://github.com/tyu41275/Ensemble/issues/665) added the resolver with 16 tests. The review artifact at `reviews/2026-04-18-instance-resolver.md` found no critical issues, and the combined [PR #692](https://github.com/tyu41275/Ensemble/pull/692) reported 2,431 passing tests.
+
+Then the path leaks started appearing.
+
+An audit filed issue [#966](https://github.com/tyu41275/Ensemble/issues/966) because several command templates still wrote to repo-relative `reviews/`, `decisions/`, and `research/` paths. The first fix did not clear review. `reviews/2026-04-27-artifact-root-routing.md` rejected it for two critical problems: a Python snippet used `os.environ` without importing `os`, and deliberation persistence tried to call `relative_to(wt_path)` on an absolute path outside that worktree. The second review passed only after the transcript write stayed worktree-relative.
+
+That distinction mattered. An artifact's logical home was the instance, but anything committed by a worker still had to be written inside that worker's Obsidian worktree. Replacing every path with an absolute registry path was not isolation; it was a shortcut around isolation.
+
+The more uncomfortable evidence arrived in [issue #1166](https://github.com/tyu41275/Ensemble/issues/1166). The interactive `/vision` command resolved `ARTIFACT_ROOT` in a shell variable but did not export it to the dispatched subprocess. By May 9, the audit found 27 orphan vision briefs, 44 research files, and 40 reviews in the Ensemble repo. That was worse than a misplaced file or two. The autonomous worker path was correct. The interactive path had quietly written somewhere else for weeks.
+
+And then came the blog cron. Its original lookup from issue #2231 was perfectly instance-local:
+
+```python
+artifact_path = _artifact_path_resolver()
+approvals_path = artifact_path("decisions") / "vision-approvals.json"
+```
+
+For a worker, that is exactly right. For a public blog fed by every instance, it is exactly wrong. [PR #2232](https://github.com/tyu41275/Ensemble/pull/2232) changed that one consumer to enumerate `list_instances()`, retain each candidate's source directories, and deduplicate by feature slug. Thirty-seven tests passed, and live verification changed the candidate count from 1 to 19.
+
+## Isolation needs an explicit audience
+
+The registry now makes the safe answer the default: a work item sees only its own configuration and artifacts. Cross-instance tools are allowed, but they have to declare that wider audience instead of inheriting it accidentally.
+
+That is the boundary I want to keep. One container can serve many fully isolated contexts, as long as every new consumer has to answer a simple question: am I working for this instance, or observing all of them?
