@@ -1,0 +1,95 @@
+---
+title: 'The Prompt Optimizer That Never Ran'
+date: '2026-09-27'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'I built a passive feedback loop to improve local agent prompts, then discovered its optimizer was never scheduled and its evidence lived inside a disposable source checkout. The useful part of the system turned out to be the rollback, identity, and durability boundaries around the reflection model.'
+---
+
+I went looking for the daily health report from my prompt optimizer and found one post from the previous several days.
+
+The Matrix container had been running at the scheduled 08:00 UTC tick. There was no crash, no failed pipeline, and no obvious red status light. The report simply hadn't happened. When I traced the rest of the system, the situation got stranger: 368 evaluation files had accumulated inside the source checkout, one server had 130 evaluations for a persona while another had 13, and the actual optimization command wasn't registered with the maintenance scheduler at all.
+
+I had built an autonomous prompt optimizer. It just wasn't autonomous.
+
+## Why I wanted prompts to learn from real runs
+
+My [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline sends the same personas through planning, development, review, and QA over and over. Local models develop recognizable failure modes: a developer burns its turn budget exploring, a reviewer fixates on formatting, or a planner produces work that is technically complete but awkward to hand off.
+
+I could tune each prompt by hand, but that resets every time I change models. The approved vision brief proposed something closer to an evolutionary loop: collect signals from normal production runs for free, reflect on them offline, create a challenger prompt, and let real outcomes decide whether it replaces the current prompt.
+
+I considered using GEPA directly. That was the first approach I rejected. GEPA assumes fast evaluation cycles; my pipeline runs take minutes and involve tools, git state, review feedback, and sometimes a second repository. Generating active evaluation runs would turn prompt tuning into a fairly expensive benchmark farm. Passive collection fit the workload better.
+
+The initial scope was deliberately small. The collector lived in `eco_orchestra/worker_runtime_logging.py`, the registry and optimizer lived under `eco_orchestra/prompt_opt/`, and a file at `prompt_opt/disabled` bypassed the registry immediately. If the directory didn't exist, `build_prompt()` used the old hardcoded prompt. The worst credible result was wasted reflection spend, not a broken frontier dispatch path.
+
+Issues #741 through #743 became PRs #832, #834, and #837: signal collection, a versioned registry, then offline reflection with Thompson-sampling A/B selection. The collector was also non-blocking. A full disk could cost me an observation, but it couldn't fail the work being observed.
+
+## The labels did not mean what I thought they meant
+
+The first post-merge bug was tiny enough to look harmless. Pipeline steps use names such as `review`; prompt directories use persona names such as `reviewer`. The collector stored the step name and then used it to resolve the prompt version. That meant a review run looked in `review_local/` while the active prompt lived in `reviewer_local/`.
+
+The pipeline still ran. The JSON still appeared. It just claimed the wrong prompt version, which would poison any comparison built on top of it. Not exactly useful evidence. Issue #835 and PR #838 added the missing translation:
+
+```diff
++_persona_for_reg = {"review": "reviewer", "qa": "qa"}.get(step, step)
+ _prompt_version = "v1"
+ try:
+     from eco_orchestra.prompt_opt.registry import resolve_prompt_template
+-    _reg = resolve_prompt_template(step, provider)
++    _reg = resolve_prompt_template(_persona_for_reg, provider)
+```
+
+That fix exposed a broader identity problem. Keying prompts by `persona + provider` treated every local model as the same model. It isn't. A prompt that helps Qwen stop thrashing may make a different coding model overly terse. Issue #911 and PR #914 moved filtering and registry lookup to `persona + provider + model`, while preserving the old path as a fallback.
+
+Then review caught a more visible lie. PR #839 registered a new challenger and immediately emitted a promotion message with the same rate on both sides: `success rate improved from 70% to 70%`. That was awkward. Nothing had been promoted; the A/B test hadn't even run. Issue #841, created by the review pipeline, removed that signal in PR #855. A challenger is a hypothesis, not a victory announcement.
+
+Those were useful corrections, but they all assumed the loop would actually execute.
+
+## One health post, 368 disposable evaluations
+
+The missing health report forced me to inspect deployment rather than algorithm code. Issue #808 documented three separate failures.
+
+First, the health task was a plain cron job. If the container restarted during its firing minute, that day disappeared. Second, each transport wrote evaluations beneath its own `/repos/Ensemble` bind mount. A rebuild or `git clean -fdx` could erase the evidence, and separate transports could never pool enough samples to converge. Third, `eco_orchestra.prompt_opt.cron_runner` existed but had no scheduler entry. The system could collect forever against a frozen baseline.
+
+That last one hurt. The engine had tests, a CLI, a registry, safety thresholds, and no ignition key.
+
+PR #811 moved the state to one intentionally shared Docker volume and registered both jobs. The real maintenance configuration now includes this:
+
+```typescript
+{
+  name: "gepa-health",
+  channelName: "gepa-cron",
+  schedule: "0 8 * * *",
+  command: ["python3", "-m", "eco_orchestra.prompt_opt.health"],
+  suppressNoOp: true,
+  election: true,
+},
+{
+  name: "gepa-optimize",
+  channelName: "gepa-cron",
+  schedule: "0 3 * * *",
+  command: ["python3", "-m", "eco_orchestra.prompt_opt.cron_runner"],
+  suppressNoOp: true,
+  election: true,
+}
+```
+
+Election matters because Matrix, Discord, and bridged transports can share that volume. They should pool observations, but they must not generate three challengers at 03:00. A non-blocking lock picks one runner, a watermark records success, and startup catch-up runs a missed daily task once. PR #811 added 12 cases around lock contention, stale takeover, watermarks, and catch-up; the full suite reported 3,082 passing tests.
+
+The storage boundary still had one surprise left. A few weeks later, the live container started repeating this warning:
+
+```text
+files.cleanupError ... unlink '/app/data/prompt_opt/evaluations'
+error: EISDIR: illegal operation on a directory
+```
+
+The generic temp cleanup treated `prompt_opt` as a stale run directory and tried to unlink its children as files. Issue #1206 and PR #1227 classified the entire prompt optimizer tree as protected shared state. The optimizer's memory was finally durable not only across restarts, but also across the cleanup code intended to keep the container healthy.
+
+## The reflection model is the least interesting safety mechanism
+
+Once enough evaluations exist—20 by default—the offline engine groups them by persona and model, compares successes with failures, and proposes a challenger. A golden-set check requires improvement before that challenger enters the registry. Production outcomes update the A/B controller; weak challengers are rejected, a 40% success-rate floor can roll back a bad version, and the `disabled` file returns every dispatch to the built-in prompt without a deploy.
+
+The reflection call is the flashy part, but it isn't the part I trust most. I trust the exact model key, the honest distinction between “challenger” and “promoted,” the shared durable evidence, and the kill switch.
+
+My theory is that most self-improving agent loops fail one layer away from the model. They optimize the clever prompt and under-design the clock, the identity key, or the directory that remembers what happened yesterday.
