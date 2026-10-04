@@ -1,0 +1,90 @@
+---
+title: 'When PASS Became FAIL in My Local Model Pipeline'
+date: '2026-10-04'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'A local model exhausted its turns, the pipeline called the issue resolved, and the first fix quietly reverted itself. Eight days of failures led to stricter completion signals, bounded retries, executable code-block fallbacks, and persona-aware write controls.'
+---
+
+PR #857 bothered me because its title said it fixed issue #856, the tests passed, review and QA ran, and GitHub merged it. The line that mattered still returned `stderr=""`, exactly as it had before.
+
+The pull request had fixed the formatting of a warning. It had not fixed the behavior described in the issue.
+
+This happened while I was moving more of my [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra) pipeline onto 27B local models. The basic agent loop worked: a model could inspect a repository, call tools, edit code, and commit. On April 17, `qwen3-coder-next` passed all three of my tool-use experiments. Eight days later, I had accumulated more than 25 commits hardening nearly every boundary around that loop.
+
+The models were capable. The trouble was that the pipeline kept believing the wrong signals.
+
+## The fix that fixed nothing
+
+Issue #856 started with a local developer model spending 50 turns exploring through bash without making an edit. When it reached `max_turns`, `eco_orchestra/local_dispatch.py` treated that as a soft success because a model might have committed useful work without calling `task_complete`. The warning went to the logger, while the returned result still had exit code 0 and empty stderr.
+
+The evidence recorded in #856 looked like this:
+
+```text
+Build returned: exit_code=0, stdout_len=451, stderr_len=0
+Local agent loop hit max_turns=50 without final answer
+Issue #841 already resolved — branch is identical to origin/main
+```
+
+Nothing had been resolved. The model had simply run out of turns. But the post-build guard saw a successful result plus an empty branch and closed the issue as already done. Issue #731 had previously been closed by the same detector, which made this less of an edge case and more of a pipeline teaching itself the wrong lesson.
+
+The planned fix was small: put the fallback warning into `DispatchResult.stderr` so the downstream guard could distinguish “no changes were needed” from “the model never finished.” The first build did that correctly. Then pytest found an old assertion expecting stderr to remain empty. The fix loop chose the test over the new requirement and reverted the production change.
+
+```diff
+ return DispatchResult(
+     exit_code=0,
+     stdout=summary or "(no final answer — check git log for committed work)",
+-    stderr="",
++    stderr=fallback_msg,
+     parsed_output=transcript,
+ )
+```
+
+Both the second review and second QA run issued `REJECT` verdicts. The pipeline merged PR #857 anyway because pytest was the hard gate and model verdicts were still advisory. That was a rather expensive way to replace six lines with two.
+
+I reopened #856. PR #858 restored `stderr=fallback_msg`, changed `tests/test_local_dispatch.py` to assert that stderr contains `max_turns`, and added fix-loop guidance explaining that an intentional behavior change may require updating the test. Re-queueing the issue then hit stale branch state and a non-fast-forward push. PR #859 was the third attempt; it carried zero changed files because #858 had finally put the real fix on `main`.
+
+## A PASS report enters a FAIL loop
+
+The obvious response was to make reviewer and QA verdicts enforceable. Issue #861 added a detector for `REJECT` and `FAIL` near the end of model output, with a retry limit so one stubborn model could not loop forever.
+
+That protection immediately found its own failure mode.
+
+Issue #873 added retry handling for transient GitHub API 502 and 503 responses. QA inspected `eco_orchestra/triggers/github_poll.py`, ran the tests, checked every acceptance criterion, and returned this report:
+
+```text
+✅ Non-transient errors fail immediately
+✅ Existing behavior unchanged for successful cases
+
+**Verdict:** PASS — All acceptance criteria met, syntax valid, tests passing.
+
+### ⚠️ Fix loop: `qa (model REJECT)` → `build`
+```
+
+The detector matched the incidental word `fail`, not the verdict. The builder received a rejection for code QA had approved, produced no commit, and was handed back to build three times. On a later pass, QA correctly reported that the retry logic was now entirely absent from the branch. The guardrail had helped erase the change it was supposed to protect. Not ideal.
+
+Commit `e48184d` narrowed the regex to verdict-shaped text such as `Verdict: FAIL`, `**Verdict:** REJECT`, or a verdict heading followed by the decision. A passing report can now discuss how a command fails without becoming a rejection itself.
+
+## Giving each persona fewer ways to be wrong
+
+Those two bugs changed how I approached the rest of local dispatch. Prompting harder was not enough. The loop needed explicit evidence at each boundary and a smaller action space for each persona.
+
+Some models, for example, returned commands inside fenced Markdown instead of structured `tool_calls`. Commit `7dc1554` extracted bash blocks and converted them into synthetic calls. That first pass was too narrow: `qwen3.6:27b` also emitted Python and unlabeled blocks. Commit `e470a29` added those cases while skipping unsupported languages. The fallback stayed behind native tool calling rather than replacing it.
+
+Timeouts followed the same pattern. Issue #851 came from a worker that hung for more than ten minutes when Ollama unloaded `qwen3-coder-next` during a QA turn. PR #854 bounded each request and retried transient transport failures once. The initial 120-second limit then proved too aggressive for CPU-backed review output; every legitimate timeout bought another two-minute retry. PR #875 raised the per-request ceiling to 600 seconds. Bounded does not have to mean impatient.
+
+The most visible change was persona-specific preambles. A SWE-bench-trained model sees a repository issue and wants to patch code, even when its assigned role is planner. One planner spent 42 turns behaving like a developer and wrote documentation into `commands/plan.md`. The replacement preamble was not subtle:
+
+```text
+YOU ARE A PLANNER, NOT A DEVELOPER.
+- Your ONLY output is `gh issue create` commands.
+- Do NOT write Python, JavaScript, shell scripts, or any source code files.
+- Do NOT run git add or git commit — you have nothing to commit.
+```
+
+Instructions still drift over a long conversation, so commit `3c2d881` also made the bash executor persona-aware. Planner, reviewer, and QA can inspect with `cat`, `grep`, and `git diff`, and the planner can run `gh issue create`; file redirects, heredocs, `tee`, `sed -i`, `git add`, `git commit`, and `cp` are blocked. Every persona is blocked from writing under `commands/`. On April 24, the preamble also gained the actual working directory because fine-tuned models kept trying to `cd /testbed` out of habit.
+
+After those constraints landed, the planner created three correctly structured issues in one turn. That result mattered more to me than another paragraph of prompt engineering. The model had not become smarter overnight. The runtime had stopped asking prose to carry responsibilities that belonged to code.
+
+My working theory is that local agent reliability will keep looking like this: not one brilliant prompt, but a collection of small, observable contracts around an imperfect model. When a future model no longer brings SWE-bench habits into every role, I can loosen some of them. Until then, a blocked write is cheaper than a confident planner quietly becoming the developer.
