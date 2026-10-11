@@ -1,0 +1,87 @@
+---
+title: 'Why My AI Design Pipeline Does Not Have a Designer'
+date: '2026-10-11'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'I nearly added a dedicated design persona to my AI development pipeline, but the investigation pointed to a better place for design decisions. The implementation also exposed what happens when dependent PRs reach review in the wrong order.'
+---
+
+On April 26, I had three pull requests that appeared to solve the design problem in my AI development pipeline. PR #947 split a flat `DESIGN.md` into a richer design system. PR #949 taught `/plan` to carry design decisions into UI task specs. PR #950 made the design freshness policy suggest documentation changes when code introduced a new token.
+
+All three had tests. PR #947 reported 78 passing tests, and PR #950 reported 47. The standup listed them as shipped.
+
+Then the post-merge review opened issue #963 because `/plan` referenced `design/components.md` and `design/constraints.md`, but those files did not exist in the workspace it inspected. Another finding, issue #957, said the ship-time token check described by PR #950 had not been implemented at all.
+
+That was an uncomfortable result for a feature meant to make UI work less ambiguous. The pipeline had apparently documented files it could not find and advertised enforcement it did not perform. Not great.
+
+## The designer I almost put between planning and building
+
+The original idea was a new `/design` persona in [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra), positioned between `/plan` and `/build`. It would own the design system, write a brief for each UI task, and review the rendered result after QA.
+
+It sounded tidy because every concern had an owner. It also added another model call, roughly $0.50 to $1.00 per UI ticket, another handoff document, and another place where the task spec and design brief could disagree.
+
+I compared three options in the vision pass: a full persona, a late design review inside `/qa`, and an enriched planning step backed by policy enforcement. The third option won. Design was not missing because there was no persona named Designer. It was missing because the information reaching the builder was too thin.
+
+At the time, `DESIGN.md` was mostly a token sheet. A palette can tell an agent which blue to use. It cannot tell the agent whether a destructive action belongs in a ghost button, what a selected card looks like, or which page layout is appropriate for a filterable list.
+
+The approved structure separated those concerns without feeding hundreds of lines into every planning run:
+
+```text
+DESIGN.md                    # Index + tokens only (~50-80 lines)
+  ├── design/components.md   # Variants, states, code examples
+  ├── design/patterns.md     # Page templates, layouts, user flows
+  └── design/constraints.md  # Accessibility and "never do this" rules
+```
+
+The planner would read only the files relevant to the task and copy the necessary decisions forward. The builder would receive a focused spec instead of being asked to interpret the entire design library.
+
+## When the dependency graph existed only on paper
+
+The plan recorded a clear dependency chain: issue #925 created the four-file design structure, then issues #926 and #927 consumed it. The implementation batch did not honor that chain. PRs #947, #949, and #950 were all based on the same earlier commit and arrived almost together.
+
+That explains issue #963. PR #949 had instructions for files created by PR #947, but its own branch could not prove those files existed. The first version of the prompt also had no fallback. If a project still used the older single-file format, `/plan` could fail or silently produce an incomplete design spec.
+
+The fix on PR #949, commit `6789263`, made the transition explicit. This is the actual diff added to `commands/plan.md`:
+
+```diff
++9. **Check design system (UI tasks)** — Determine whether the target project
++   is a UI project by checking `has_ui` from ecosystem discovery or by looking
++   for `playwright.config.ts` in the project root.
++
++   For UI projects:
++   - Read `DESIGN.md` from the artifact root, then fall back to the repo root.
++   - Read `design/components.md` and `design/constraints.md` from the same
++     location hierarchy. If these files don't exist yet, extract components
++     and constraints directly from the relevant sections of DESIGN.md instead.
++   - Carry these forward into the `## Design Spec` section of each UI issue.
+```
+
+That fallback matters beyond merge ordering. Existing projects do not instantly acquire the new directory structure when the pipeline changes. A planner that understands only the newest format turns a documentation upgrade into a flag day.
+
+Issue #957 looked worse: the review claimed `_generate_token_suggestion()` and ship-time coverage were absent from merged code. But this finding was wrong. The review had checked `main` while PR #950 was still on its feature branch. The branch already contained both functions and their tests.
+
+The implementation generating the proposed table rows was small:
+
+```python
+def _generate_token_suggestion(token: str, category: str) -> str:
+    if category == "colors":
+        return f"| `{token}` | _define value_ |"
+    if category == "spacing":
+        return f"| `{token}` | _define value_ |"
+    if category == "typography":
+        return f"| `{token}` | _define size_ |"
+    return f"| `{token}` | _define_ |"
+```
+
+The reviewer found a plausible scope gap in the wrong snapshot. Fair enough -- I would rather investigate a false positive than ignore a real omission. But this one showed why review evidence needs a commit SHA. “Missing from main” and “missing from the PR” are not the same claim.
+
+## Design decisions now travel with the task
+
+The resulting `## Design Spec` is optional for non-UI work and required by the planning instructions for UI work. It names applicable components, exact palette and spacing tokens, layout constraints, and the relevant “never” rules. That keeps the design decision beside the implementation steps instead of creating a second brief for the builder to reconcile.
+
+The other half runs later. When a `.tsx`, `.css`, or similar UI file introduces an undocumented token, `check-design-freshness` returns a warning with a ready-to-edit `DESIGN.md` table row. It runs during review and again during ship. The policy proposes the addition; it does not invent the value or quietly rewrite the design system.
+
+There was still a process problem to own. The April 26 standup records that the batch skipped the normal `/review` and `/qa` sequence and needed a post-merge review across 12 PRs. That review opened 13 findings, including the legitimate dependency problem and the false snapshot finding. After fixes and merge ordering were resolved, the next day's end-to-end report recorded 9/9 passing scenarios across the shipped batch.
+
+The useful lesson was not that every design concern needs a specialist agent. It was that design intent needs a durable source, a deliberate point where it enters the task, and a later check that notices drift. Adding another persona would have made the diagram more impressive. Putting better evidence into `/plan` made the builder's job clearer.
