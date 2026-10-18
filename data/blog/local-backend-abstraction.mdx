@@ -1,0 +1,124 @@
+---
+title: 'The Local Backend Abstraction I Approved—and Then Replaced'
+date: '2026-10-18'
+tags: ['automation', 'ai', 'ductor']
+draft: !!bool true
+aiGenerated: !!bool true
+summary: 'I approved a LocalBackend protocol to put Ollama and vLLM behind one local provider. A manual DGX Spark experiment showed that the shared chat endpoint was the abstraction boundary, not the provider itself.'
+---
+
+On May 3, I ran a hybrid pipeline against issue #1087. Claude handled the build in about nine minutes. My DGX Spark handled review and QA through vLLM: 70 seconds for a 13-turn review, then 52 seconds for a four-turn QA pass.
+
+That was the result I wanted. It was also running from a container on a temporary fix branch, with its persona config edited in place, because the mainline integration had already found two ways to reject the same request before it reached the model.
+
+The interesting part was not getting Qwen to review code at roughly seven tokens per second. It was how far the architecture moved between “this should work” and that first real pipeline run.
+
+## Four issues for an abstraction that never shipped
+
+Two days before the vLLM implementation landed, I had approved a different design for [EcoOrchestra](/blog/2026-03-15-what-is-ecoorchestra). The existing `local` provider was deeply coupled to Ollama, but both Ollama and vLLM exposed an OpenAI-compatible `/v1/chat/completions` endpoint. The chat path was already shared. Only model discovery, context lookup, health checks, alias resolution, and response normalization differed.
+
+The clean answer appeared to be a `LocalBackend` protocol. `local` would continue to mean “self-hosted inference,” while a config field selected `OllamaBackend` or `VLLMBackend` underneath it. The April 26 vision brief called the blast radius low and produced four concrete issues:
+
+```text
+#937  LocalBackend protocol + OllamaBackend extraction
+#938  VLLMBackend implementation: /v1/models, /health, identity normalization
+#939  Unit tests for the protocol and both backends
+#940  backend_type config for the local provider
+```
+
+I liked this design because it kept the provider surface small. Personas already used `provider: "local"`; why make them care which server happened to answer?
+
+Then I did the manual experiment the brief required.
+
+The first surprise was that vLLM was not simply Ollama with different metadata URLs. Ollama could swap models dynamically. vLLM ran one base model per process, with a 30–150 second load penalty depending on the model. Serving coding, general, and vision models meant multiple vLLM processes plus a router. The first plan considered LiteLLM; the deployed setup used llama-swap, which accepted one endpoint and started the requested model on demand.
+
+That changed model identity too. An Ollama alias might resolve through Open WebUI and then `/api/ps`. A vLLM request used the model name from llama-swap configuration. Its health check answered a different question: not “is this Ollama model running?” but “is the router reachable, even if the requested model is currently cold?”
+
+The protocol could represent those differences. That did not mean it was the right boundary.
+
+## The provider was carrying more than transport
+
+On April 28, I ran vision again with the deployment facts instead of the endpoint similarity. This time the recommendation was a first-class `VllmAdapter`, separate from `LocalAdapter`, while reusing the agent loop below both.
+
+That sounds like more duplication until the operational behavior is included. vLLM needed its own environment variables, optional bearer authentication, provider registration, readiness status, health probe, model mapping, and per-persona timeout. Hiding it behind `local` would make every one of those paths branch on `backend_type`. The supposedly smaller provider surface would just move the distinction into less visible places.
+
+Issues #1016–#1020 replaced the original plan. PR #1022 introduced `eco_orchestra/providers/vllm_adapter.py` and added one deliberate escape hatch to the shared dispatch functions:
+
+```diff
+ def dispatch_local_with_agent_loop(
+     temperature: Optional[float] = None,
+     num_ctx_config: str | int | None = None,
+     persona: str = "",
++    chat_url_override: Optional[str] = None,
+ ) -> DispatchResult:
+
+-    if not key:
++    if not key and not chat_url_override:
+         return DispatchResult(...)
+
+     resolved_model, url = _resolve_model_and_url(model_id, base)
++    if chat_url_override:
++        url = chat_url_override
++        resolved_model = model_id
+```
+
+That small override captured the actual shared boundary. Both providers could use the same multi-turn tool loop, context compaction, preambles, and completion handling. Only Ollama should enter `_resolve_model_and_url()`. vLLM could pass its native `/v1/chat/completions` URL and preserve the requested llama-swap model name.
+
+The hybrid theme made the separation explicit rather than hiding it in a backend field:
+
+```json
+{
+  "developer": {
+    "provider": "claude_account",
+    "model": "opus",
+    "dispatch_mode": "cli"
+  },
+  "reviewer": {
+    "provider": "vllm",
+    "model": "qwen3.6-27b",
+    "dispatch_mode": "api"
+  },
+  "qa": {
+    "provider": "vllm",
+    "model": "qwen3.6-27b",
+    "dispatch_mode": "api"
+  }
+}
+```
+
+This was less elegant in one narrow sense: there were now two provider names. It was much more honest about configuration and failure.
+
+## Green tests, then a 401
+
+The review for #1020 found no critical issues, warnings, or suggestions. QA reported 69 passing tests, including 17 new vLLM tests. The test suite verified the adapter factory, URL override, optional API key, timeout resolution, auth status, and health probe.
+
+Then the hybrid pipeline test reached the real authenticated llama-swap endpoint.
+
+`VllmAdapter` correctly read `VLLM_API_KEY` and passed it into `dispatch_local_with_agent_loop()`. The loop correctly resolved that argument into a local variable named `key`. It then built the authorization header from `LOCAL_LLM_API_KEY` anyway. The unit tests proved the parameter was forwarded; they did not prove the downstream request used it. Result: HTTP 401.
+
+The readiness check failed independently with the exact message its fallback was designed to emit:
+
+```text
+No readiness handler is registered for provider 'vllm' (api).
+```
+
+PR #1093 fixed both paths. The authorization header changed from the Ollama-specific environment lookup to the already resolved caller-supplied key, and `check_pipeline_ready.py` gained an explicit vLLM branch:
+
+```diff
+-    ollama_key = os.environ.get("LOCAL_LLM_API_KEY", "")
+-    if ollama_key:
+-        headers["Authorization"] = f"Bearer {ollama_key}"
++    if key:
++        headers["Authorization"] = f"Bearer {key}"
+
++    if normalized_provider == "vllm":
++        return _vllm_auth_status()
+```
+
+That is what made pipeline run `539f43bc` meaningful. It exercised the provider registry, readiness gate, bearer header, llama-swap routing, cold-start tolerance, shared agent loop, and persona-specific model mapping together. The original protocol design had focused on six backend methods. The real failure happened between systems those methods did not cover.
+
+## Closing the tidy plan
+
+On May 2, after PR #1074 split the 1,170-line `local_dispatch.py` into focused modules, I closed #937–#940 as obsolete. Ollama-specific behavior now lived in `local_dispatch_ollama.py`; vLLM lived in `providers/vllm_adapter.py`; the agent loop remained shared. The protocol was no longer buying enough to justify another layer.
+
+I still agree with the instinct behind the original vision brief: backend details should not leak into chat orchestration. I no longer agree that Ollama and vLLM are merely backends of one provider. The manual run exposed the distinction. They share a conversation loop, but they have different operational contracts—and that is exactly the kind of difference an abstraction should reveal, not conceal.
