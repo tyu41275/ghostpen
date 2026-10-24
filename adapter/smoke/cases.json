@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "actor": "ghostpen-smoke-tester",
+  "cases": [
+    { "name": "status says ghostpen answers for its instance",
+      "command": { "name": "status", "args": {} },
+      "expect": { "match": "^ghostpen for [A-Za-z0-9._-]+ is on and answering\\.$" } }
+  ]
+}
