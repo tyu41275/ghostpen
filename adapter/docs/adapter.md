@@ -14,8 +14,9 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
 - **Settings** (`src/settings.ts`): `instance`, `port` (1024–65535), `dataDir` (absolute, must exist), and an optional `appIdentityKeyFile`. They're written from the operator's own config; no machine-specific value lives in code. Errors name the field, never the value.
 - **`status`** (a command and an agent tool) replies `ghostpen for <instance> is on and answering.`, or `ghostpen is not answering (<why>).` It never throws.
 - **Version:** the adapter's `version` is the chatter adapter API it's written against (1.0.0), not ghostpen's own (`src/version.ts`).
-- **Still to come** (ghostpen#86 part 2): the install, Relay's install hook, adapter smoke, CI, and the catalogue entry.
+- **Still to come** (ghostpen#86 part 2): the install, Relay's install hook, adapter smoke, CI (with this browser suite as the `browser-e2e` check), and the catalogue entry.
 
 ```
 cd adapter && npm ci && npm run typecheck && npm test
+npx playwright install --only-shell chromium && npm run test:browser   # the app page in real Chromium (e2e/)
 ```
