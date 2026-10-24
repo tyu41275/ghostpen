@@ -1,0 +1,32 @@
+{
+  "checks": {
+    "test": {
+      "timeout_minutes": 15,
+      "events": [
+        "pull_request",
+        "push"
+      ],
+      "tests": true,
+      "run": "# The adapter's tests (adapter/; the blog in the root has none). Test reports (JUnit) for the check runner's per-file times (ADR 0028).\nreports=\"${CHECK_REPORT_DIR:-$RUNNER_TEMP/reports}\"\nmkdir -p \"$reports\"\n# The newest Node 24 release from nodejs.org.\nnode_ver=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(r[\"version\"] for r in json.load(sys.stdin) if r[\"version\"].startswith(\"v24.\")))')\nmkdir -p \"$RUNNER_TEMP/node24\"\ncurl -fsSL --retry 3 \"https://nodejs.org/dist/$node_ver/node-$node_ver-linux-x64.tar.xz\" | tar -xJ -C \"$RUNNER_TEMP/node24\" --strip-components=1\nexport PATH=\"$RUNNER_TEMP/node24/bin:$PATH\"\nnode --version\ncd adapter\n# npm ci with a deadline per attempt and up to 3 attempts (tyu41275/Clock#57).\nbash scripts/ci-npm-ci.sh\nnpm run typecheck\n# Fast tests only: files with `slow` in the name run in the scheduled slow-tests check (ADR 0028).\nnpm test -- --reporter=default --reporter=junit --outputFile.junit=\"$reports/vitest.xml\"\nnpm run lint:file-sizes\n",
+      "retry": "# The adapter's tests (adapter/; the blog in the root has none). Test reports (JUnit) for the check runner's per-file times (ADR 0028).\nreports=\"${CHECK_REPORT_DIR:-$RUNNER_TEMP/reports}\"\nmkdir -p \"$reports\"\n# The newest Node 24 release from nodejs.org.\nnode_ver=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(r[\"version\"] for r in json.load(sys.stdin) if r[\"version\"].startswith(\"v24.\")))')\nmkdir -p \"$RUNNER_TEMP/node24\"\ncurl -fsSL --retry 3 \"https://nodejs.org/dist/$node_ver/node-$node_ver-linux-x64.tar.xz\" | tar -xJ -C \"$RUNNER_TEMP/node24\" --strip-components=1\nexport PATH=\"$RUNNER_TEMP/node24/bin:$PATH\"\nnode --version\ncd adapter\n# npm ci with a deadline per attempt and up to 3 attempts (tyu41275/Clock#57).\nbash scripts/ci-npm-ci.sh\n# The failed test files again ($CHECK_RETRY_FILES), then what `run` does after its tests.\nnpx vitest run --reporter=default --reporter=junit --outputFile.junit=\"$reports/vitest.xml\" $CHECK_RETRY_FILES\nnpm run lint:file-sizes\n"
+    },
+    "slow-tests": {
+      "schedule": true,
+      "tests": true,
+      "timeout_minutes": 30,
+      "run": "# The adapter's tests (adapter/; the blog in the root has none). Test reports (JUnit) for the check runner's per-file times (ADR 0028).\nreports=\"${CHECK_REPORT_DIR:-$RUNNER_TEMP/reports}\"\nmkdir -p \"$reports\"\n# The newest Node 24 release from nodejs.org.\nnode_ver=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(r[\"version\"] for r in json.load(sys.stdin) if r[\"version\"].startswith(\"v24.\")))')\nmkdir -p \"$RUNNER_TEMP/node24\"\ncurl -fsSL --retry 3 \"https://nodejs.org/dist/$node_ver/node-$node_ver-linux-x64.tar.xz\" | tar -xJ -C \"$RUNNER_TEMP/node24\" --strip-components=1\nexport PATH=\"$RUNNER_TEMP/node24/bin:$PATH\"\nnode --version\ncd adapter\n# npm ci with a deadline per attempt and up to 3 attempts (tyu41275/Clock#57).\nbash scripts/ci-npm-ci.sh\nnpm run test:slow -- --reporter=default --reporter=junit --outputFile.junit=\"$reports/vitest.xml\"\n",
+      "retry": "# The adapter's tests (adapter/; the blog in the root has none). Test reports (JUnit) for the check runner's per-file times (ADR 0028).\nreports=\"${CHECK_REPORT_DIR:-$RUNNER_TEMP/reports}\"\nmkdir -p \"$reports\"\n# The newest Node 24 release from nodejs.org.\nnode_ver=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(r[\"version\"] for r in json.load(sys.stdin) if r[\"version\"].startswith(\"v24.\")))')\nmkdir -p \"$RUNNER_TEMP/node24\"\ncurl -fsSL --retry 3 \"https://nodejs.org/dist/$node_ver/node-$node_ver-linux-x64.tar.xz\" | tar -xJ -C \"$RUNNER_TEMP/node24\" --strip-components=1\nexport PATH=\"$RUNNER_TEMP/node24/bin:$PATH\"\nnode --version\ncd adapter\n# npm ci with a deadline per attempt and up to 3 attempts (tyu41275/Clock#57).\nbash scripts/ci-npm-ci.sh\nnpx vitest run --reporter=default --reporter=junit --outputFile.junit=\"$reports/vitest.xml\" $CHECK_RETRY_FILES\n"
+    },
+    "adapter-smoke": {
+      "timeout_minutes": 20,
+      "events": [
+        "pull_request",
+        "push"
+      ],
+      "with": {
+        "ensemble-chatter": "cd1f77ad337d46d824dc48085614e93f2b4e6eb3"
+      },
+      "run": "# chatter's adapter smoke over ghostpen's adapter, against a real ghostpen service (ADR 0101).\nbash adapter/scripts/ci-adapter-smoke.sh\n"
+    }
+  }
+}
