@@ -131,6 +131,10 @@ describe("the published-post index", () => {
     expect(again.posts[1]!.about).toEqual(["kept"]);
     expect(again.posts[0]!.about).toEqual(["llm-router"]); // still in the title
     expect(again.posts[0]!.mentions).toEqual([]);
+    // A new blog address rebuilds every entry, so no stored post keeps the old host in its URL.
+    const moved = buildPublishedIndex({ ...source, baseUrl: "https://new.example" }, ["chatter", "llm-router", "relay"], data).index;
+    expect(moved.posts.map((p) => p.url.split("/blog/")[0])).toEqual(["https://new.example", "https://new.example", "https://new.example"]);
+    expect(moved.posts[1]!.about).toEqual(["chatter"]); // the edited "kept" entry was not reused
   });
 
   it("names a blog folder it cannot read, and parses frontmatter lists and quotes", () => {

@@ -57,7 +57,8 @@ function indexPost(file: string, text: string, hash: string, source: PublishedSo
 export function buildPublishedIndex(source: PublishedSource, terms: string[], dataDir: string):
   { index: PublishedIndex; problems: SourceProblem[] } {
   const wanted = [...new Set(terms.map((term) => term.trim().toLowerCase()).filter(Boolean))].sort();
-  const termsKey = createHash("sha256").update(wanted.join("\n")).digest("hex").slice(0, 16);
+  // The key covers what an entry is built from besides the post: the terms and the blog's address (its URLs).
+  const termsKey = createHash("sha256").update(`${source.baseUrl}\n${wanted.join("\n")}`).digest("hex").slice(0, 16);
   const path = join(dataDir, INDEX_FILE);
   let kept = new Map<string, PublishedPost>();
   try {
