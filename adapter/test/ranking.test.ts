@@ -83,8 +83,12 @@ describe("the ranking", () => {
     const booking = { decision: decision.id, title: decision.title, bookedAt: "2026-10-24T00:00:00Z" };
     const unrelated = candidateOf(doc("gh:o/r#5", ["# other", "nothing"], { kind: "issue" }));
     expect(owedPostMortems([booking], [decision, unrelated])).toEqual([{ ...booking, due: false, evidence: [] }]);
+    const lookalike = candidateOf(doc("gh:o/r#6", ["# other ADR", "Per ADR 00220 and 0022-live-trading-parity-v2 nothing."], { kind: "issue" }));
+    expect(owedPostMortems([booking], [decision, lookalike])[0]).toMatchObject({ due: false, evidence: [] }); // whole tokens only
     const outcome = candidateOf(doc("gh:o/r#9", ["# First live week", "Per ADR 0022 the decisions matched."], { kind: "issue" }));
     expect(owedPostMortems([booking], [decision, outcome])[0]).toMatchObject({ due: true, evidence: ["gh:o/r#9"] });
+    const byFile = candidateOf(doc("exp/live", ["# Live week", "See 0022-live-trading-parity.md for the rules."], { kind: "experiment" }));
+    expect(owedPostMortems([booking], [decision, byFile])[0]).toMatchObject({ due: true, evidence: ["exp/live"] });
   });
 });
 

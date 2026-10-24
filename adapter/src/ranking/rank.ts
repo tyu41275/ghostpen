@@ -27,6 +27,9 @@ export const TOP = 15;
 
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const names = (text: string, term: string) => new RegExp(`(^|[^A-Za-z0-9])${escapeRe(term)}($|[^A-Za-z0-9])`, "iu").test(text);
+/** A document's handle as a whole token: a file name (".md" allowed after it) or ADR number not continued by more of a name. */
+const token = (text: string, handle: string) =>
+  new RegExp(`(^|[^A-Za-z0-9_-])${escapeRe(handle)}(?![A-Za-z0-9_-]|\\.(?!md\\b)[A-Za-z0-9])`, "u").test(text);
 
 /** The stack parts (from `terms`) a candidate's document names that no published post is about. */
 export function explanationCost(candidate: Candidate, terms: string[], index: PublishedIndex): string[] {
@@ -49,7 +52,8 @@ export function owedPostMortems(bookings: Booking[], candidates: Candidate[]): O
   return bookings.map((booking) => {
     const decision = byId.get(booking.decision);
     const wanted = decision ? handles(decision) : [];
-    const evidence = outcomes.filter((o) => wanted.some((h) => o.document.lines.join("\n").includes(h))).map((o) => o.id);
+    // Whole tokens only: "ADR 00220" or "0022-other-name.md" never stand for ADR 0022.
+    const evidence = outcomes.filter((o) => wanted.some((h) => token(o.document.lines.join("\n"), h))).map((o) => o.id);
     return { ...booking, due: evidence.length > 0, evidence };
   });
 }
