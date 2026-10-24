@@ -51,6 +51,11 @@ describe("scores", () => {
       { factor: "carryOver", score: 0, quote: "Never round risk up, ever", line: null, note: "its quote is not in the source" },
       { factor: "thoughtProcess", score: 0, quote: "Match returns.", line: null, note: "no score from 0 to 3 was given" }]);
     expect(checkScores(candidate, { stakes: { score: 2, quote: "risk" } })[0]).toMatchObject({ score: 0, note: "its quote is not in the source" }); // too short to prove
+    for (const score of [4, -1, 1.5]) { // just past each edge, and a fraction
+      expect(checkScores(candidate, { stakes: { score, quote: "Real-money trading waits for a parity check" } })[0])
+        .toMatchObject({ score: 0, note: "no score from 0 to 3 was given" });
+    }
+    expect(checkScores(candidate, { stakes: { score: 3, quote: "Real-money trading waits for a parity check" } })[0]).toMatchObject({ score: 3 });
     expect(total(scores)).toBe(3);
     expect(total(scores, { ...DEFAULT_WEIGHTS, stakes: 2 })).toBe(6);
   });
