@@ -25,7 +25,7 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 export async function health(ctx: GhostpenAdapterContext): Promise<Record<string, unknown>> {
   const settingsFile = ctx.config.settingsFile;
   if (typeof settingsFile !== "string") throw new Error("ghostpen adapter config needs settingsFile");
-  const { port } = readSettings(settingsFile);
+  const { port, instance } = readSettings(settingsFile);
   let response: Response;
   try {
     response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
@@ -34,6 +34,10 @@ export async function health(ctx: GhostpenAdapterContext): Promise<Record<string
   }
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) return { answering: false, status: response.status, ...(typeof body.error === "string" ? { error: body.error } : {}) };
+  // Whatever answers on the port must be this instance's ghostpen: anything else is not ghostpen answering.
+  if (body.ok !== true || body.instance !== instance || typeof body.version !== "string") {
+    return { answering: false, error: `something else answers on port ${port} (not ghostpen for ${instance})` };
+  }
   return { answering: true, ...body };
 }
 

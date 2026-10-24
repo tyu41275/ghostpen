@@ -33,4 +33,17 @@ describe("adapter", () => {
     expect(statusText({ answering: false, status: 503, error: "dataDir: /d is not a folder" }))
       .toBe("ghostpen is not answering (HTTP 503; dataDir: /d is not a folder).");
   });
+
+  it("never takes another server on the port, or another instance's ghostpen, for this one", async () => {
+    const { createServer } = await import("node:http");
+    const dir = tempDir();
+    for (const body of [{ hello: "world" }, { ok: true, instance: "other-instance", version: "0.1.0" }, "not json"]) {
+      const other = createServer((_req, res) => { res.writeHead(200); res.end(typeof body === "string" ? body : JSON.stringify(body)); });
+      servers.push(other);
+      await new Promise<void>((done) => other.listen(0, "127.0.0.1", done));
+      const port = (other.address() as { port: number }).port;
+      expect(await status.execute({}, ctx({ settingsFile: settingsFile(dir, { port }) })))
+        .toBe(`ghostpen is not answering (something else answers on port ${port} (not ghostpen for personal-comms-host)).`);
+    }
+  });
 });
