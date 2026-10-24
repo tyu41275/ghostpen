@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseSources } from "../src/sources/config.js";
@@ -97,6 +97,15 @@ describe("GitHub as a topic source", () => {
     expect(asked[0]).toContain("since=2026-09-24T00:00:00.000Z");
   });
 
+  it("reports more results in the window than it reads, never dropping them silently", async () => {
+    const full = (page: number) => Array.from({ length: 100 }, (_, i) => ({ number: page * 1000 + i, title: "t", body: "", labels: [],
+      updated_at: "2026-10-23T00:00:00Z", html_url: "u" }));
+    const read = await readGithubTopics(source, async (path) => full(Number(/page=(\d+)/u.exec(path)![1])), NOW);
+    expect(read.items.filter((d) => d.kind === "issue")).toHaveLength(1000);
+    expect(read.problems).toEqual([{ source: "gh", problem: "o/r has more issues in the last 30 days than the 1000 newest read" },
+      { source: "gh", problem: "o/r has more pull requests in the last 30 days than the 1000 newest read" }]);
+  });
+
   it("names a repository it cannot read, and still reads the others", async () => {
     const read = await readGithubTopics({ ...source, repos: ["o/down", "o/r"] }, async (path) => {
       if (path.startsWith("/repos/o/down")) throw new Error("GitHub answered 404");
@@ -135,6 +144,17 @@ describe("the published-post index", () => {
     const moved = buildPublishedIndex({ ...source, baseUrl: "https://new.example" }, ["chatter", "llm-router", "relay"], data).index;
     expect(moved.posts.map((p) => p.url.split("/blog/")[0])).toEqual(["https://new.example", "https://new.example", "https://new.example"]);
     expect(moved.posts[1]!.about).toEqual(["chatter"]); // the edited "kept" entry was not reused
+  });
+
+  it("names a post it cannot read and still indexes the rest", () => {
+    const blog = tree({ "a.mdx": post("A on chatter", "", ""), "b.mdx": post("B", "", "") });
+    chmodSync(join(blog, "b.mdx"), 0o000);
+    try {
+      if (process.getuid?.() === 0) return; // root reads anything
+      const { index, problems } = buildPublishedIndex({ blogDir: blog, baseUrl: "https://x" }, ["chatter"], tempDir());
+      expect(index.posts.map((p) => p.file)).toEqual(["a.mdx"]);
+      expect(problems).toEqual([{ source: "published", problem: "the post b.mdx cannot be read" }]);
+    } finally { chmodSync(join(blog, "b.mdx"), 0o644); }
   });
 
   it("names a blog folder it cannot read, and parses frontmatter lists and quotes", () => {

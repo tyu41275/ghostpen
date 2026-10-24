@@ -71,16 +71,22 @@ export function buildPublishedIndex(source: PublishedSource, terms: string[], da
   } catch {
     return { index: { version: 1, terms: termsKey, posts: [] }, problems: [{ source: "published", problem: `the blog folder ${source.blogDir} cannot be read` }] };
   }
-  const posts = names.map((name) => {
-    const text = readFileSync(join(source.blogDir, name), "utf8");
+  const problems: SourceProblem[] = [];
+  const posts: PublishedPost[] = [];
+  for (const name of names) {
+    let text: string;
+    try { text = readFileSync(join(source.blogDir, name), "utf8"); } catch {
+      problems.push({ source: "published", problem: `the post ${name} cannot be read` }); // one bad file never stops the rest
+      continue;
+    }
     const hash = createHash("sha256").update(text).digest("hex");
     const old = kept.get(name);
-    return old && old.hash === hash ? old : indexPost(name, text, hash, source, wanted);
-  });
+    posts.push(old && old.hash === hash ? old : indexPost(name, text, hash, source, wanted));
+  }
   const index: PublishedIndex = { version: 1, terms: termsKey, posts };
   writeFileSync(`${path}.tmp`, JSON.stringify(index, null, 2));
   renameSync(`${path}.tmp`, path);
-  return { index, problems: [] };
+  return { index, problems };
 }
 
 /** The published (not draft) posts about `term`, newest first: what a draft links instead of explaining it again. */

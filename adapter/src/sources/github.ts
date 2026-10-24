@@ -11,7 +11,7 @@ import type { Read, TopicDocument } from "./types.js";
 /** One GitHub REST GET (`/repos/...`), answering the parsed JSON; tests pass recorded answers. */
 export type GithubGet = (path: string) => Promise<unknown>;
 
-const PAGES = 5;
+const PAGES = 10; // 1,000 newest per list; more in the window is reported, never silently dropped
 type Rec = Record<string, unknown>;
 
 /** The live reader: api.github.com, with the source's token when it names one. */
@@ -33,17 +33,20 @@ function document(source: GithubSource, repo: string, item: Rec, kind: "issue" |
     ...(typeof item.updated_at === "string" ? { updated: item.updated_at } : {}) };
 }
 
-/** Pages of a list, newest first, until one is short or older than `cutoff` (by `field`). */
-async function pages(get: GithubGet, path: string, field: string, cutoff: number): Promise<Rec[]> {
-  const all: Rec[] = [];
+/**
+ * Pages of a list, newest first, until one is short or older than `cutoff` (by `field`). `truncated` says the last page
+ * read was still full and inside the window: more results exist than were read, which the caller reports.
+ */
+async function pages(get: GithubGet, path: string, field: string, cutoff: number): Promise<{ items: Rec[]; truncated: boolean }> {
+  const items: Rec[] = [];
   for (let page = 1; page <= PAGES; page += 1) {
     const batch = await get(`${path}&per_page=100&page=${page}`);
     if (!Array.isArray(batch)) throw new Error("GitHub answered something other than a list");
-    all.push(...batch as Rec[]);
+    items.push(...batch as Rec[]);
     const last = batch[batch.length - 1] as Rec | undefined;
-    if (batch.length < 100 || !last || Date.parse(String(last[field])) < cutoff) break;
+    if (batch.length < 100 || !last || Date.parse(String(last[field])) < cutoff) return { items, truncated: false };
   }
-  return all;
+  return { items, truncated: true };
 }
 
 export async function readGithubTopics(source: GithubSource, get: GithubGet, now: Date = new Date()): Promise<Read<TopicDocument>> {
@@ -56,9 +59,12 @@ export async function readGithubTopics(source: GithubSource, get: GithubGet, now
     try {
       const issues = await pages(get, `/repos/${repo}/issues?state=all&labels=${encodeURIComponent(source.incidentLabel)}&since=${since}&sort=updated&direction=desc`,
         "updated_at", cutoff);
-      for (const issue of issues) if (!issue.pull_request) items.push(document(source, repo, issue, "issue"));
+      for (const issue of issues.items) if (!issue.pull_request) items.push(document(source, repo, issue, "issue"));
       const pulls = await pages(get, `/repos/${repo}/pulls?state=closed&sort=updated&direction=desc`, "updated_at", cutoff);
-      for (const pull of pulls) {
+      for (const [list, read] of [["issues", issues], ["pull requests", pulls]] as const) {
+        if (read.truncated) problems.push({ source: source.name, problem: `${repo} has more ${list} in the last ${source.days} days than the ${PAGES * 100} newest read` });
+      }
+      for (const pull of pulls.items) {
         const merged = typeof pull.merged_at === "string" ? Date.parse(pull.merged_at) : NaN;
         if (Number.isFinite(merged) && merged >= cutoff && measured.test(typeof pull.body === "string" ? pull.body : "")) {
           items.push(document(source, repo, pull, "pull"));
