@@ -11,11 +11,16 @@ export const APP_AUDIENCE = "ghostpen";
 
 export interface AppViewer { login: string; sub: string }
 
-/** The key in `file`: base64url text of at least 32 bytes; anything else refuses to start. */
+/** The key in `file`: base64url text of at least 32 bytes; anything else refuses to start, naming the field, never the path. */
 export function readAppKey(file: string): Buffer {
-  const text = readFileSync(file, "utf8").trim();
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8").trim();
+  } catch {
+    throw new Error("appIdentityKeyFile: cannot be read"); // the field, never the path (settings errors name fields)
+  }
   const key = /^[A-Za-z0-9_-]{43,}={0,2}$/u.test(text) ? Buffer.from(text.replace(/=+$/u, ""), "base64url") : Buffer.alloc(0);
-  if (key.length < 32) throw new Error(`app identity key file ${file} must hold base64url text of at least 32 bytes`);
+  if (key.length < 32) throw new Error("appIdentityKeyFile: must hold base64url text of at least 32 bytes");
   return key;
 }
 

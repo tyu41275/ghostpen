@@ -61,10 +61,12 @@ describe("service", () => {
   it("starts nothing when the data folder is missing or the named key file is unreadable or short", async () => {
     const dir = tempDir();
     await expect(startService(settingsFile(dir, { dataDir: join(dir, "missing") }), 0)).rejects.toThrow("is not a folder");
-    await expect(startService(settingsFile(dir, { appIdentityKeyFile: join(dir, "absent.key") }), 0)).rejects.toThrow();
+    const absent = startService(settingsFile(dir, { appIdentityKeyFile: join(dir, "absent.key") }), 0);
+    await expect(absent).rejects.toThrow("appIdentityKeyFile: cannot be read");
+    await expect(absent).rejects.not.toThrow(dir);
     const short = join(dir, "short.key");
     writeFileSync(short, Buffer.alloc(8).toString("base64url"));
-    await expect(startService(settingsFile(dir, { appIdentityKeyFile: short }), 0)).rejects.toThrow("at least 32 bytes");
+    await expect(startService(settingsFile(dir, { appIdentityKeyFile: short }), 0)).rejects.toThrow(/^appIdentityKeyFile: must hold base64url text of at least 32 bytes$/u);
     const running = await startService(settingsFile(dir, { appIdentityKeyFile: keyFile(dir) }), 0);
     servers.push(running.server);
     expect((await fetch(`http://127.0.0.1:${running.port}/health`)).status).toBe(200);
