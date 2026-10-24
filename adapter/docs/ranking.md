@@ -20,4 +20,16 @@ ghostpen ranks possible posts by the value they give a reader. It doesn't use wh
   - A Write on a decision post books its post-mortem.
   - **Weight suggestions** come from what's written versus skipped: a third of the score gap, at most half a point, within 0.25–3. They're shown with their reason, and apply only through `applyWeights` once the operator agrees.
 
-Still to come in #88: the scorer (who proposes the scores, as a configured command) and the ranking view on the app page.
+- **The scorer** (`src/ranking/scorer.ts`): the command in `settings.scorer.command`, an argv run without a shell, with `timeoutSeconds` from 10 to 3600 (default 300). **Which model and account it uses is the operator's choice. Nothing in the code names one.**
+  - It gets one prompt on stdin: the rubric for the candidate's kind, the plain-words rule, the answer's shape and the numbered document.
+  - It answers one JSON object: `topic`, `takeaway`, and each factor's `{score, quote}`. Its scores are only proposals; the quote check above decides.
+  - Results are kept in `dataDir/scores.json` by document hash, so a run scores only documents that changed.
+  - A candidate the scorer fails on (an exit, a timeout, no JSON) is left out and its failure reported. It never gets made-up scores.
+- **A run** (`src/ranking/run.ts`, `node dist/cli/rank.js <settings.json>`): it reads every source, makes candidates, scores the changed ones and ranks them. It writes `dataDir/ranking.json` with every source problem and scorer failure. With no scorer set, nothing is ranked and the run says so.
+- **The app page** shows the last ranking:
+  - each topic with its takeaway, kind and score;
+  - each factor's score, opening to the quoted line and where it is (or why it counts for nothing);
+  - what needs explaining;
+  - the posts to write first, the post-mortems owed, and the problems.
+
+  A ranking file that can't be read says so. It never shows as empty.

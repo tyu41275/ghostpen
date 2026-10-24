@@ -3,7 +3,9 @@
  * read; it checks the data folder on every request, so a folder that went away reads as down (503, saying why).
  * `/app/` opens only to a person chatter's console signed (`app-identity.ts`); anyone else finds nothing (404).
  */
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { RANKING_FILE, type RankingView } from "../ranking/run.js";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { GHOSTPEN_VERSION } from "../version.js";
 import { APP_CSP, renderApp } from "./app.js";
@@ -22,6 +24,15 @@ export function checkDataDir(dir: string): void {
   try { isFolder = statSync(dir).isDirectory(); } catch { /* reported below */ }
   if (!isFolder) throw new Error(`dataDir: ${dir} is not a folder`);
   try { accessSync(dir, constants.W_OK); } catch { throw new Error(`dataDir: ${dir} cannot be written`); }
+}
+
+/** The last ranking run's result, null before the first, an Error when the file cannot be read (shown, never hidden). */
+function lastRanking(dataDir: string): RankingView | null | Error {
+  const path = join(dataDir, RANKING_FILE);
+  if (!existsSync(path)) return null;
+  try { return JSON.parse(readFileSync(path, "utf8")) as RankingView; } catch (error) {
+    return new Error(error instanceof Error ? error.message.split("\n")[0]! : String(error));
+  }
 }
 
 export function createGhostpenServer(options: ServerOptions): Server {
@@ -45,7 +56,7 @@ export function createGhostpenServer(options: ServerOptions): Server {
       if (!viewer) return send(res, 404, { error: "not found" });
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": APP_CSP,
         "x-content-type-options": "nosniff", "referrer-policy": "same-origin" });
-      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer));
+      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir)));
       return;
     }
     send(res, 404, { error: "not found" });
