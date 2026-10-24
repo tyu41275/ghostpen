@@ -30,7 +30,14 @@ export function checkDataDir(dir: string): void {
 function lastRanking(dataDir: string): RankingView | null | Error {
   const path = join(dataDir, RANKING_FILE);
   if (!existsSync(path)) return null;
-  try { return JSON.parse(readFileSync(path, "utf8")) as RankingView; } catch (error) {
+  try {
+    const view = JSON.parse(readFileSync(path, "utf8")) as Partial<RankingView> | null;
+    const lists = ["entries", "background", "owed", "problems"] as const;
+    if (!view || typeof view !== "object" || typeof view.ranAt !== "string" || lists.some((key) => !Array.isArray(view[key]))) {
+      return new Error("it is not a ranking (ranAt, entries, background, owed and problems are expected)");
+    }
+    return view as RankingView;
+  } catch (error) {
     return new Error(error instanceof Error ? error.message.split("\n")[0]! : String(error));
   }
 }

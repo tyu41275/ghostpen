@@ -67,9 +67,8 @@ export function runScorer(settings: ScorerSettings, prompt: string): Promise<str
     const group = (signal: NodeJS.Signals) => { try { if (child.pid) process.kill(-child.pid, signal); } catch { /* already gone */ } };
     const timer = setTimeout(() => {
       group("SIGTERM");
-      const hard = setTimeout(() => group("SIGKILL"), KILL_GRACE_MS);
-      hard.unref();
-      child.once("exit", () => clearTimeout(hard));
+      // Kept even once the scorer itself exits: a child it started may still ignore SIGTERM. A group already gone is a no-op.
+      setTimeout(() => group("SIGKILL"), KILL_GRACE_MS).unref();
       child.stdout.destroy(); child.stderr.destroy(); child.stdin.destroy();
       settle(() => reject(new Error(`the scorer did not answer within ${settings.timeoutSeconds} s`)));
     }, settings.timeoutSeconds * 1000);

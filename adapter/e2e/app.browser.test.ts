@@ -82,10 +82,13 @@ describe("ghostpen app page", () => {
     expect(await page.locator("[data-section=problems] li").innerText()).toBe("github: o/r cannot be read (GitHub answered 404)");
   });
 
-  it("says when the last ranking cannot be read, never showing an empty one", async () => {
-    const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
-    await page.goto(await app("{ broken"));
-    expect(await page.locator("[data-error=ranking]").innerText()).toMatch(/^The last ranking cannot be read: /u);
-    expect(await page.locator("[data-empty=ranking]").count()).toBe(0);
+  it("says when the last ranking cannot be read or is not a ranking, never showing an empty one or failing", async () => {
+    for (const content of ["{ broken", "{}", "[]", JSON.stringify({ ranAt: "x", entries: {}, background: [], owed: [], problems: [] })]) {
+      const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
+      const response = await page.goto(await app(content));
+      expect(response?.status()).toBe(200);
+      expect(await page.locator("[data-error=ranking]").innerText()).toMatch(/^The last ranking cannot be read: /u);
+      expect(await page.locator("[data-empty=ranking]").count()).toBe(0);
+    }
   });
 });

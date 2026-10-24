@@ -55,6 +55,16 @@ describe("the scorer", () => {
     for (const pid of readFileSync(pids, "utf8").split(" ").map(Number)) expect(alive(pid)).toBe(false);
   }, 15_000);
 
+  it("still kills a child that ignores SIGTERM after the scorer itself exited on it", async () => {
+    const dir = tempDir(), pids = join(dir, "pids");
+    // The scorer dies on SIGTERM (the default); the child it started ignores it.
+    const script = `const fs=require('fs');const c=require('child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(pids)},String(c.pid));setInterval(()=>{},1000)`;
+    await expect(runScorer({ command: ["node", "-e", script], timeoutSeconds: 1 }, "x")).rejects.toThrow("did not answer within 1 s");
+    await new Promise((done) => setTimeout(done, KILL_GRACE_MS + 1_000));
+    const child = Number(readFileSync(pids, "utf8"));
+    expect((() => { try { process.kill(child, 0); return true; } catch { return false; } })()).toBe(false);
+  }, 15_000);
+
   it("scores only documents that changed, and leaves out a candidate it fails on rather than inventing scores", async () => {
     const dir = tempDir();
     const settings = { command: ["unused"], timeoutSeconds: 10 };
