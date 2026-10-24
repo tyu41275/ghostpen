@@ -1,84 +1,89 @@
 /**
- * Readers for folders of markdown (ADR 0101, brief D8): decision documents and experiment records as topic documents,
- * and glossaries (`## Term` sections) as definitions. Plain files only: nothing here knows Obsidian. A folder that is
- * missing, or a pattern that matches nothing, is a problem named with its source, never an empty result.
+ * The published-post index (ADR 0101, brief D1 and D8): for each post in the blog folder, what it is **about** (a stack
+ * part named in its title, tags or summary) and what it only **mentions** (named in its body). Built once per post and
+ * kept in ghostpen's data folder by the post's content hash, so an unchanged post is never read again. It answers "is
+ * there a post about X?" with the post's address, which a draft must link instead of explaining X again.
  */
-import { globSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import type { GlossarySource, MarkdownSource } from "./config.js";
-import type { Definition, Read, TopicDocument } from "./types.js";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { PublishedSource } from "./config.js";
+import type { SourceProblem } from "./types.js";
 
-const MAX_BYTES = 1024 * 1024; // a document larger than this is skipped and reported, never half read
+export interface PublishedPost {
+  file: string; hash: string; url: string; title: string; date: string; tags: string[]; draft: boolean;
+  /** Stack parts (from the terms given) the post is about: in its title, tags or summary. Lower case. */
+  about: string[];
+  /** Stack parts named only in its body. Lower case. */
+  mentions: string[];
+}
+export interface PublishedIndex { version: 1; terms: string; posts: PublishedPost[] }
+export const INDEX_FILE = "published-index.json";
 
-/** The files `include` matches under `root`, sorted, each still inside root (a symlink out of it is refused). */
-function files(source: { name: string; root: string; include: string[] }): { paths: string[]; problems: string[] } {
-  let root: string;
-  try {
-    root = realpathSync(source.root);
-    if (!statSync(root).isDirectory()) throw new Error("not a folder");
-  } catch {
-    return { paths: [], problems: [`its folder ${source.root} cannot be read`] };
+/** The frontmatter fields the index uses, from a post's `---` block (single- or double-quoted strings and `[...]` lists). */
+export function frontmatter(text: string): { fields: Record<string, string | string[]>; body: string } {
+  const match = /^---\n([\s\S]*?)\n---\n?/u.exec(text);
+  if (!match) return { fields: {}, body: text };
+  const fields: Record<string, string | string[]> = {};
+  for (const line of match[1]!.split("\n")) {
+    const kv = /^([A-Za-z][A-Za-z0-9_]*):\s*(.*)$/u.exec(line);
+    if (!kv) continue;
+    const value = kv[2]!.trim();
+    const unquote = (v: string) => v.replace(/^(['"])(.*)\1$/u, "$2");
+    fields[kv[1]!] = value.startsWith("[") ? value.replace(/^\[|\]$/gu, "").split(",").map((v) => unquote(v.trim())).filter(Boolean)
+      : unquote(value);
   }
-  const found = new Set<string>();
-  const problems: string[] = [];
-  for (const pattern of source.include) {
-    const matched = globSync(pattern, { cwd: root }).map((path) => join(root, path));
-    if (matched.length === 0) problems.push(`its pattern ${pattern} matches no file`);
-    for (const path of matched) {
-      let real: string;
-      try { real = realpathSync(path); } catch { continue; }
-      if (relative(root, real).startsWith("..")) { problems.push(`${relative(root, path)} leads outside its folder`); continue; }
-      if (statSync(real).isFile()) found.add(path);
-    }
-  }
-  return { paths: [...found].sort(), problems };
+  return { fields, body: text.slice(match[0].length) };
 }
 
-function text(path: string): string | Error {
-  try {
-    if (statSync(path).size > MAX_BYTES) return new Error("is larger than 1 MiB");
-    return readFileSync(path, "utf8");
-  } catch (error) {
-    return error instanceof Error ? error : new Error(String(error));
-  }
-}
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+const named = (text: string, term: string) => new RegExp(`(^|[^A-Za-z0-9])${escapeRe(term)}($|[^A-Za-z0-9])`, "iu").test(text);
 
-/** A document's title: its first `# ` heading, else its file name. */
-const titleOf = (lines: string[], path: string): string =>
-  lines.find((line) => line.startsWith("# "))?.slice(2).trim() || path.split("/").pop()!.replace(/\.md$/u, "");
-
-export function readMarkdownTopics(source: MarkdownSource): Read<TopicDocument> {
-  const { paths, problems } = files(source);
-  const items: TopicDocument[] = [];
-  for (const path of paths) {
-    const content = text(path);
-    if (content instanceof Error) { problems.push(`${relative(source.root, path)} ${content.message}`); continue; }
-    const lines = content.split("\n");
-    items.push({ id: `${source.name}:${relative(source.root, path)}`, kind: source.as, source: source.name, title: titleOf(lines, path),
-      lines, location: { path, line: 1 }, updated: statSync(path).mtime.toISOString() });
-  }
-  return { items, problems: problems.map((problem) => ({ source: source.name, problem })) };
+function indexPost(file: string, text: string, hash: string, source: PublishedSource, terms: string[]): PublishedPost {
+  const { fields, body } = frontmatter(text);
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const tags = Array.isArray(fields.tags) ? fields.tags : [];
+  const head = [str(fields.title), str(fields.summary), ...tags].join("\n");
+  const about = terms.filter((term) => named(head, term));
+  const mentions = terms.filter((term) => !about.includes(term) && named(body, term));
+  return { file, hash, url: `${source.baseUrl}/blog/${file.replace(/\.mdx?$/u, "")}`, title: str(fields.title), date: str(fields.date),
+    tags, draft: fields.draft === "true", about, mentions };
 }
 
 /**
- * Each `## Term` section of each glossary file: the term, and its text up to the next heading. A term defined twice
- * keeps both, each with its own location: the caller sees the clash.
+ * The index for the blog folder now, against `terms` (the stack parts' names, e.g. glossary terms). A post whose hash and
+ * the term list are unchanged keeps its stored entry; the rest are read again. Writes the index to `dataDir`.
  */
-export function readGlossaries(source: GlossarySource): Read<Definition> {
-  const { paths, problems } = files(source);
-  const items: Definition[] = [];
-  for (const path of paths) {
-    const content = text(path);
-    if (content instanceof Error) { problems.push(`${relative(source.root, path)} ${content.message}`); continue; }
-    const lines = content.split("\n");
-    for (let i = 0; i < lines.length; i += 1) {
-      const heading = /^## (.+)$/u.exec(lines[i]!);
-      if (!heading) continue;
-      const body: string[] = [];
-      for (let j = i + 1; j < lines.length && !/^#{1,2} /u.test(lines[j]!); j += 1) body.push(lines[j]!);
-      const definition = body.join("\n").trim();
-      if (definition) items.push({ term: heading[1]!.trim(), text: definition, location: { path, line: i + 1 }, source: source.name });
-    }
+export function buildPublishedIndex(source: PublishedSource, terms: string[], dataDir: string):
+  { index: PublishedIndex; problems: SourceProblem[] } {
+  const wanted = [...new Set(terms.map((term) => term.trim().toLowerCase()).filter(Boolean))].sort();
+  const termsKey = createHash("sha256").update(wanted.join("\n")).digest("hex").slice(0, 16);
+  const path = join(dataDir, INDEX_FILE);
+  let kept = new Map<string, PublishedPost>();
+  try {
+    const stored = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as PublishedIndex : undefined;
+    if (stored?.version === 1 && stored.terms === termsKey) kept = new Map(stored.posts.map((post) => [post.file, post]));
+  } catch { /* an unreadable index is rebuilt */ }
+  let names: string[];
+  try {
+    names = readdirSync(source.blogDir).filter((name) => /\.mdx?$/u.test(name)).sort();
+  } catch {
+    return { index: { version: 1, terms: termsKey, posts: [] }, problems: [{ source: "published", problem: `the blog folder ${source.blogDir} cannot be read` }] };
   }
-  return { items, problems: problems.map((problem) => ({ source: source.name, problem })) };
+  const posts = names.map((name) => {
+    const text = readFileSync(join(source.blogDir, name), "utf8");
+    const hash = createHash("sha256").update(text).digest("hex");
+    const old = kept.get(name);
+    return old && old.hash === hash ? old : indexPost(name, text, hash, source, wanted);
+  });
+  const index: PublishedIndex = { version: 1, terms: termsKey, posts };
+  writeFileSync(`${path}.tmp`, JSON.stringify(index, null, 2));
+  renameSync(`${path}.tmp`, path);
+  return { index, problems: [] };
+}
+
+/** The published (not draft) posts about `term`, newest first: what a draft links instead of explaining it again. */
+export function postsAbout(index: PublishedIndex, term: string): PublishedPost[] {
+  const key = term.trim().toLowerCase();
+  return index.posts.filter((post) => !post.draft && post.about.includes(key)).sort((a, b) => b.date.localeCompare(a.date));
 }
