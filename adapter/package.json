@@ -1,0 +1,23 @@
+{
+  "name": "ghostpen-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ghostpen's optional chatter adapter: ranks blog topics by value and drafts posts Tim approves (ADR 0101)",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --exclude 'test/**/*.slow.test.ts'",
+    "test:slow": "vitest run --passWithNoTests slow.test",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "playwright": "^1.64.1"
+  }
+}
