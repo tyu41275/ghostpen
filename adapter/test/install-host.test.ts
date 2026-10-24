@@ -55,7 +55,7 @@ describe("install-host.sh", () => {
     const at = await port("personal-comms-host");
     expect(await install(dir, { port: at })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
     const appKey = join(config, "app-identity.key");
-    expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey });
+    expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey, sources: { topics: [], references: [] } });
     expect(readAppKey(appKey).length).toBe(32);
     for (const file of [settingsFile, appKey]) expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(join(config, "chatter-adapter.json"), "utf8"))).toEqual({ settingsFile });

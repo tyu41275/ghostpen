@@ -5,7 +5,7 @@ import { settingsFile, tempDir } from "./helpers.js";
 describe("settings", () => {
   it("reads an instance's settings, the key file optional", () => {
     const dir = tempDir();
-    expect(readSettings(settingsFile(dir))).toEqual({ instance: "personal-comms-host", port: 8794, dataDir: dir });
+    expect(readSettings(settingsFile(dir))).toEqual({ instance: "personal-comms-host", port: 8794, dataDir: dir, sources: { topics: [], references: [] } });
     expect(readSettings(settingsFile(dir, { appIdentityKeyFile: "/etc/ghostpen/app.key" })).appIdentityKeyFile).toBe("/etc/ghostpen/app.key");
   });
 

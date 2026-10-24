@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { parseSources, type SourcesSettings } from "./sources/config.js";
 
 export interface GhostpenSettings {
   /** The chatter instance this ghostpen belongs to. */
@@ -17,6 +18,8 @@ export interface GhostpenSettings {
    * least 32 bytes. Unset: the app opens to nobody.
    */
   appIdentityKeyFile?: string;
+  /** What ghostpen reads (adapter/docs/sources.md); none configured: nothing to rank yet. */
+  sources: SourcesSettings;
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
@@ -45,7 +48,8 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   if (typeof value.port !== "number" || !Number.isInteger(value.port) || value.port < 1024 || value.port > 65535) {
     throw new Error("settings: port must be a whole number from 1024 to 65535");
   }
-  const settings: GhostpenSettings = { instance: value.instance, port: value.port, dataDir: absolute(value.dataDir, "dataDir") };
+  const settings: GhostpenSettings = { instance: value.instance, port: value.port, dataDir: absolute(value.dataDir, "dataDir"),
+    sources: parseSources(value.sources) };
   if (value.appIdentityKeyFile !== undefined) settings.appIdentityKeyFile = absolute(value.appIdentityKeyFile, "appIdentityKeyFile");
   return settings;
 }
