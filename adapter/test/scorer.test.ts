@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateOf } from "../src/ranking/candidates.js";
 import { RANKING_FILE, rankNow } from "../src/ranking/run.js";
-import { parseAnswer, runScorer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
+import { KILL_GRACE_MS, parseAnswer, runScorer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
 import { parseSettings } from "../src/settings.js";
 import type { TopicDocument } from "../src/sources/types.js";
 import { tempDir } from "./helpers.js";
@@ -42,6 +42,18 @@ describe("the scorer", () => {
     await expect(runScorer({ command: ["node", "-e", "setTimeout(()=>{}, 5000)"], timeoutSeconds: 1 }, "x")).rejects.toThrow("did not answer within 1 s");
     await expect(runScorer({ command: ["/nonexistent/scorer"], timeoutSeconds: 10 }, "x")).rejects.toThrow("could not start");
   });
+
+  it("stops a timed-out scorer that ignores SIGTERM, and the child it started, so nothing keeps running", async () => {
+    const dir = tempDir(), pids = join(dir, "pids");
+    // The scorer ignores SIGTERM and starts a child that ignores it too; both write their pid.
+    const script = `const fs=require('fs');process.on('SIGTERM',()=>{});const c=require('child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(pids)},process.pid+' '+c.pid);setInterval(()=>{},1000)`;
+    const started = Date.now();
+    await expect(runScorer({ command: ["node", "-e", script], timeoutSeconds: 1 }, "x")).rejects.toThrow("did not answer within 1 s");
+    expect(Date.now() - started).toBeLessThan(5_000);
+    await new Promise((done) => setTimeout(done, KILL_GRACE_MS + 1_000));
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    for (const pid of readFileSync(pids, "utf8").split(" ").map(Number)) expect(alive(pid)).toBe(false);
+  }, 15_000);
 
   it("scores only documents that changed, and leaves out a candidate it fails on rather than inventing scores", async () => {
     const dir = tempDir();

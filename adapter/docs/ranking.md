@@ -25,6 +25,7 @@ ghostpen ranks possible posts by the value they give a reader. It doesn't use wh
   - It answers one JSON object: `topic`, `takeaway`, and each factor's `{score, quote}`. Its scores are only proposals; the quote check above decides.
   - Results are kept in `dataDir/scores.json` by document hash, so a run scores only documents that changed.
   - A candidate the scorer fails on (an exit, a timeout, no JSON) is left out and its failure reported. It never gets made-up scores.
+  - A scorer that times out is stopped with everything it started: it runs in its own process group, which gets SIGTERM and then, after 2 s, SIGKILL.
 - **A run** (`src/ranking/run.ts`, `node dist/cli/rank.js <settings.json>`): it reads every source, makes candidates, scores the changed ones and ranks them. It writes `dataDir/ranking.json` with every source problem and scorer failure. With no scorer set, nothing is ranked and the run says so.
 - **The app page** shows the last ranking:
   - each topic with its takeaway, kind and score;
