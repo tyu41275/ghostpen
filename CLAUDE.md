@@ -108,7 +108,7 @@ ghostpen is part of the EcoOrchestra ecosystem. It consumes AI-generated content
 
 1. **Source material**: EcoOrchestra artifacts (vision briefs in `decisions/vision-briefs/`, code reviews in `reviews/`, daily standups in `standups/`) provide raw material for blog topics
 2. **LLM routing**: `scripts/generate_post.py` calls the llm-router HTTP API at `http://localhost:8321/route` to generate blog post content — llm-router handles provider selection and rate limiting
-3. **Post-ship hook**: `~/.claude/hooks/generate-blog-post.sh` triggers `scripts/generate_post.py` after code is shipped in other ecosystem projects — automates the "write about what you built" workflow
+3. **Post-ship hook (retired, Obsidian ADR 0101)**: ghostpen now runs as an optional chatter adapter in `adapter/` (see `adapter/docs/adapter.md`), proposing topics by value on a schedule instead of after each ship.
 4. **Output**: Generator writes `.mdx` files to `data/blog/` with `aiGenerated: true` and `draft: true` set automatically
 
 ### Dependencies

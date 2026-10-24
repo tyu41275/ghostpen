@@ -28,7 +28,7 @@ Your dev artifacts     ->   Generator script    ->   Draft PR        ->   Publis
  screenshots)               calls Anthropic API)                          Vercel deploys)
 ```
 
-The generator can be triggered manually (`python scripts/generate_post.py --feature <slug>`) or by a post-ship hook that fires after you merge a PR. It only generates posts for features that have a decision record -- the heuristic for "this is worth writing about."
+The post-ship hook and the "has a decision record, so it's worth writing about" rule are retired (Obsidian ADR 0101). ghostpen is becoming an optional chatter adapter (`adapter/`, see `adapter/docs/adapter.md`): it ranks topics by the value they give a reader, proposes a weekly shortlist, and drafts posts that explain every part of the setup they mention. Nothing is published without the author's press.
 
 AI-generated posts are transparently labeled with an `aiGenerated` frontmatter field and a banner on the post.
 
