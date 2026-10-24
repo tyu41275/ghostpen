@@ -16,6 +16,6 @@ describe("settings", () => {
     expect(() => parseSettings({ ...base, port: 80 })).toThrow("settings: port must be a whole number from 1024 to 65535");
     expect(() => parseSettings({ ...base, dataDir: "relative/dir" })).toThrow("settings: dataDir must be an absolute path");
     expect(() => parseSettings({ ...base, appIdentityKeyFile: "key" })).toThrow("settings: appIdentityKeyFile must be an absolute path");
-    expect(() => readSettings("/nonexistent/settings.json")).toThrow(/settings: cannot read \/nonexistent\/settings.json/u);
+    expect(() => readSettings("/nonexistent/settings.json")).toThrow(/^settings: the settings file cannot be read as JSON$/u);
   });
 });

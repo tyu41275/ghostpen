@@ -31,8 +31,8 @@ export function readSettings(path: string): GhostpenSettings {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    throw new Error(`settings: cannot read ${path} (${error instanceof Error ? error.message : String(error)})`);
+  } catch {
+    throw new Error("settings: the settings file cannot be read as JSON"); // its path is the caller's argument, never repeated here
   }
   return parseSettings(raw);
 }
