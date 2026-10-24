@@ -9,7 +9,7 @@ ghostpen reads only what its settings' `sources` block names. Nothing in the cod
 | `references[]` | `glossary`: `root`, `include` | each `## Term` section: the term, its text up to the next heading, and the heading's line | `src/sources/markdown.ts` |
 | `published` | `blogDir`, `baseUrl` | the published-post index: per post, the stack parts it's **about** (in its title, tags or summary) and the ones it only **mentions** (its body), against the glossary terms | `src/sources/published.ts` |
 
-The published-post index lives in `dataDir/published-index.json`. A post whose content hash and term list haven't changed keeps its stored entry, so each post is read once. `postsAbout(index, term)` returns the published (not draft) posts about a stack part, newest first. That's the link a draft uses instead of explaining the part again (brief D1, D3).
+The published-post index lives in `dataDir/published-index.json`. Each build reads every post to hash it. A post whose hash, the term list and the blog address haven't changed keeps its stored entry, so only changed posts are parsed again. `postsAbout(index, term)` returns the published (not draft) posts about a stack part, newest first. That's the link a draft uses instead of explaining the part again (brief D1, D3).
 
 Compass isn't a source yet. The readers return the same `Read<T>` shape (`src/sources/types.ts`), so a Compass reader can be added beside them later.
 

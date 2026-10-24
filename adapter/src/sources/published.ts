@@ -1,7 +1,7 @@
 /**
  * The published-post index (ADR 0101, brief D1 and D8): for each post in the blog folder, what it is **about** (a stack
- * part named in its title, tags or summary) and what it only **mentions** (named in its body). Built once per post and
- * kept in ghostpen's data folder by the post's content hash, so an unchanged post is never read again. It answers "is
+ * part named in its title, tags or summary) and what it only **mentions** (named in its body). Kept in ghostpen's data
+ * folder by each post's content hash: every build reads and hashes each post, and parses again only the changed ones. It answers "is
  * there a post about X?" with the post's address, which a draft must link instead of explaining X again.
  */
 import { createHash } from "node:crypto";
