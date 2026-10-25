@@ -18,7 +18,8 @@ import type { Reply } from "./adapter-routes.js";
 const MAX_CARD = 1900;
 const OPERATOR_ONLY = "Only the operator can publish or edit ghostpen's drafts, so nothing was done.";
 const OLD_CARD = "This card is for an older draft; use the newest card. Nothing was done.";
-const stale = (draft: DraftState, body: Record<string, unknown>) => body.round !== undefined && body.round !== draft.round;
+/** A press must name its card's round, and it must be the draft's: a missing round counts as an old card. */
+const stale = (draft: DraftState, body: Record<string, unknown>) => body.round !== draft.round;
 
 /** The draft's card in plain words, or null while it is being written; and which buttons it gets. */
 export function draftCard(draft: DraftState, topic: string): { text: string; publish: boolean; edit: boolean } | null {

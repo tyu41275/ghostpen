@@ -263,8 +263,8 @@ describe("the draft's card, Publish and Edit", () => {
     finish();
     await new Promise((r) => setTimeout(r, 10));
     expect(draftOf(settings)?.status).toBe("published");
-    expect((await draftPublish(settings, { ...at, user: OPERATOR }, clock, ready)).body.reply).toBe("It is on the blog already.");
-    expect((await draftPublish(withDraft({ ...base, status: "failed" }), { ...at, user: OPERATOR }, clock, ready)).body.refused).toBe("This draft is not ready to publish, so nothing was done.");
+    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR }, clock, ready)).body.reply).toBe("It is on the blog already.");
+    expect((await draftPublish(withDraft({ ...base, status: "failed" }), { ...at, round: 1, user: OPERATOR }, clock, ready)).body.refused).toBe("This draft is not ready to publish, so nothing was done.");
   });
 
   it("does nothing when the draft changed while its pull request was being checked", async () => {
@@ -284,11 +284,11 @@ describe("the draft's card, Publish and Edit", () => {
 
   it("puts a draft back to ready, saying why, when the merge fails; marks one merged elsewhere as published", async () => {
     const settings = withDraft(base);
-    await draftPublish(settings, { ...at, user: OPERATOR }, () => NOW, { check: async () => ({ reason: null, merged: false }), merge: async () => { throw new Error("gh pr merge failed: conflict"); } });
+    await draftPublish(settings, { ...at, round: 1, user: OPERATOR }, () => NOW, { check: async () => ({ reason: null, merged: false }), merge: async () => { throw new Error("gh pr merge failed: conflict"); } });
     await new Promise((r) => setTimeout(r, 10));
     expect(draftOf(settings)).toMatchObject({ status: "ready", problem: "the merge failed: gh pr merge failed: conflict" });
     expect(draftCard(draftOf(settings)!, "d:1")!.text).toContain("Last try: the merge failed: gh pr merge failed: conflict");
-    expect((await draftPublish(settings, { ...at, user: OPERATOR }, () => NOW, { check: async () => ({ reason: "it is published already", merged: true }), merge: async () => {} })).body.reply).toBe("It is on the blog already.");
+    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR }, () => NOW, { check: async () => ({ reason: "it is published already", merged: true }), merge: async () => {} })).body.reply).toBe("It is on the blog already.");
     expect(draftOf(settings)).toMatchObject({ status: "published" });
     expect(draftOf(settings)?.problem).toBeUndefined();
   });
@@ -304,11 +304,12 @@ describe("the draft's card, Publish and Edit", () => {
     const settings = withDraft({ ...base, status: "failed" });
     const seen: unknown[] = [];
     const jobs = new DraftJobs(settings, { draft: async (_s, _id, _seams, edit) => { seen.push(edit?.notes); return draft({ title: "T2" }); }, open: async (_p, _d, _date, _run, branch) => ({ ...pr, branch: branch ?? "new" }), review: () => true, now: () => NOW });
-    expect(draftEdit(settings, { ...at, user: "1", notes: "x" }, NOW, jobs).body.refused).toContain("Only the operator");
-    expect(draftEdit(settings, { ...at, user: OPERATOR, notes: " " }, NOW, jobs).body.refused).toBe("An Edit needs the changes you want, so nothing was done.");
+    expect(draftEdit(settings, { ...at, round: 1, user: "1", notes: "x" }, NOW, jobs).body.refused).toContain("Only the operator");
+    expect(draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: " " }, NOW, jobs).body.refused).toBe("An Edit needs the changes you want, so nothing was done.");
     expect(draftEdit(settings, { ...at, round: 5, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This card is for an older draft; use the newest card. Nothing was done.");
-    expect(draftEdit(settings, { ...at, user: OPERATOR, notes: "Shorter intro." }, NOW, undefined).body.refused).toContain("not drafting here");
-    expect(draftEdit(settings, { ...at, user: OPERATOR, notes: "Shorter intro." }, NOW, jobs).body.reply).toContain("The writer is making your changes");
+    expect(draftEdit(settings, { ...at, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This card is for an older draft; use the newest card. Nothing was done.");
+    expect(draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: "Shorter intro." }, NOW, undefined).body.refused).toContain("not drafting here");
+    expect(draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: "Shorter intro." }, NOW, jobs).body.reply).toContain("The writer is making your changes");
     expect(draftOf(settings)).toMatchObject({ status: "queued", round: 2, notes: "Shorter intro." });
     await jobs.idle();
     expect(seen).toEqual([undefined]); // no earlier draft file: the writer starts fresh
@@ -317,9 +318,9 @@ describe("the draft's card, Publish and Edit", () => {
     // With the last draft kept, an Edit hands the writer that draft and the changes.
     mkdirSync(join(settings.dataDir, "drafts"), { recursive: true });
     writeFileSync(draftFile(settings.dataDir, "d:1"), JSON.stringify(draft({ title: "T2" })));
-    draftEdit(settings, { ...at, user: OPERATOR, notes: "Add a diagram." }, NOW, jobs);
+    draftEdit(settings, { ...at, round: 2, user: OPERATOR, notes: "Add a diagram." }, NOW, jobs);
     await jobs.idle();
     expect(seen).toEqual([undefined, "Add a diagram."]);
-    expect(draftEdit(withDraft({ ...base, status: "drafting" }), { ...at, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This draft cannot be edited now, so nothing was done.");
+    expect(draftEdit(withDraft({ ...base, status: "drafting" }), { ...at, round: 1, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This draft cannot be edited now, so nothing was done.");
   });
 });
