@@ -3,8 +3,10 @@
  * this week's shortlist and posts every card not posted yet, keeping where it went; a card posted before this adapter run
  * and not answered yet is redrawn once, which re-arms its buttons after a chatter restart. Buttons: Write, Skip (asks
  * for a one-line reason through chatter's private form) and Not yet. The service decides who may answer and keeps the
- * answer; the card is then edited to say what was chosen, without buttons. Nothing here throws into chatter.
+ * answer; the card is then edited to say what was chosen, without buttons. A Write's draft gets its own cards
+ * (`drafts.ts`). Nothing here throws into chatter.
  */
+import { syncDrafts, type DraftView } from "./drafts.js";
 import { callAdapterRoute } from "./service.js";
 
 export const BUTTON_OWNER = "ghostpen.";
@@ -21,7 +23,7 @@ export interface ShortlistContext {
   updatePostedMessage?: (channelRef: string, messageRef: string, content: { text: string }, buttons?: Button[]) => Promise<boolean>;
 }
 export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown }
-interface Item { index: number; id: string; text: string; posted?: { channelRef: string; messageRef: string }; answered: boolean }
+interface Item { index: number; id: string; text: string; posted?: { channelRef: string; messageRef: string }; answered: boolean; draft?: DraftView }
 interface Week { week?: string; channel?: string; operator?: string; items?: Item[]; off?: string; waiting?: string }
 
 const buttons = (week: string, index: number): Button[] => [
@@ -57,7 +59,8 @@ export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>,
     await callAdapterRoute(ctx.config, "POST", "shortlist/posted", { week: state.week, index: item.index, channelRef: refs.channelRef, messageRef: refs.messageRef });
     ctx.log("info", "ghostpen.shortlist.posted", { week: state.week, index: item.index, id: item.id });
   }
-  return posted;
+  // Then each Write's draft card (ghostpen#90), under the cards it came from.
+  return posted + await syncDrafts(ctx, state.week, state.channel, state.items, redrawn, live);
 }
 
 type Reply = { handled: true; reply_text: string } | { handled: true; ask: { title: string; label: string; placeholder: string; maxLength: number } };
