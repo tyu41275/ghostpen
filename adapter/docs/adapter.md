@@ -21,7 +21,9 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
   - The adapter reaches the service on loopback with the adapter key (`src/adapter/service.ts`). Nothing here throws into chatter.
 - **`status`** (a command and an agent tool) replies `ghostpen for <instance> is on and answering.`, or `ghostpen is not answering (<why>).` It never throws.
 - **Version:** the adapter's `version` is the chatter adapter API it's written against (1.0.0), not ghostpen's own (`src/version.ts`).
+- **Draft cards** (`src/adapter/drafts.ts`, ghostpen#90): after a Write, each new state of its draft gets a new card in the same channel: ready, waiting, failed, stopped, publishing or published, in the service's words. The card before it loses its buttons. Buttons: **Publish** and **Edit**. Edit asks for the changes through chatter's private form; its press then comes back carrying them. Each button names its draft's round (`ghostpen.draft:<action>:<week>:<index>:<round>`), so an old card can't act on a newer draft. After a chatter restart, a card with buttons is redrawn once, like shortlist cards.
 - **Shortlist:** `docs/shortlist.md`: the weekly proposals, the routes the adapter calls, and who may answer.
+- **Publishing:** `docs/publishing.md`: from a Write to the blog, Publish and Edit.
 - **Ranking:** `docs/ranking.md`: candidates, quote-checked scores, background posts, post-mortems owed and weight suggestions.
 - **Sources:** `docs/sources.md`: what ghostpen reads, as the settings' `sources` block names it.
 - **Install:** `docs/install.md` covers `scripts/install-host.sh`, Relay's `scripts/relay-install.mjs`, and the drop-in with the app.
