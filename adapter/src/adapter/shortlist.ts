@@ -1,0 +1,92 @@
+/**
+ * The weekly shortlist in chatter (ghostpen#89, ADR 0101 brief D13). On each heartbeat the adapter asks the service for
+ * this week's shortlist and posts every card not posted yet, keeping where it went; a card posted before this adapter run
+ * and not answered yet is redrawn once, which re-arms its buttons after a chatter restart. Buttons: Write, Skip (asks
+ * for a one-line reason through chatter's private form) and Not yet. The service decides who may answer and keeps the
+ * answer; the card is then edited to say what was chosen, without buttons. Nothing here throws into chatter.
+ */
+import { callAdapterRoute } from "./service.js";
+
+export const BUTTON_OWNER = "ghostpen.";
+export const BUTTON_PREFIX = "shortlist:";
+/** How many cards one heartbeat posts: a shortlist is 3 to 5, so one beat posts the whole week. */
+export const CARDS_PER_BEAT = 5;
+
+export interface Button { label: string; style?: "primary" | "secondary" | "success" | "danger"; id: string }
+export interface ShortlistContext {
+  config: Record<string, unknown>;
+  log: (level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) => void;
+  postToChannel?: (channel: string, content: { text: string; singleUserNotification?: { userId: string } }, buttons?: Button[]) =>
+    Promise<{ channelRef?: string; messageRef?: string } | undefined>;
+  updatePostedMessage?: (channelRef: string, messageRef: string, content: { text: string }, buttons?: Button[]) => Promise<boolean>;
+}
+export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown }
+interface Item { index: number; id: string; text: string; posted?: { channelRef: string; messageRef: string }; answered: boolean }
+interface Week { week?: string; channel?: string; operator?: string; items?: Item[]; off?: string; waiting?: string }
+
+const buttons = (week: string, index: number): Button[] => [
+  { label: "Write", style: "success", id: `${BUTTON_OWNER}${BUTTON_PREFIX}write:${week}:${index}` },
+  { label: "Skip", style: "secondary", id: `${BUTTON_OWNER}${BUTTON_PREFIX}skip:${week}:${index}` },
+  { label: "Not yet", style: "secondary", id: `${BUTTON_OWNER}${BUTTON_PREFIX}later:${week}:${index}` }];
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** One heartbeat: post this week's unposted cards and redraw, once per adapter run, the posted ones not yet answered. */
+export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>, live: () => boolean = () => true): Promise<"off" | number> {
+  if (!ctx.postToChannel) return "off";
+  const state = await callAdapterRoute<Week>(ctx.config, "GET", "shortlist");
+  if (!state.week || !state.channel || !state.items) return "off";
+  let posted = 0;
+  for (const item of state.items) {
+    if (!live() || item.answered) continue;
+    const key = `${state.week}:${item.index}`;
+    if (item.posted) {
+      if (redrawn.has(key) || !ctx.updatePostedMessage) continue;
+      redrawn.add(key);
+      if (!await ctx.updatePostedMessage(item.posted.channelRef, item.posted.messageRef, { text: item.text }, buttons(state.week, item.index))) {
+        ctx.log("warn", "ghostpen.shortlist.redrawFailed", { week: state.week, index: item.index });
+      }
+      continue;
+    }
+    if (posted >= CARDS_PER_BEAT) continue;
+    // The week's first card pings the operator once; the rest arrive quietly under it.
+    const ping = item.index === 0 && state.operator ? { singleUserNotification: { userId: state.operator } } : {};
+    const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping }, buttons(state.week, item.index));
+    if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${state.channel}`);
+    posted += 1;
+    redrawn.add(key);
+    await callAdapterRoute(ctx.config, "POST", "shortlist/posted", { week: state.week, index: item.index, channelRef: refs.channelRef, messageRef: refs.messageRef });
+    ctx.log("info", "ghostpen.shortlist.posted", { week: state.week, index: item.index, id: item.id });
+  }
+  return posted;
+}
+
+type Reply = { handled: true; reply_text: string } | { handled: true; ask: { title: string; label: string; placeholder: string; maxLength: number } };
+
+/** A press of a shortlist card's button; any other event is left to chatter (undefined). */
+export async function answerShortlistPress(event: PressEvent, ctx: ShortlistContext): Promise<Reply | undefined> {
+  if (event?.type !== "button_click" || typeof event.button_id !== "string") return undefined;
+  const id = event.button_id.startsWith(BUTTON_OWNER) ? event.button_id.slice(BUTTON_OWNER.length) : event.button_id;
+  if (!id.startsWith(BUTTON_PREFIX)) return undefined;
+  const [action, week, index] = id.slice(BUTTON_PREFIX.length).split(":");
+  if (!["write", "skip", "later"].includes(action ?? "") || !week || !/^\d+$/u.test(index ?? "")) {
+    return { handled: true, reply_text: "ghostpen does not know that button, so nothing was done." };
+  }
+  const reason = typeof event.text === "string" ? event.text : undefined;
+  // A Skip asks for its reason first; chatter sends the same press again carrying it as `text`.
+  if (action === "skip" && reason === undefined) {
+    return { handled: true, ask: { title: "Why skip this topic?", label: "One line: what makes it not worth a post", placeholder: "e.g. too narrow, already covered", maxLength: 200 } };
+  }
+  let answered: { refused?: string; text?: string; reply?: string; already?: boolean; posted?: { channelRef: string; messageRef: string } | null };
+  try {
+    answered = await callAdapterRoute(ctx.config, "POST", "shortlist/answer", { week, index: Number(index), action, user: typeof event.user_id === "string" ? event.user_id : "",
+      ...(reason !== undefined ? { reason } : {}) });
+  } catch (error) {
+    return { handled: true, reply_text: `ghostpen could not take the answer, so nothing was done: ${errorText(error)}` };
+  }
+  if (answered.refused) return { handled: true, reply_text: answered.refused };
+  // The answer is kept whether or not the edit lands; a card left with buttons answers its next press the same way.
+  const edited = answered.posted && answered.text && ctx.updatePostedMessage
+    ? await ctx.updatePostedMessage(answered.posted.channelRef, answered.posted.messageRef, { text: answered.text }, []).catch(() => false) : false;
+  if (!edited) ctx.log("warn", "ghostpen.shortlist.editFailed", { week, index });
+  return { handled: true, reply_text: answered.reply ?? (answered.already ? "This topic was answered already; its card shows the answer." : "Done.") };
+}

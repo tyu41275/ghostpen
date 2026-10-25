@@ -2,7 +2,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error: a plain script with no types; Relay runs it before anything is built.
-import { INPUTS, installArgs } from "../scripts/relay-install.mjs";
+import { INPUTS, installArgs, OPTIONAL_INPUTS } from "../scripts/relay-install.mjs";
 import { tempDir } from "./helpers.js";
 
 function world() {
@@ -20,6 +20,9 @@ describe("relay-install.mjs", () => {
   it("maps Relay's inputs onto install-host.sh for the checkout it runs in", () => {
     const { home, checkout, instances, env } = world();
     expect(INPUTS).toEqual(["port", "dropin_dir"]);
+    expect(OPTIONAL_INPUTS).toEqual(["chatter_facts"]);
+    expect(installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "/run/facts.json" }, checkout, checkout).slice(-2)).toEqual(["--chatter-facts", "/run/facts.json"]);
+    expect(() => installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "facts.json" }, checkout, checkout)).toThrow("chatter_facts input must be an absolute path");
     expect(installArgs(env, checkout, checkout)).toEqual(["--instance", "personal-comms-host", "--root", join(home, "ghostpen"),
       "--port", "8794", "--dropin-dir", join(home, "adapters.d"), "--stack", join(instances, "personal-comms-host", "config", "stack.yaml")]);
   });

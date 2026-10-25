@@ -1,10 +1,15 @@
 /**
  * ghostpen's chatter adapter (ADR 0101, ADR 0030). Chatter loads it only while ghostpen is allowed and switched on for
  * the instance; switching it off runs the drop-in's `stop`, which stops ghostpen's service and keeps its data. Its
- * chatter config (`ctx.config.settingsFile`) names the settings file the service reads. It contributes `status` for
- * now; nothing here may break chatter, so a ghostpen that does not answer is reported, saying why, never thrown.
+ * chatter config (`ctx.config.settingsFile`) names the settings file the service reads. It contributes `status` and the
+ * weekly shortlist (`shortlist.ts`); nothing here may break chatter, so a ghostpen that does not answer is reported,
+ * saying why, never thrown.
  */
 import { readSettings } from "../settings.js";
+import { answerShortlistPress, syncShortlist, type PressEvent, type ShortlistContext } from "./shortlist.js";
+
+/** How often the adapter asks the service whether a shortlist card is due: a weekly post lands within this of its slot. */
+export const HEARTBEAT_MS = 10 * 60_000;
 
 export const REQUEST_TIMEOUT_MS = 5_000;
 /**
@@ -13,11 +18,13 @@ export const REQUEST_TIMEOUT_MS = 5_000;
  */
 export const ADAPTER_API_VERSION = "1.0.0";
 
-/** The slice of chatter's adapter context ghostpen uses. */
-export interface GhostpenAdapterContext {
+/** The slice of chatter's adapter context ghostpen uses: its config, its log, and posting to its channel. */
+export interface GhostpenAdapterContext extends ShortlistContext {
   config: Record<string, unknown>;
   log: (level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) => void;
 }
+
+let heartbeat: ReturnType<typeof setInterval> | undefined, run: object | undefined;
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -67,6 +74,29 @@ export const adapter = {
       try { return statusText(await health(ctx)); } catch (error) { return statusText({ answering: false, error: errorText(error) }); }
     },
   }],
+  /** Posts the weekly shortlist's cards now and on every heartbeat; the first beat redraws unanswered ones, re-arming them. */
+  onStartup: async (ctx: GhostpenAdapterContext): Promise<void> => {
+    clearInterval(heartbeat);
+    const mine = {}, redrawn = new Set<string>();
+    run = mine;
+    // One beat at a time: a card still being posted has not been kept as posted yet, so a second beat would post it again.
+    let busy = false;
+    const beat = async () => {
+      if (busy) return;
+      busy = true;
+      try { await syncShortlist(ctx, redrawn, () => run === mine); } catch (error) { ctx.log("warn", "ghostpen.shortlist.failed", { error: errorText(error) }); }
+      finally { busy = false; }
+    };
+    heartbeat = setInterval(() => { void beat(); }, HEARTBEAT_MS);
+    heartbeat.unref();
+    await beat();
+  },
+  onMessage: async (event: PressEvent, ctx: GhostpenAdapterContext) => answerShortlistPress(event, ctx),
+  onShutdown: async (): Promise<void> => {
+    clearInterval(heartbeat);
+    heartbeat = undefined;
+    run = undefined;
+  },
 };
 
 // Chatter takes a module's `default` export as the adapter.
