@@ -69,11 +69,25 @@ describe("taking screenshots", () => {
     expect(result.findings).toEqual([
       "screenshot console shows something private (an email address): mask it (settings.draft.screenshots.pages[].mask)",
       "screenshot tempo needs words saying what it shows",
-      "screenshot tempo shows content that cannot be checked (canvas, iframe): mask it (settings.draft.screenshots.pages[].mask)",
       "screenshot nope is not a configured page (settings.draft.screenshots.pages)",
       "screenshot gone could not be taken: net::ERR_CONNECTION_REFUSED"]);
     expect(result.files).toEqual({});
     expect(existsSync(dir)).toBe(false);
+  });
+
+  it("keeps no picture, and takes none, for a screenshot with no words", async () => {
+    const dir = join(tempDir(), "shots");
+    let calls = 0;
+    const result = await takeScreenshots("![ ](screenshot:console)", SETTINGS, dir, async () => { calls += 1; return clean; });
+    expect(result).toEqual({ passed: false, findings: ["screenshot console needs words saying what it shows"], files: {} });
+    expect(calls).toBe(0);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it("keeps no picture of a page with content it cannot read", async () => {
+    const result = await takeScreenshots("![Tempo's chart](screenshot:tempo)", SETTINGS, tempDir(), fake({ tempo: { ...clean, unreadable: ["canvas", "canvas", "iframe"] } }));
+    expect(result).toEqual({ passed: false, files: {},
+      findings: ["screenshot tempo shows content that cannot be checked (canvas, iframe): mask it (settings.draft.screenshots.pages[].mask)"] });
   });
 
   it("checks the operator's own private words", async () => {

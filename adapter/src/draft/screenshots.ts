@@ -47,7 +47,7 @@ export async function takeScreenshots(markdown: string, settings: ScreenshotSett
     seen.add(name);
     const page = settings?.pages.find((p) => p.name === name);
     if (!page) { findings.push(`screenshot ${name} is not a configured page (settings.draft.screenshots.pages)`); continue; }
-    if (!alt) findings.push(`screenshot ${name} needs words saying what it shows`);
+    if (!alt) { findings.push(`screenshot ${name} needs words saying what it shows`); continue; }
     let shot: Capture;
     try { shot = await capture(page, settings!.timeoutSeconds * 1000); } catch (error) {
       findings.push(`screenshot ${name} could not be taken: ${error instanceof Error ? error.message.split("\n")[0]!.slice(0, 200) : String(error)}`);
