@@ -1,6 +1,6 @@
 /**
  * The stack-part check (ADR 0101, brief D1 and D3): every part of the author's setup a draft names (a glossary term) is
- * handled. A part with a published post must link that post. A part with no post that is **central** to the draft (in
+ * handled. A part with a published post must link that post (a markdown link outside code, by address or path). A part with no post that is **central** to the draft (in
  * its title, or named three times or more) holds the draft: its background post is written first. A part only mentioned
  * in passing must be explained where it first appears, and goes on the "posts to write later" list.
  *
@@ -23,6 +23,14 @@ const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const termRe = (term: string, flags = "giu") => new RegExp(`(^|[^A-Za-z0-9])${escapeRe(term)}(?=$|[^A-Za-z0-9])`, flags);
 const EXPLAINS = [" is ", " are ", " (", " — ", " - ", ", a ", ", an ", ", the ", ", which ", ": a ", ": an "];
 
+/** The draft's link targets outside code: `[text](target)` and `<https://...>`, without a trailing slash or `#part`. */
+function linkTargets(markdown: string): Set<string> {
+  const text = markdown.replace(/```[\s\S]*?```/gu, " ").replace(/`[^`\n]*`/gu, " ");
+  const targets = [...text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gu), ...text.matchAll(/<(https?:\/\/[^>\s]+)>/gu)].map((m) => m[1]!);
+  return new Set(targets.map(bare));
+}
+const bare = (target: string) => target.replace(/#.*$/u, "").replace(/\/+$/u, "");
+
 /** Whether the paragraph explains `term` right after its first mention. */
 function explained(paragraph: string, term: string): boolean {
   const match = termRe(term, "iu").exec(paragraph);
@@ -35,6 +43,7 @@ export function checkStackParts(title: string, markdown: string, terms: string[]
   const text = prose(markdown);
   const wanted = [...new Set(terms.map((t) => t.trim()).filter((t) => t.length >= 2))];
   const findings: string[] = [], hold: string[] = [], later: string[] = [];
+  const links = linkTargets(markdown);
   for (const term of wanted) {
     const count = (text.match(termRe(term)) ?? []).length + (termRe(term, "iu").test(title) ? 1 : 0);
     if (count === 0) continue;
@@ -42,7 +51,7 @@ export function checkStackParts(title: string, markdown: string, terms: string[]
     if (posts.length > 0) {
       const post = posts[0]!;
       const path = new URL(post.url).pathname;
-      if (!markdown.includes(post.url) && !markdown.includes(`](${path})`)) findings.push(`${term} has a post: link ${post.url} where it first appears`);
+      if (!links.has(bare(post.url)) && !links.has(bare(path))) findings.push(`${term} has a post: link ${post.url} where it first appears`);
       continue;
     }
     if (termRe(term, "iu").test(title) || count >= 3) {

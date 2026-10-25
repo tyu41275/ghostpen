@@ -72,6 +72,18 @@ describe("every stack part linked or explained", () => {
     expect(checkStackParts("Weekly notes", "We use [Tempo](/blog/a) for this.", ["Tempo"], idx).passed).toBe(true);
   });
 
+  it("counts only real links outside code, ignoring a trailing slash or #part", () => {
+    const idx = index(post({ about: ["tempo"] }));
+    const check = (text: string) => checkStackParts("Notes", text, ["Tempo"], idx).passed;
+    expect(check("Tempo grades work.\n```\n[post](https://blog.example/blog/a)\n```")).toBe(false);
+    expect(check("Tempo grades work. See `[post](https://blog.example/blog/a)`.")).toBe(false);
+    expect(check("Tempo grades work: https://blog.example/blog/a")).toBe(false);
+    expect(check("Tempo grades work. [More](https://blog.example/blog/a/#start).")).toBe(true);
+    expect(check("Tempo grades work. <https://blog.example/blog/a>")).toBe(true);
+    expect(check('[Tempo](/blog/a "the post") grades work.')).toBe(true);
+    expect(check("[Tempo](/blog/ab) grades work.")).toBe(false);
+  });
+
   it("fails a part that has a post when the draft does not link it, even if explained", () => {
     const result = checkStackParts("Weekly notes", "We use Tempo, a tool that grades work.", ["Tempo"], index(post({ about: ["tempo"] })));
     expect(result.passed).toBe(false);
