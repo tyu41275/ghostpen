@@ -19,11 +19,15 @@ export interface CheckReport {
 }
 
 export interface DraftInput { title: string; markdown: string }
-export interface CheckContext { terms: string[]; index: PublishedIndex; graph: StackGraph | null; plain?: PlainOptions }
+export interface CheckContext {
+  terms: string[]; index: PublishedIndex; graph: StackGraph | null; plain?: PlainOptions;
+  /** A background post's subject: the part it explains, so it is not asked to link or hold for it. */
+  subject?: string;
+}
 
 export function checkDraft(draft: DraftInput, context: CheckContext): CheckReport {
   const plain = checkPlain(draft.markdown, context.plain ?? PLAIN_DEFAULTS);
-  const parts = checkStackParts(draft.title, draft.markdown, context.terms, context.index);
+  const parts = checkStackParts(draft.title, draft.markdown, context.terms, context.index, context.subject ? [context.subject] : []);
   const diagrams = checkDiagrams(draft.markdown, context.graph);
   const checks = [
     { name: "Plain words", passed: plain.passed, findings: plain.findings },

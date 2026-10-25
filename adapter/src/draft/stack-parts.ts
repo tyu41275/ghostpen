@@ -39,9 +39,11 @@ function explained(paragraph: string, term: string): boolean {
   return EXPLAINS.some((phrase) => window.includes(phrase));
 }
 
-export function checkStackParts(title: string, markdown: string, terms: string[], index: PublishedIndex): StackPartResult {
+/** `exempt`: parts the draft itself is the post about (a background post's subject), which it explains and cannot link. */
+export function checkStackParts(title: string, markdown: string, terms: string[], index: PublishedIndex, exempt: string[] = []): StackPartResult {
   const text = prose(markdown);
-  const wanted = [...new Set(terms.map((t) => t.trim()).filter((t) => t.length >= 2))];
+  const skip = new Set(exempt.map((t) => t.trim().toLowerCase()));
+  const wanted = [...new Set(terms.map((t) => t.trim()).filter((t) => t.length >= 2 && !skip.has(t.toLowerCase())))];
   const findings: string[] = [], hold: string[] = [], later: string[] = [];
   const links = linkTargets(markdown);
   for (const term of wanted) {

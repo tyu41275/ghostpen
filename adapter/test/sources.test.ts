@@ -5,16 +5,7 @@ import { parseSources } from "../src/sources/config.js";
 import { readGithubTopics } from "../src/sources/github.js";
 import { readGlossaries, readMarkdownTopics } from "../src/sources/markdown.js";
 import { buildPublishedIndex, frontmatter, INDEX_FILE, postsAbout } from "../src/sources/published.js";
-import { tempDir } from "./helpers.js";
-
-function tree(files: Record<string, string>): string {
-  const root = tempDir();
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(join(root, path, ".."), { recursive: true });
-    writeFileSync(join(root, path), text);
-  }
-  return root;
-}
+import { tempDir, tree } from "./helpers.js";
 
 describe("the sources settings", () => {
   it("reads topic, reference and published sources, and names the field that is wrong", () => {
