@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --exclude 'test/**/*.slow.test.ts'",
+    "test": "vitest run --exclude 'adapter/test/**/*.slow.test.ts'",
     "test:slow": "vitest run --passWithNoTests slow.test",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "lint:file-sizes": "node scripts/check-file-sizes.mjs"
