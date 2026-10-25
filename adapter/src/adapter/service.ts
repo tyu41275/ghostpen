@@ -11,7 +11,8 @@ export const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_ANSWER = 1024 * 1024;
 
 /** One call to an adapter route; resolves the JSON answer of a 200, throws with the service's words otherwise. */
-export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GET" | "POST", route: string, body?: unknown): Promise<T> {
+export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GET" | "POST", route: string, body?: unknown,
+  timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const settingsFile = config.settingsFile;
   if (typeof settingsFile !== "string") return Promise.reject(new Error("ghostpen adapter config needs settingsFile"));
   let port: number, key: string;
@@ -25,7 +26,7 @@ export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GE
   }
   const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
   return new Promise((resolve, reject) => {
-    const req = request({ host: "127.0.0.1", port, method, path: `/v1/adapter/${route}`, timeout: REQUEST_TIMEOUT_MS,
+    const req = request({ host: "127.0.0.1", port, method, path: `/v1/adapter/${route}`, timeout: timeoutMs,
       headers: { authorization: `Bearer ${key}`, ...(payload ? { "content-type": "application/json", "content-length": payload.length } : {}) } }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -38,7 +39,7 @@ export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GE
       });
       res.on("error", reject);
     });
-    req.on("timeout", () => req.destroy(new Error(`ghostpen's service did not answer within ${REQUEST_TIMEOUT_MS / 1000} s`)));
+    req.on("timeout", () => req.destroy(new Error(`ghostpen's service did not answer within ${timeoutMs / 1000} s`)));
     req.on("error", reject);
     req.end(payload);
   });

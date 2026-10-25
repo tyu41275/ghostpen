@@ -22,6 +22,8 @@ export interface WriterBrief {
   graph: StackGraph | null;
   styleGuide?: string;
   voice: Array<{ title: string; body: string }>;
+  /** What the author added about this topic in its card's thread (ADR 0101, amended 2026-10-25), oldest first. */
+  context?: string[];
   /** Pages the writer may screenshot, by name, with what each shows. */
   screenshots?: Array<{ name: string; description: string }>;
 }
@@ -70,7 +72,8 @@ export function writerPrompt(brief: WriterBrief): string {
         ...brief.screenshots.map((s) => `- ${s.name}: ${s.description}`)]
       : ["Add no screenshots or images."]),
     "",
-    "Use only facts from the source documents. Do not invent numbers, names or events.",
+    "Use only facts from the source documents and the author's own context below. Do not invent numbers, names or events.",
+    ...(brief.context?.length ? ["", "The author added this context about the topic. It is true; use it where it fits:", ...brief.context.map((c) => `- ${c.replace(/\s+/gu, " ")}`)] : []),
     brief.styleGuide ? `\nThe author's style guide (the first rule above wins where they differ):\n${brief.styleGuide}` : "",
     ...brief.voice.map((v) => `\nOne of the author's posts, for the voice only (not for facts): ${v.title}\n${v.body.split("\n").slice(0, MAX_VOICE_LINES).join("\n")}`),
     "",

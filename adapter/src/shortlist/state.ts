@@ -7,7 +7,8 @@ import { join } from "node:path";
 import type { ShortlistItem } from "./picks.js";
 
 export type Action = "write" | "skip" | "later";
-export interface Posted { channelRef: string; messageRef: string }
+/** Where a card went; `threadRef`: the thread opened under it (chatter #5252), where the operator asks and adds context. */
+export interface Posted { channelRef: string; messageRef: string; threadRef?: string }
 export interface Answer { action: Action; reason: string; by: string; at: string }
 /** A Write's draft (ghostpen#90): where it is, its pull request, and the card last posted about it. */
 export interface DraftState {

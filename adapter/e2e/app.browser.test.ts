@@ -18,9 +18,10 @@ afterAll(async () => { await browser?.close(); });
 const closers: Array<() => void> = [];
 afterEach(() => { for (const close of closers.splice(0)) close(); });
 
-async function app(ranking?: unknown): Promise<string> {
+async function app(ranking?: unknown, feedback?: unknown[]): Promise<string> {
   const dataDir = tempDir();
   if (ranking !== undefined) writeFileSync(join(dataDir, "ranking.json"), typeof ranking === "string" ? ranking : JSON.stringify(ranking));
+  if (feedback !== undefined) writeFileSync(join(dataDir, "feedback.json"), JSON.stringify({ version: 1, entries: feedback }));
   const server = createGhostpenServer({ instance: "personal-comms-host", dataDir, appKey: KEY, now: () => NOW });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   closers.push(() => server.close());
@@ -80,6 +81,20 @@ describe("ghostpen app page", () => {
     expect(await page.locator("[data-section=background] li").innerText()).toBe("ci: unlocks 2 topics");
     expect(await page.locator("[data-section=owed] li").innerText()).toBe("ADR 0022: due now (gh:o/r#9)");
     expect(await page.locator("[data-section=problems] li").innerText()).toBe("github: o/r cannot be read (GitHub answered 404)");
+  });
+
+  it("shows what the operator told ghostpen: context under its topic, every note newest first, as text", async () => {
+    const ranking = { ranAt: "2026-10-25T00:00:00.000Z", problems: [], background: [], owed: [], entries: [
+      { id: "d:1", kind: "decision", title: "ADR 1", topic: "One timer app", takeaway: "Fewer timers", total: 6, explain: [], location: "/o/1.md:1", scores: [] }] };
+    const note = (kind: string, text: string, action?: string) => ({ at: "2026-10-26T14:00:00Z", by: "234652039735541760", topic: "d:1", kind, text, intake: "pending", ...(action ? { action } : {}) });
+    const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
+    await page.goto(await app(ranking, [note("reason", "Others would find it useful", "write"), note("context", "We tried <b>three</b> timers first"),
+      note("question", "Why first?"), note("answer", "It saved two hours a week.")]));
+    expect(await page.locator("[data-candidate='d:1'] [data-field=context] li").allInnerTexts()).toEqual(["Your context: We tried <b>three</b> timers first"]);
+    expect(await page.locator("[data-section=notes] li").evaluateAll((items) => items.map((li) => li.getAttribute("data-kind"))))
+      .toEqual(["answer", "question", "context", "reason"]);
+    expect(await page.locator("[data-section=notes] li").first().innerText()).toBe("ghostpen answered, d:1: It saved two hours a week.");
+    expect(await page.locator("[data-section=notes] b").count()).toBe(0); // text, never markup
   });
 
   it("says when the last ranking cannot be read or is not a ranking, never showing an empty one or failing", async () => {

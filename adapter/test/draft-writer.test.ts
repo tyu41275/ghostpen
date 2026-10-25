@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseWritten, revisePrompt, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
 import { parseStackMap, readStackMap, STACK_MAP_FORMAT } from "../src/draft/stack-map.js";
 import { draftFile, draftNow, readDraft } from "../src/draft/write.js";
+import { addFeedback } from "../src/feedback/store.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { tempDir, tree } from "./helpers.js";
 
@@ -177,6 +178,16 @@ describe("drafting a post", () => {
     await expect(draftNow(settings, "background:Nothing", { write: async () => answer(LINKED) })).rejects.toThrow("nothing in the sources defines or names Nothing");
     await expect(draftNow({ ...settings, draft: undefined }, ID)).rejects.toThrow("no draft writer is set");
     expect(existsSync(draftFile(settings.dataDir, ID))).toBe(false);
+  });
+
+  it("gives the writer the context the author added in the card's thread", async () => {
+    const settings = setup();
+    addFeedback(settings.dataDir, { at: "t", by: "1", topic: ID, kind: "context", text: "It ran for a month before we chose." });
+    addFeedback(settings.dataDir, { at: "t", by: "1", topic: "other", kind: "context", text: "About another topic." });
+    const prompts: string[] = [];
+    await draftNow(settings, ID, { write: async (p) => { prompts.push(p); return answer(LINKED); } });
+    expect(prompts[0]).toContain("- It ran for a month before we chose.");
+    expect(prompts[0]).not.toContain("About another topic.");
   });
 
   it("uses the ranking's topic and takeaway when the candidate is ranked", async () => {

@@ -7,6 +7,7 @@
  */
 import { readSettings } from "../settings.js";
 import { answerDraftPress } from "./drafts.js";
+import { answerThreadMessage } from "./threads.js";
 import { answerShortlistPress, syncShortlist, type PressEvent, type ShortlistContext } from "./shortlist.js";
 
 /** How often the adapter asks the service whether a shortlist card is due: a weekly post lands within this of its slot. */
@@ -92,7 +93,8 @@ export const adapter = {
     heartbeat.unref();
     await beat();
   },
-  onMessage: async (event: PressEvent, ctx: GhostpenAdapterContext) => (await answerShortlistPress(event, ctx)) ?? answerDraftPress(event, ctx),
+  onMessage: async (event: PressEvent, ctx: GhostpenAdapterContext) =>
+    (await answerShortlistPress(event, ctx)) ?? (await answerDraftPress(event, ctx)) ?? answerThreadMessage(event, ctx),
   onShutdown: async (): Promise<void> => {
     clearInterval(heartbeat);
     heartbeat = undefined;
