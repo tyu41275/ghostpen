@@ -8,7 +8,7 @@
 export interface PlainOptions { maxGrade: number; maxSentenceWords: number }
 export const PLAIN_DEFAULTS: PlainOptions = { maxGrade: 8, maxSentenceWords: 30 };
 
-/** The draft's prose: no fenced blocks, inline code, link addresses, images, headings, tables or HTML. */
+/** The draft's prose: no fenced blocks, inline code, link addresses (bare ones too), images, headings, tables or HTML. */
 export function prose(markdown: string): string {
   return markdown
     .replace(/^---\n[\s\S]*?\n---\n/u, "")
@@ -16,6 +16,7 @@ export function prose(markdown: string): string {
     .replace(/`[^`\n]*`/gu, " code ")
     .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ")
     .replace(/\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    .replace(/https?:\/\/[^\s)>\]]+/gu, " link ")
     .replace(/<[^>]+>/gu, " ")
     .split("\n").filter((line) => !/^\s*(#|\||>?\s*$)/u.test(line)).join("\n");
 }

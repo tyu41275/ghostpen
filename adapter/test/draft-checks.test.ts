@@ -33,6 +33,11 @@ describe("plain words", () => {
     expect(text).not.toMatch(/Heading|title|https|veryLong|\| a/u);
   });
 
+  it("leaves bare web addresses out of the grade", () => {
+    expect(prose("See https://example.com/a/very-long-address-with-many-syllables-in-it.html now.")).toBe("See  link  now.");
+    expect(checkPlain(`${SIMPLE} Read it at https://example.com/organisational-infrastructure-modernisation.`).passed).toBe(true);
+  });
+
   it("splits sentences at stops and blank lines", () => {
     expect(sentencesOf("One two. Three four! Five?\n\nsix seven")).toEqual(["One two.", "Three four!", "Five?", "six seven"]);
   });
@@ -147,6 +152,23 @@ describe("diagrams match the stack map", () => {
     expect(arrows).toEqual([["a", "b"], ["b", "c"], ["c", "d"], ["d", "a"]]);
   });
 
+  it("reads every Mermaid link kind, chains, & groups and worded links, but not invisible ones", () => {
+    const arrows = (body: string) => parseFlowchart(body).arrows;
+    expect(arrows("a --o b\nc --x d\ne <--> f\ng o--o h\ni x--x j")).toEqual([["a", "b"], ["c", "d"], ["e", "f"], ["g", "h"], ["i", "j"]]);
+    expect(arrows("a ---> b\nc -..-> d\ne ====> f\ng --- h\ni -.- j\nk === l")).toEqual([["a", "b"], ["c", "d"], ["e", "f"], ["g", "h"], ["i", "j"], ["k", "l"]]);
+    expect(arrows("a -- talks to --> b\nc == calls ==> d\ne -. maybe .-> f")).toEqual([["a", "b"], ["c", "d"], ["e", "f"]]);
+    expect(arrows("a --> b --> c\nd & e --> f")).toEqual([["a", "b"], ["b", "c"], ["d", "f"], ["e", "f"]]);
+    expect(arrows("Tempo-->Clock\nbox --> echo")).toEqual([["Tempo", "Clock"], ["box", "echo"]]);
+    expect(arrows("a ~~~ b\nclassDef x fill:#f00\nstyle a fill:#0f0\n%% a --> b")).toEqual([]);
+    const { labels } = parseFlowchart('a{{"chatter"}} --> b>Clock] --> c(((Tempo)))\nd[("Relay")] --> e[/Disk/]');
+    expect([...labels]).toEqual([["a", "chatter"], ["b", "Clock"], ["c", "Tempo"], ["d", "Relay"], ["e", "Disk"]]);
+  });
+
+  it("fails a circle or cross link the map does not have", () => {
+    expect(checkDiagrams(md("flowchart LR\n  a[Clock] --o b[Tempo]"), GRAPH).passed).toBe(false);
+    expect(checkDiagrams(md("flowchart LR\n  Clock --x Tempo"), GRAPH).passed).toBe(false);
+  });
+
   it("passes arrows the map has, in either direction", () => {
     expect(checkDiagrams(md("flowchart LR\n  a[chatter] --> b[Clock]\n  c[tempo] --> a"), GRAPH).passed).toBe(true);
   });
@@ -167,6 +189,7 @@ describe("diagrams match the stack map", () => {
   it("says a diagram cannot be checked when no map is configured", () => {
     expect(checkDiagrams(md("flowchart LR\n  a[chatter] --> b[Clock]"), null).findings).toEqual(["diagram 1 cannot be checked: no stack map is configured"]);
     expect(checkDiagrams("No diagrams here.", null).passed).toBe(true);
+    expect(checkDiagrams(md("flowchart LR\n  chatter --> Clock"), null).passed).toBe(false);
     expect(checkDiagrams(md('pie\n  "yes": 3\n  "no": 1'), null).passed).toBe(true);
   });
 });
