@@ -27,10 +27,10 @@ async function world(draft: DraftState) {
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const settingsFile = join(dir, "settings.json");
   writeFileSync(settingsFile, JSON.stringify({ ...raw, port: (server.address() as { port: number }).port }));
-  const posts: Array<{ text: string; buttons: Button[] }> = [];
+  const posts: Array<{ text: string; buttons: Button[]; selects?: unknown }> = [];
   const edits: Array<{ messageRef: string; text: string; buttons: Button[] }> = [];
   const ctx = { config: { settingsFile }, log: () => {},
-    postToChannel: async (_channel: string, content: { text: string }, buttons: Button[] = []) => { posts.push({ text: content.text, buttons }); return { channelRef: "c", messageRef: `d${posts.length}` }; },
+    postToChannel: async (_channel: string, content: { text: string; selects?: unknown }, buttons: Button[] = []) => { posts.push({ text: content.text, buttons, selects: content.selects }); return { channelRef: "c", messageRef: `d${posts.length}` }; },
     updatePostedMessage: async (_c: string, messageRef: string, content: { text: string }, buttons: Button[] = []) => { edits.push({ messageRef, text: content.text, buttons }); return true; } };
   const setDraft = (change: Partial<DraftState>) => {
     const state = readShortlists(dir);
@@ -49,11 +49,13 @@ describe("draft cards in chatter", () => {
     expect(await syncShortlist(w.ctx, redrawn)).toBe(1);
     expect(w.posts[0]!.text).toContain("**Draft ready: T**");
     expect(w.posts[0]!.buttons).toEqual([{ label: "Publish", style: "success", id: `ghostpen.draft:publish:${WEEK}:0:1` }, { label: "Edit", style: "secondary", id: `ghostpen.draft:edit:${WEEK}:0:1` }]);
+    expect(w.posts[0]!.selects).toEqual([{ id: `ghostpen.draft:reason:${WEEK}:0:1`, placeholder: "Pick a reason to publish, or press Publish to type one",
+      options: [{ label: "Publish: Accurate and reads well", value: "publish:0" }, { label: "Publish: Good enough; small fixes can follow", value: "publish:1" }] }]);
     expect(w.draft().card).toEqual({ channelRef: "c", messageRef: "d1", round: 1, status: "ready" });
     expect(await syncShortlist(w.ctx, redrawn)).toBe(0); // nothing new
     w.setDraft({ status: "published" });
     expect(await syncShortlist(w.ctx, redrawn)).toBe(1);
-    expect(w.posts[1]).toEqual({ text: "**Published: T**\nhttps://github.com/o/blog/pull/7", buttons: [] });
+    expect(w.posts[1]).toEqual({ text: "**Published: T**\nhttps://github.com/o/blog/pull/7", buttons: [], selects: [] });
     expect(w.edits).toEqual([{ messageRef: "d1", text: "This draft moved on; the newest card about it is below.", buttons: [] }]);
   });
 
@@ -76,8 +78,12 @@ describe("draft cards in chatter", () => {
       ask: { title: "What should change?", label: "The changes, in plain words", placeholder: "e.g. shorter intro; explain what Relay is", maxLength: 2000 } });
     expect(await press(`ghostpen.draft:edit:${WEEK}:0:1`, { text: "Shorter." })).toEqual({ handled: true, reply_text: "ghostpen is not drafting here (settings.draft), so nothing was done." });
     expect(await press(`ghostpen.draft:edit:${WEEK}:0:0`, { text: "x" })).toEqual({ handled: true, reply_text: "This card is for an older draft; use the newest card. Nothing was done." });
-    expect(await press(`ghostpen.draft:publish:${WEEK}:0:1`, { user_id: "1" })).toMatchObject({ reply_text: expect.stringContaining("Only the operator") });
-    expect(await press(`ghostpen.draft:publish:${WEEK}:0:1`)).toEqual({ handled: true, reply_text: "This draft is not ready to publish, so nothing was done." });
+    // Publish asks for its reason first, or takes one picked from the card's reasons.
+    expect(await press(`ghostpen.draft:publish:${WEEK}:0:1`)).toMatchObject({ handled: true, ask: { title: "Why publish it now?", maxLength: 200 } });
+    expect(await press(`ghostpen.draft:publish:${WEEK}:0:1`, { user_id: "1", text: "ready" })).toMatchObject({ reply_text: expect.stringContaining("Only the operator") });
+    expect(await press(`ghostpen.draft:publish:${WEEK}:0:1`, { text: "ready" })).toEqual({ handled: true, reply_text: "This draft is not ready to publish, so nothing was done." });
+    expect(await press(`ghostpen.draft:reason:${WEEK}:0:1`, { values: ["publish:0"] })).toEqual({ handled: true, reply_text: "This draft is not ready to publish, so nothing was done." });
+    expect(await press(`ghostpen.draft:reason:${WEEK}:0:1`, { values: ["write:0"] })).toEqual({ handled: true, reply_text: "ghostpen does not know that reason, so nothing was done." });
     expect(await press("ghostpen.draft:delete:x:0:1")).toEqual({ handled: true, reply_text: "ghostpen does not know that button, so nothing was done." });
     expect(await press("ghostpen.shortlist:write:x:0")).toBeUndefined();
     expect(await answerDraftPress({ type: "message" }, w.ctx)).toBeUndefined();
@@ -85,14 +91,14 @@ describe("draft cards in chatter", () => {
 
   it("reaches draft presses through the adapter's onMessage", async () => {
     const w = await world({ status: "failed", round: 1, at: "x" });
-    expect(await adapter.onMessage({ type: "button_click", button_id: `ghostpen.draft:publish:${WEEK}:0:1`, user_id: OPERATOR }, w.ctx as never))
+    expect(await adapter.onMessage({ type: "button_click", button_id: `ghostpen.draft:publish:${WEEK}:0:1`, user_id: OPERATOR, text: "ready" }, w.ctx as never))
       .toEqual({ handled: true, reply_text: "This draft is not ready to publish, so nothing was done." });
   });
 
   it("says so when the service can't be reached", async () => {
     const w = await world({ status: "ready", round: 1, at: "x" });
     await new Promise((done) => servers.pop()!.close(done));
-    const reply = await answerDraftPress({ type: "button_click", button_id: `ghostpen.draft:publish:${WEEK}:0:1`, user_id: OPERATOR }, w.ctx);
+    const reply = await answerDraftPress({ type: "button_click", button_id: `ghostpen.draft:publish:${WEEK}:0:1`, user_id: OPERATOR, text: "ready" }, w.ctx);
     expect(reply).toMatchObject({ handled: true, reply_text: expect.stringContaining("ghostpen could not take the press, so nothing was done") });
   });
 });

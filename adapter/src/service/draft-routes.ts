@@ -2,7 +2,8 @@
  * The draft routes the chatter adapter calls (ghostpen#90), behind the same adapter key as the shortlist's:
  *
  *   POST /v1/adapter/draft/posted   {week, index, round, status, channelRef, messageRef}: a draft card was posted
- *   POST /v1/adapter/draft/publish  {week, index, round, user}: Publish, the operator's only; lands the post once it is ready
+ *   POST /v1/adapter/draft/publish  {week, index, round, user, reason, chip?}: Publish with its reason, the operator's only;
+ *                                   lands the post once it is ready
  *   POST /v1/adapter/draft/edit     {week, index, round, user, notes}: Edit, the operator's only; the writer makes the changes
  *
  * `round` is the card's: a press on a card for an older draft is refused, so it can never publish or edit a newer one.
@@ -10,6 +11,7 @@
  * `draftCard` is the card text the shortlist route hands the adapter with each item's draft.
  */
 import { checkPost, mergePost, type PublishSettings } from "../publish/github.js";
+import { addFeedback } from "../feedback/store.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import type { GhostpenSettings } from "../settings.js";
 import { findItem, readShortlists, saveShortlists, type DraftState } from "../shortlist/state.js";
@@ -63,6 +65,10 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (!item?.draft) return { status: 404, body: { error: "no such draft" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { refused: OPERATOR_ONLY } };
   if (stale(item.draft, body)) return { status: 200, body: { refused: OLD_CARD } };
+  const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
+  if (!reason) return { status: 200, body: { refused: "A Publish needs a reason, so nothing was done." } };
+  // Kept whatever happens next (published already, not ready yet, a failed check): the reason still teaches.
+  addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
   if (item.draft.status === "published") return { status: 200, body: { reply: "It is on the blog already." } };
   if (item.draft.status === "publishing") return { status: 200, body: { reply: "It is being published now." } };
   if (item.draft.status !== "ready" || !item.draft.pr || !settings.publish) return { status: 200, body: { refused: "This draft is not ready to publish, so nothing was done." } };
@@ -76,7 +82,10 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (!fresh || fresh.round !== item.draft.round || fresh.status !== "ready" || fresh.pr?.number !== pr) {
     return { status: 200, body: { refused: "The draft changed while ghostpen checked it; use the newest card. Nothing was done." } };
   }
-  if (checked.merged) { setStatus(settings, body, now(), "published"); return { status: 200, body: { reply: "It is on the blog already." } }; }
+  if (checked.merged) {
+    setStatus(settings, body, now(), "published");
+    return { status: 200, body: { reply: "It is on the blog already." } };
+  }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");
   void ops.merge(publish, pr, head).then(() => setStatus(settings, body, now(), "published"),
@@ -110,6 +119,7 @@ export function draftEdit(settings: GhostpenSettings, body: Record<string, unkno
   item.draft.status = "queued";
   item.draft.round += 1;
   item.draft.notes = notes;
+  addFeedback(settings.dataDir, { at: now.toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "edit", text: notes });
   item.draft.at = now.toISOString();
   saveShortlists(settings.dataDir, state);
   jobs.enqueue(body.week as string, body.index as number);

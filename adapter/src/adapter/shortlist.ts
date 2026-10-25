@@ -7,6 +7,7 @@
  * (`drafts.ts`). Nothing here throws into chatter.
  */
 import { syncDrafts, type DraftView } from "./drafts.js";
+import { chipOf, chipOptions, type ReasonAction } from "../feedback/chips.js";
 import { callAdapterRoute } from "./service.js";
 
 export const BUTTON_OWNER = "ghostpen.";
@@ -15,16 +16,28 @@ export const BUTTON_PREFIX = "shortlist:";
 export const CARDS_PER_BEAT = 5;
 
 export interface Button { label: string; style?: "primary" | "secondary" | "success" | "danger"; id: string }
+/** A dropdown on a post (chatter #5054): its choice comes back as a press whose `values` hold the option's value. */
+export interface Select { id: string; placeholder?: string; options: Array<{ label: string; value: string }> }
+export interface PostContent { text: string; singleUserNotification?: { userId: string }; selects?: Select[] }
 export interface ShortlistContext {
   config: Record<string, unknown>;
   log: (level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) => void;
-  postToChannel?: (channel: string, content: { text: string; singleUserNotification?: { userId: string } }, buttons?: Button[]) =>
+  postToChannel?: (channel: string, content: PostContent, buttons?: Button[]) =>
     Promise<{ channelRef?: string; messageRef?: string } | undefined>;
-  updatePostedMessage?: (channelRef: string, messageRef: string, content: { text: string }, buttons?: Button[]) => Promise<boolean>;
+  updatePostedMessage?: (channelRef: string, messageRef: string, content: PostContent, buttons?: Button[]) => Promise<boolean>;
 }
-export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown }
+export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown; values?: unknown }
 interface Item { index: number; id: string; text: string; posted?: { channelRef: string; messageRef: string }; answered: boolean; draft?: DraftView }
 interface Week { week?: string; channel?: string; operator?: string; items?: Item[]; off?: string; waiting?: string }
+
+const SHORTLIST_ACTIONS: readonly ReasonAction[] = ["write", "skip", "later"];
+/** The card's reason choices (ADR 0101, amended 2026-10-25): one pick answers the card with that reason. */
+const reasons = (week: string, index: number): Select[] => [{ id: `${BUTTON_OWNER}${BUTTON_PREFIX}reason:${week}:${index}`,
+  placeholder: "Pick a reason, or press a button to type your own", options: chipOptions(SHORTLIST_ACTIONS) }];
+const ASK: Record<string, { title: string; label: string; placeholder: string }> = {
+  write: { title: "Why write this one?", label: "One line: what makes it worth a post", placeholder: "e.g. people keep asking how this works" },
+  skip: { title: "Why skip this topic?", label: "One line: what makes it not worth a post", placeholder: "e.g. too narrow, already covered" },
+  later: { title: "Why not yet?", label: "One line: what it is waiting for", placeholder: "e.g. the outcome is not known yet" } };
 
 const buttons = (week: string, index: number): Button[] => [
   { label: "Write", style: "success", id: `${BUTTON_OWNER}${BUTTON_PREFIX}write:${week}:${index}` },
@@ -44,7 +57,7 @@ export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>,
     if (item.posted) {
       if (redrawn.has(key) || !ctx.updatePostedMessage) continue;
       redrawn.add(key);
-      if (!await ctx.updatePostedMessage(item.posted.channelRef, item.posted.messageRef, { text: item.text }, buttons(state.week, item.index))) {
+      if (!await ctx.updatePostedMessage(item.posted.channelRef, item.posted.messageRef, { text: item.text, selects: reasons(state.week, item.index) }, buttons(state.week, item.index))) {
         ctx.log("warn", "ghostpen.shortlist.redrawFailed", { week: state.week, index: item.index });
       }
       continue;
@@ -52,7 +65,7 @@ export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>,
     if (posted >= CARDS_PER_BEAT) continue;
     // The week's first card pings the operator once; the rest arrive quietly under it.
     const ping = item.index === 0 && state.operator ? { singleUserNotification: { userId: state.operator } } : {};
-    const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping }, buttons(state.week, item.index));
+    const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping, selects: reasons(state.week, item.index) }, buttons(state.week, item.index));
     if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${state.channel}`);
     posted += 1;
     redrawn.add(key);
@@ -70,26 +83,28 @@ export async function answerShortlistPress(event: PressEvent, ctx: ShortlistCont
   if (event?.type !== "button_click" || typeof event.button_id !== "string") return undefined;
   const id = event.button_id.startsWith(BUTTON_OWNER) ? event.button_id.slice(BUTTON_OWNER.length) : event.button_id;
   if (!id.startsWith(BUTTON_PREFIX)) return undefined;
-  const [action, week, index] = id.slice(BUTTON_PREFIX.length).split(":");
-  if (!["write", "skip", "later"].includes(action ?? "") || !week || !/^\d+$/u.test(index ?? "")) {
+  const [pressed, week, index] = id.slice(BUTTON_PREFIX.length).split(":");
+  if (!["write", "skip", "later", "reason"].includes(pressed ?? "") || !week || !/^\d+$/u.test(index ?? "")) {
     return { handled: true, reply_text: "ghostpen does not know that button, so nothing was done." };
   }
-  const reason = typeof event.text === "string" ? event.text : undefined;
-  // A Skip asks for its reason first; chatter sends the same press again carrying it as `text`.
-  if (action === "skip" && reason === undefined) {
-    return { handled: true, ask: { title: "Why skip this topic?", label: "One line: what makes it not worth a post", placeholder: "e.g. too narrow, already covered", maxLength: 200 } };
-  }
+  // A pick from the card's reasons answers with that press and those words.
+  const chip = pressed === "reason" ? chipOf(Array.isArray(event.values) ? event.values[0] : undefined, SHORTLIST_ACTIONS) : null;
+  if (pressed === "reason" && !chip) return { handled: true, reply_text: "ghostpen does not know that reason, so nothing was done." };
+  const action = chip?.action ?? pressed!;
+  const reason = chip?.reason ?? (typeof event.text === "string" ? event.text : undefined);
+  // A button asks for its reason first; chatter sends the same press again carrying it as `text`.
+  if (reason === undefined) return { handled: true, ask: { ...ASK[action]!, maxLength: 200 } };
   let answered: { refused?: string; text?: string; reply?: string; already?: boolean; posted?: { channelRef: string; messageRef: string } | null };
   try {
     answered = await callAdapterRoute(ctx.config, "POST", "shortlist/answer", { week, index: Number(index), action, user: typeof event.user_id === "string" ? event.user_id : "",
-      ...(reason !== undefined ? { reason } : {}) });
+      reason, ...(chip ? { chip: true } : {}) });
   } catch (error) {
     return { handled: true, reply_text: `ghostpen could not take the answer, so nothing was done: ${errorText(error)}` };
   }
   if (answered.refused) return { handled: true, reply_text: answered.refused };
   // The answer is kept whether or not the edit lands; a card left with buttons answers its next press the same way.
   const edited = answered.posted && answered.text && ctx.updatePostedMessage
-    ? await ctx.updatePostedMessage(answered.posted.channelRef, answered.posted.messageRef, { text: answered.text }, []).catch(() => false) : false;
+    ? await ctx.updatePostedMessage(answered.posted.channelRef, answered.posted.messageRef, { text: answered.text, selects: [] }, []).catch(() => false) : false;
   if (!edited) ctx.log("warn", "ghostpen.shortlist.editFailed", { week, index });
   return { handled: true, reply_text: answered.reply ?? (answered.already ? "This topic was answered already; its card shows the answer." : "Done.") };
 }
