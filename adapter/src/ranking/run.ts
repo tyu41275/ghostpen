@@ -28,6 +28,23 @@ export interface RankingView {
   problems: string[];
 }
 
+const str = (v: unknown): v is string => typeof v === "string";
+const strs = (v: unknown) => Array.isArray(v) && v.every(str);
+const rec = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Whether `value` is a whole ranking, every entry, score, background post and booking of the right shape. */
+export function isRankingView(value: unknown): value is RankingView {
+  if (!rec(value) || !str(value.ranAt) || !strs(value.problems)) return false;
+  const score = (s: unknown) => rec(s) && str(s.factor) && typeof s.score === "number" && str(s.quote) && str(s.location)
+    && (s.line === null || typeof s.line === "number") && (s.note === undefined || str(s.note));
+  const entry = (e: unknown) => rec(e) && [e.id, e.kind, e.title, e.topic, e.takeaway, e.location].every(str)
+    && typeof e.total === "number" && strs(e.explain) && Array.isArray(e.scores) && e.scores.every(score);
+  const background = (b: unknown) => rec(b) && str(b.part) && strs(b.unlocks);
+  const owed = (o: unknown) => rec(o) && str(o.decision) && str(o.title) && str(o.bookedAt) && typeof o.due === "boolean" && strs(o.evidence);
+  return Array.isArray(value.entries) && value.entries.every(entry) && Array.isArray(value.background) && value.background.every(background)
+    && Array.isArray(value.owed) && value.owed.every(owed);
+}
+
 /** Where a line of a document is, as the operator can open it: `path:line` or the web address. */
 const where = (document: TopicDocument, line: number | null) =>
   document.location.url ?? `${document.location.path ?? document.id}${line ? `:${line}` : ""}`;

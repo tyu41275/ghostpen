@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateOf } from "../src/ranking/candidates.js";
-import { RANKING_FILE, rankNow } from "../src/ranking/run.js";
+import { isRankingView, RANKING_FILE, rankNow } from "../src/ranking/run.js";
 import { KILL_GRACE_MS, parseAnswer, runScorer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
 import { parseSettings } from "../src/settings.js";
 import type { TopicDocument } from "../src/sources/types.js";
@@ -99,6 +99,7 @@ describe("a ranking run", () => {
     expect(view.background).toEqual([{ part: "ci", unlocks: ["decisions:chatter/decisions/0028.md"] }]);
     expect(view.problems).toEqual(["decisions: its pattern none/*.md matches no file"]);
     expect(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")).ranAt).toBe("2026-10-25T00:00:00.000Z");
+    expect(isRankingView(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")))).toBe(true); // what a run writes, the page reads
     const unset = await rankNow({ ...settings, scorer: undefined }, { now: new Date() });
     expect(unset.entries).toEqual([]);
     expect(unset.problems).toContain("no scorer is set (settings.scorer): nothing is ranked");

@@ -83,7 +83,11 @@ describe("ghostpen app page", () => {
   });
 
   it("says when the last ranking cannot be read or is not a ranking, never showing an empty one or failing", async () => {
-    for (const content of ["{ broken", "{}", "[]", JSON.stringify({ ranAt: "x", entries: {}, background: [], owed: [], problems: [] })]) {
+    const base = { ranAt: "x", entries: [], background: [], owed: [], problems: [] };
+    const goodEntry = { id: "a", kind: "decision", title: "t", topic: "t", takeaway: "", total: 1, explain: [], location: "l", scores: [] };
+    for (const content of ["{ broken", "{}", "[]", JSON.stringify({ ...base, entries: {} }), JSON.stringify({ ...base, entries: [null] }),
+      JSON.stringify({ ...base, entries: [{ ...goodEntry, scores: [{ factor: "stakes" }] }] }), JSON.stringify({ ...base, entries: [{ ...goodEntry, explain: "x" }] }),
+      JSON.stringify({ ...base, background: [{ part: "ci" }] }), JSON.stringify({ ...base, owed: [{ decision: "d" }] }), JSON.stringify({ ...base, problems: [1] })]) {
       const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
       const response = await page.goto(await app(content));
       expect(response?.status()).toBe(200);

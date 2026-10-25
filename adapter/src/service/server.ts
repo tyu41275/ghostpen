@@ -5,7 +5,7 @@
  */
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { RANKING_FILE, type RankingView } from "../ranking/run.js";
+import { isRankingView, RANKING_FILE, type RankingView } from "../ranking/run.js";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { GHOSTPEN_VERSION } from "../version.js";
 import { APP_CSP, renderApp } from "./app.js";
@@ -31,12 +31,9 @@ function lastRanking(dataDir: string): RankingView | null | Error {
   const path = join(dataDir, RANKING_FILE);
   if (!existsSync(path)) return null;
   try {
-    const view = JSON.parse(readFileSync(path, "utf8")) as Partial<RankingView> | null;
-    const lists = ["entries", "background", "owed", "problems"] as const;
-    if (!view || typeof view !== "object" || typeof view.ranAt !== "string" || lists.some((key) => !Array.isArray(view[key]))) {
-      return new Error("it is not a ranking (ranAt, entries, background, owed and problems are expected)");
-    }
-    return view as RankingView;
+    const view: unknown = JSON.parse(readFileSync(path, "utf8"));
+    // Every entry and score is checked, so a malformed file shows as unreadable instead of failing the page.
+    return isRankingView(view) ? view : new Error("it is not a ranking ghostpen wrote (an entry, score or list has the wrong shape)");
   } catch (error) {
     return new Error(error instanceof Error ? error.message.split("\n")[0]! : String(error));
   }
