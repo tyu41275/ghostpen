@@ -76,7 +76,8 @@ describe("the pull request", () => {
       return "https://github.com/o/blog/pull/7\n";
     };
     const pr = await openPostPr(settings, draft({ screenshots: { console: png } }), "2026-10-26", run);
-    expect(pr).toEqual({ number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostpen/why-we-use-one-timer", preview: "https://blog-git-ghostpen-why-we-use-one-timer.example" });
+    expect(pr).toEqual({ number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostpen/why-we-use-one-timer", preview: "https://blog-git-ghostpen-why-we-use-one-timer.example",
+      head: execFileSync("git", ["rev-parse", "ghostpen/why-we-use-one-timer"], { cwd: remote }).toString().trim() });
     const files = execFileSync("git", ["ls-tree", "-r", "--name-only", "ghostpen/why-we-use-one-timer"], { cwd: remote }).toString().trim().split("\n");
     expect(files).toEqual(["README.md", "data/blog/why-we-use-one-timer.mdx", "public/static/images/ghostpen/why-we-use-one-timer/console.png"]);
     const create = gh.find((a) => a[2] === "create")!;
@@ -89,6 +90,7 @@ describe("the pull request", () => {
     const again = await openPostPr(settings, draft({ title: "One timer is enough" }), "2026-10-26",
       async (argv, options) => (argv[0] !== "gh" ? runIn(argv, options) : (gh.push(argv), argv[2] === "list" ? '[{"number":7,"url":"u7"}]' : "")), pr.branch);
     expect(again).toMatchObject({ number: 7, url: "u7", branch: "ghostpen/why-we-use-one-timer" });
+    expect(again.head).not.toBe(pr.head);
     expect(gh.map((a) => a[2])).toEqual(["list", "edit"]);
     expect(gh[1]!.slice(0, 8)).toEqual(["gh", "pr", "edit", "7", "-R", "o/blog", "--title", "Post: One timer is enough"]);
     const after = execFileSync("git", ["ls-tree", "-r", "--name-only", pr.branch], { cwd: remote }).toString();
@@ -131,12 +133,16 @@ describe("Publish", () => {
   it("checks a pull request, and merges it and brings the clone back to main", async () => {
     const settings = parsePublish({ repoDir: "/r", repo: "o/blog" });
     const calls: string[][] = [];
-    expect(await checkPost(settings, 7, run({ state: "OPEN", statusCheckRollup: [status("independent-review", "SUCCESS")] }, calls))).toEqual({ reason: null, merged: false });
-    expect(await checkPost(settings, 7, run({ state: "MERGED", statusCheckRollup: [] }, calls))).toEqual({ reason: "it is published already", merged: true });
-    expect(calls[0]).toEqual(["gh", "pr", "view", "7", "-R", "o/blog", "--json", "state,statusCheckRollup"]);
+    const ok = [status("independent-review", "SUCCESS")];
+    expect(await checkPost(settings, 7, "abc", run({ state: "OPEN", headRefOid: "abc", statusCheckRollup: ok }, calls))).toEqual({ reason: null, merged: false });
+    // A review of an earlier draft belongs to an earlier commit: a head that isn't the pushed draft is never published.
+    expect(await checkPost(settings, 7, "abc", run({ state: "OPEN", headRefOid: "old", statusCheckRollup: ok }, calls)))
+      .toEqual({ reason: "the pull request does not hold the current draft yet (or someone else changed it)", merged: false });
+    expect(await checkPost(settings, 7, "abc", run({ state: "MERGED", headRefOid: "abc", statusCheckRollup: [] }, calls))).toEqual({ reason: "it is published already", merged: true });
+    expect(calls[0]).toEqual(["gh", "pr", "view", "7", "-R", "o/blog", "--json", "state,headRefOid,statusCheckRollup"]);
     calls.length = 0;
-    await mergePost(settings, 7, run({}, calls));
-    expect(calls).toEqual([["gh", "pr", "merge", "7", "-R", "o/blog", "--squash", "--delete-branch"], ["git", "fetch", "origin", "main"], ["git", "checkout", "-f", "-B", "main", "origin/main"]]);
+    await mergePost(settings, 7, "abc", run({}, calls));
+    expect(calls).toEqual([["gh", "pr", "merge", "7", "-R", "o/blog", "--squash", "--delete-branch", "--match-head-commit", "abc"], ["git", "fetch", "origin", "main"], ["git", "checkout", "-f", "-B", "main", "origin/main"]]);
   });
 });
 
@@ -148,7 +154,7 @@ function service(over: Record<string, unknown> = {}): GhostpenSettings {
   return settings;
 }
 const draftOf = (settings: GhostpenSettings) => readShortlists(settings.dataDir).weeks["2026-10-26"]!.items[0]!.draft;
-const pr = { number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostpen/x" };
+const pr = { number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostpen/x", head: "abc" };
 
 describe("drafting after a Write", () => {
   it("drafts, opens the pull request and starts its review", async () => {

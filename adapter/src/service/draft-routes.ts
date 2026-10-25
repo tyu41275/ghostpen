@@ -52,8 +52,8 @@ export function draftPosted(settings: GhostpenSettings, body: Record<string, unk
 }
 
 export interface PublishOps {
-  check: (s: PublishSettings, pr: number) => Promise<{ reason: string | null; merged: boolean }>;
-  merge: (s: PublishSettings, pr: number) => Promise<void>;
+  check: (s: PublishSettings, pr: number, head: string) => Promise<{ reason: string | null; merged: boolean }>;
+  merge: (s: PublishSettings, pr: number, head: string) => Promise<void>;
 }
 
 /** Publish: checks the pull request now and answers; a ready one merges in the background and its card follows. */
@@ -66,9 +66,9 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (item.draft.status === "published") return { status: 200, body: { reply: "It is on the blog already." } };
   if (item.draft.status === "publishing") return { status: 200, body: { reply: "It is being published now." } };
   if (item.draft.status !== "ready" || !item.draft.pr || !settings.publish) return { status: 200, body: { refused: "This draft is not ready to publish, so nothing was done." } };
-  const publish = settings.publish, pr = item.draft.pr.number;
+  const publish = settings.publish, pr = item.draft.pr.number, head = item.draft.pr.head;
   let checked: { reason: string | null; merged: boolean };
-  try { checked = await ops.check(publish, pr); } catch (error) {
+  try { checked = await ops.check(publish, pr, head); } catch (error) {
     return { status: 200, body: { refused: `ghostpen could not check the pull request, so nothing changed: ${firstLine(error)}` } };
   }
   // The check took a moment: the draft must still be the one checked (no Edit, no other press since), or nothing is done.
@@ -79,7 +79,7 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (checked.merged) { setStatus(settings, body, now(), "published"); return { status: 200, body: { reply: "It is on the blog already." } }; }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");
-  void ops.merge(publish, pr).then(() => setStatus(settings, body, now(), "published"),
+  void ops.merge(publish, pr, head).then(() => setStatus(settings, body, now(), "published"),
     (error: unknown) => setStatus(settings, body, now(), "ready", `the merge failed: ${firstLine(error)}`));
   return { status: 200, body: { reply: "Publishing now; its card says when it is on the blog." } };
 }

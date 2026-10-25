@@ -34,7 +34,8 @@ export interface PublishSettings {
   reviewStatus: string;
 }
 
-export interface PostPr { number: number; url: string; branch: string; preview?: string }
+/** `head`: the commit ghostpen pushed; Publish merges only that commit, so a review of an earlier draft never counts. */
+export interface PostPr { number: number; url: string; branch: string; head: string; preview?: string }
 
 export const branchOf = (draft: Draft) => `ghostpen/${slugOf(draft.title)}`;
 
@@ -69,18 +70,19 @@ export async function openPostPr(settings: PublishSettings, draft: Draft, date: 
   }
   await run(["git", "add", "--", ...paths], { cwd });
   await run(["git", "commit", "-m", `Post: ${draft.title} (drafted by ghostpen)`], { cwd });
+  const head = (await run(["git", "rev-parse", "HEAD"], { cwd })).trim();
   await run(["git", "push", "-f", "origin", branch], { cwd });
   const preview = previewOf(settings, branch);
   const open = JSON.parse(await run(["gh", "pr", "list", "-R", settings.repo, "--head", branch, "--state", "open", "--json", "number,url"], { cwd })) as Array<{ number: number; url: string }>;
   if (open[0]) {
     await run(["gh", "pr", "edit", String(open[0].number), "-R", settings.repo, "--title", `Post: ${draft.title}`, "--body", prBody(draft, preview)], { cwd });
-    return { number: open[0].number, url: open[0].url, branch, ...(preview ? { preview } : {}) };
+    return { number: open[0].number, url: open[0].url, branch, head, ...(preview ? { preview } : {}) };
   }
   const url = (await run(["gh", "pr", "create", "-R", settings.repo, "--base", settings.base, "--head", branch, "--title", `Post: ${draft.title}`,
     "--body", prBody(draft, preview)], { cwd })).trim().split("\n").pop()!;
   const number = Number(/\/pull\/(\d+)/u.exec(url)?.[1]);
   if (!number) throw new Error("gh did not say which pull request it opened");
-  return { number, url, branch, ...(preview ? { preview } : {}) };
+  return { number, url, branch, head, ...(preview ? { preview } : {}) };
 }
 
 /** Starts the operator's review of pull request `pr`, detached; its output goes to `logFile`. Unset: nothing starts. */
@@ -99,7 +101,7 @@ const PASSED = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
 const RUNNING = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"]);
 
 interface Rollup { __typename?: string; context?: string; name?: string; state?: string; status?: string; conclusion?: string }
-interface PrView { state: string; statusCheckRollup: Rollup[] }
+interface PrView { state: string; headRefOid?: string; statusCheckRollup: Rollup[] }
 
 /** Why pull request `pr` cannot be published yet, in plain words, or null when it can. */
 export function notReady(view: PrView, reviewStatus: string): string | null {
@@ -120,16 +122,22 @@ export function notReady(view: PrView, reviewStatus: string): string | null {
   return null;
 }
 
-/** Whether pull request `pr` can be published: null when it can, else why not; `merged` when it is on the blog already. */
-export async function checkPost(settings: PublishSettings, pr: number, run: Run = runIn): Promise<{ reason: string | null; merged: boolean }> {
-  const view = JSON.parse(await run(["gh", "pr", "view", String(pr), "-R", settings.repo, "--json", "state,statusCheckRollup"], { cwd: settings.repoDir })) as PrView;
+/**
+ * Whether pull request `pr` can be published: null when it can, else why not; `merged` when it is on the blog already.
+ * Its head must be `head`, the commit ghostpen pushed for the current draft: statuses belong to a commit, so the review
+ * read is that draft's own, never an earlier draft's.
+ */
+export async function checkPost(settings: PublishSettings, pr: number, head: string, run: Run = runIn): Promise<{ reason: string | null; merged: boolean }> {
+  const view = JSON.parse(await run(["gh", "pr", "view", String(pr), "-R", settings.repo, "--json", "state,headRefOid,statusCheckRollup"], { cwd: settings.repoDir })) as PrView;
+  if (view.state === "OPEN" && view.headRefOid !== head) return { reason: "the pull request does not hold the current draft yet (or someone else changed it)", merged: false };
   return { reason: notReady(view, settings.reviewStatus), merged: view.state === "MERGED" };
 }
 
 /** Merges pull request `pr` (already checked), then brings the clone back to the base so the new post is indexed. */
-export async function mergePost(settings: PublishSettings, pr: number, run: Run = runIn): Promise<void> {
+export async function mergePost(settings: PublishSettings, pr: number, head: string, run: Run = runIn): Promise<void> {
   const cwd = settings.repoDir;
-  await run(["gh", "pr", "merge", String(pr), "-R", settings.repo, "--squash", "--delete-branch"], { cwd });
+  // --match-head-commit: GitHub refuses the merge if anything was pushed after the check.
+  await run(["gh", "pr", "merge", String(pr), "-R", settings.repo, "--squash", "--delete-branch", "--match-head-commit", head], { cwd });
   await run(["git", "fetch", "origin", settings.base], { cwd });
   await run(["git", "checkout", "-f", "-B", settings.base, `origin/${settings.base}`], { cwd });
 }

@@ -20,7 +20,7 @@ export interface DraftState {
   /** The check report in plain words. */
   report?: string;
   problem?: string;
-  pr?: { number: number; url: string; branch: string; preview?: string };
+  pr?: { number: number; url: string; branch: string; head: string; preview?: string };
   /** The card posted about this draft, and for which round and status. */
   card?: Posted & { round: number; status: string };
   at: string;
