@@ -108,7 +108,7 @@ ghostpen is part of the EcoOrchestra ecosystem. It consumes AI-generated content
 
 1. **Source material**: EcoOrchestra artifacts (vision briefs in `decisions/vision-briefs/`, code reviews in `reviews/`, daily standups in `standups/`) provide raw material for blog topics
 2. **LLM routing**: `scripts/generate_post.py` calls the llm-router HTTP API at `http://localhost:8321/route` to generate blog post content — llm-router handles provider selection and rate limiting
-3. **Post-ship hook (retired, Obsidian ADR 0101)**: ghostpen is becoming an optional chatter adapter in `adapter/` (see `adapter/docs/adapter.md`). It ranks topics by value (`adapter/docs/ranking.md`; `node adapter/dist/cli/rank.js <settings>`), shown on its app page. Its service makes the weekly shortlist (`adapter/docs/shortlist.md`); posting the cards in chatter (rest of ghostpen#89) and drafting (#90) are still to come, replacing the after-each-ship trigger.
+3. **Post-ship hook (retired, Obsidian ADR 0101)**: ghostpen is becoming an optional chatter adapter in `adapter/` (see `adapter/docs/adapter.md`). It ranks topics by value (`adapter/docs/ranking.md`; `node adapter/dist/cli/rank.js <settings>`), shown on its app page. It proposes a weekly shortlist in its channel with Write, Skip and Not yet (`adapter/docs/shortlist.md`). Drafting after Write (#90) is still to come. This replaces the after-each-ship trigger.
 4. **Output**: Generator writes `.mdx` files to `data/blog/` with `aiGenerated: true` and `draft: true` set automatically
 
 ### Dependencies
