@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readFeedback } from "../src/feedback/store.js";
 import { readChoices } from "../src/ranking/choices.js";
 import { RANKING_FILE, type RankingView } from "../src/ranking/run.js";
 import { createGhostpenServer } from "../src/service/server.js";
@@ -100,19 +101,29 @@ describe("the adapter routes", () => {
     const { call, dataDir, setNow } = await service();
     const { week } = (await call("GET", "/v1/adapter/shortlist")).body;
     expect((await call("POST", "/v1/adapter/shortlist/posted", { week, index: 1, channelRef: "c1", messageRef: "m1" })).body).toEqual({ ok: true });
-    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "1234567" })).body.refused)
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", reason: "useful", user: "1234567" })).body.refused)
       .toBe("Only the operator can answer ghostpen's shortlist, so nothing was done.");
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: " ", user: "234652039735541760" })).body.refused)
-      .toBe("A Skip needs a one-line reason, so nothing was done.");
-    const wrote = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "234652039735541760" });
+      .toBe("A Skip needs a reason, so nothing was done.");
+    // Every press needs its reason now, a Write and a Not yet too (ADR 0101, amended 2026-10-25).
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "234652039735541760" })).body.refused)
+      .toBe("A Write needs a reason, so nothing was done.");
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "", user: "234652039735541760" })).body.refused)
+      .toBe("A Not yet needs a reason, so nothing was done.");
+    const wrote = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", reason: "Others would find it useful", chip: true, user: "234652039735541760" });
     expect(wrote.body.posted).toEqual({ channelRef: "c1", messageRef: "m1" });
-    expect(wrote.body.text).toMatch(/\*\*Write: next to draft\*\* \(<@234652039735541760>\)$/u);
+    expect(wrote.body.text).toMatch(/\*\*Write: next to draft\*\* \(<@234652039735541760>: Others would find it useful\)$/u);
     const skipped = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: "too narrow", user: "234652039735541760" });
     expect(skipped.body.text).toMatch(/\*\*Skipped\*\* \(<@234652039735541760>: too narrow\)$/u);
-    await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", user: "234652039735541760" });
+    await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "waiting", user: "234652039735541760" });
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "skip", reason: "x", user: "234652039735541760" })).body.already).toBe(true);
     const choices = readChoices(dataDir);
-    expect(choices.choices.map((c) => [c.candidate, c.choice, c.reason])).toEqual([["a", "write", ""], ["b", "skip", "too narrow"], ["background:ci", "not-yet", ""]]);
+    expect(choices.choices.map((c) => [c.candidate, c.choice, c.reason])).toEqual([["a", "write", "Others would find it useful"], ["b", "skip", "too narrow"],
+      ["background:ci", "not-yet", "waiting"]]);
+    // Every reason is kept for chatter's operator intake, with whether it was one of the card's choices.
+    expect(readFeedback(dataDir).map((e) => [e.topic, e.kind, e.action, e.chip, e.text, e.intake])).toEqual([
+      ["a", "reason", "write", true, "Others would find it useful", "pending"], ["b", "reason", "skip", false, "too narrow", "pending"],
+      ["background:ci", "reason", "later", false, "waiting", "pending"]]);
     expect(choices.bookings.map((b) => b.decision)).toEqual(["a"]); // a decision post written books its post-mortem
     // Next week: written and skipped are gone, Not yet comes back.
     setNow("2026-11-02T14:05:00Z");

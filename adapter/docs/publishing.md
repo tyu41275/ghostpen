@@ -11,7 +11,7 @@ Tim approves every post. Nothing merges without his Publish press, and Publish l
   - An edited draft keeps its first branch, and so its pull request, even when its title changes.
   - With no `settings.publish`, a ready draft stays in ghostpen.
 - **The draft card** (`src/service/draft-routes.ts`): the shortlist route hands the adapter each item's card text and which buttons it gets. **Publish** comes only on a ready draft with a pull request. **Edit** comes on ready, failed and stopped drafts. Held drafts wait for their background post.
-- **Publish** (`POST /v1/adapter/draft/publish`, the operator only, from the newest card: each press names its draft's round):
+- **Publish** (`POST /v1/adapter/draft/publish`, the operator only, from the newest card: each press names its draft's round, and carries its reason, picked or typed; `docs/feedback.md`):
   - It checks the pull request at once. It merges only when the review's status (`reviewStatus`, default `independent-review`) has passed and no other check is failing or still running.
   - Statuses belong to a commit, so ghostpen keeps the commit it pushed for the current draft. It checks and merges only that commit (`--match-head-commit`). After an Edit, the earlier draft's approval never counts: the new commit needs its own review.
   - Otherwise it says why in plain words ("the independent review is still running", "these checks failed: build") and changes nothing.

@@ -4,7 +4,8 @@
  *
  *   GET  /v1/adapter/shortlist           this week's shortlist (made on first ask from the last ranking), where to post
  *   POST /v1/adapter/shortlist/posted    {week, index, channelRef, messageRef}: a card was posted
- *   POST /v1/adapter/shortlist/answer    {week, index, action: write|skip|later, reason?, user}: a press, the operator's only
+ *   POST /v1/adapter/shortlist/answer    {week, index, action: write|skip|later, reason, chip?, user}: a press with its reason,
+ *                                        the operator's only
  *   POST /v1/adapter/draft/...           a Write's draft: its card, Publish and Edit (`draft-routes.ts`)
  *
  * Every answer is JSON. The service decides; the adapter only posts and relays presses.
@@ -16,6 +17,7 @@ import { isRankingView, RANKING_FILE } from "../ranking/run.js";
 import type { GhostpenSettings } from "../settings.js";
 import { picks } from "../shortlist/picks.js";
 import { currentWeek } from "../shortlist/schedule.js";
+import { addFeedback } from "../feedback/store.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import { answeredText, readShortlists, saveShortlists, type Action } from "../shortlist/state.js";
 import { draftCard, draftEdit, draftPosted, draftPublish } from "./draft-routes.js";
@@ -80,12 +82,14 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
   const action = body.action as Action;
   if (!ACTIONS.includes(action)) return { status: 400, body: { error: "action must be write, skip or later" } };
   const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
-  if (action === "skip" && !reason) return { status: 200, body: { refused: "A Skip needs a one-line reason, so nothing was done." } };
+  // Every press carries its reason (ADR 0101, amended 2026-10-25): a choice on the card, or typed through the button.
+  if (!reason) return { status: 200, body: { refused: `${action === "write" ? "A Write" : action === "skip" ? "A Skip" : "A Not yet"} needs a reason, so nothing was done.` } };
   const ranking = existsSync(join(settings.dataDir, RANKING_FILE)) ? JSON.parse(readFileSync(join(settings.dataDir, RANKING_FILE), "utf8")) as unknown : null;
   const entry = isRankingView(ranking) ? ranking.entries.find((e) => e.id === found.id) : undefined;
   recordChoice(settings.dataDir, { candidate: found.id, choice: action === "later" ? "not-yet" : action, reason, scores: entry?.scores ?? [] },
     found.kind === "decision" ? "decision" : "post-mortem", entry?.title ?? found.id, now);
   found.answer = { action, reason, by: String(body.user), at: now.toISOString() };
+  addFeedback(settings.dataDir, { at: now.toISOString(), by: String(body.user), topic: found.id, kind: "reason", action, chip: body.chip === true, text: reason });
   const drafting = action === "write" && !!jobs;
   if (drafting) found.draft = { status: "queued", round: 1, at: now.toISOString() };
   saveShortlists(settings.dataDir, state);

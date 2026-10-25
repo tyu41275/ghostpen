@@ -6,8 +6,9 @@
  * changes through chatter's private form). Each button names its draft's round, so an old card can't act on a new
  * draft. The service decides everything; nothing here throws into chatter.
  */
+import { chipOf, chipOptions } from "../feedback/chips.js";
 import { callAdapterRoute } from "./service.js";
-import type { Button, PressEvent, ShortlistContext } from "./shortlist.js";
+import type { Button, PressEvent, Select, ShortlistContext } from "./shortlist.js";
 
 export const DRAFT_PREFIX = "draft:";
 const OWNER = "ghostpen.";
@@ -19,6 +20,11 @@ export interface DraftItem { index: number; draft?: DraftView }
 export const draftButtons = (week: string, index: number, view: DraftView): Button[] => [
   ...(view.publish ? [{ label: "Publish", style: "success" as const, id: `${OWNER}${DRAFT_PREFIX}publish:${week}:${index}:${view.round}` }] : []),
   ...(view.edit ? [{ label: "Edit", style: "secondary" as const, id: `${OWNER}${DRAFT_PREFIX}edit:${week}:${index}:${view.round}` }] : [])];
+
+/** A ready draft's reason choices for Publish (ADR 0101, amended 2026-10-25): one pick publishes with that reason. */
+export const draftSelects = (week: string, index: number, view: DraftView): Select[] => (view.publish
+  ? [{ id: `${OWNER}${DRAFT_PREFIX}reason:${week}:${index}:${view.round}`, placeholder: "Pick a reason to publish, or press Publish to type one",
+    options: chipOptions(["publish"]) }] : []);
 
 /** One heartbeat's draft cards for the week; returns how many were posted. */
 export async function syncDrafts(ctx: ShortlistContext, week: string, channel: string, items: DraftItem[], redrawn: Set<string>,
@@ -33,18 +39,20 @@ export async function syncDrafts(ctx: ShortlistContext, week: string, channel: s
     if (card && card.round === draft.round && card.status === draft.status) {
       if (buttons.length && !redrawn.has(key) && ctx.updatePostedMessage) {
         redrawn.add(key);
-        if (!await ctx.updatePostedMessage(card.channelRef, card.messageRef, { text: draft.text }, buttons)) ctx.log("warn", "ghostpen.draft.redrawFailed", { week, index });
+        if (!await ctx.updatePostedMessage(card.channelRef, card.messageRef, { text: draft.text, selects: draftSelects(week, index, draft) }, buttons)) {
+          ctx.log("warn", "ghostpen.draft.redrawFailed", { week, index });
+        }
       }
       continue;
     }
-    const refs = await ctx.postToChannel(channel, { text: draft.text }, buttons);
+    const refs = await ctx.postToChannel(channel, { text: draft.text, selects: draftSelects(week, index, draft) }, buttons);
     if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${channel}`);
     posted += 1;
     redrawn.add(key);
     await callAdapterRoute(ctx.config, "POST", "draft/posted", { week, index, round: draft.round, status: draft.status, channelRef: refs.channelRef, messageRef: refs.messageRef });
     // The card before it keeps its words for the record but loses its buttons: only the newest card acts.
     if (card && ctx.updatePostedMessage) {
-      await ctx.updatePostedMessage(card.channelRef, card.messageRef, { text: "This draft moved on; the newest card about it is below." }, []).catch(() => false);
+      await ctx.updatePostedMessage(card.channelRef, card.messageRef, { text: "This draft moved on; the newest card about it is below.", selects: [] }, []).catch(() => false);
     }
     ctx.log("info", "ghostpen.draft.posted", { week, index, round: draft.round, status: draft.status });
   }
@@ -58,16 +66,24 @@ export async function answerDraftPress(event: PressEvent, ctx: ShortlistContext)
   if (event?.type !== "button_click" || typeof event.button_id !== "string") return undefined;
   const id = event.button_id.startsWith(OWNER) ? event.button_id.slice(OWNER.length) : event.button_id;
   if (!id.startsWith(DRAFT_PREFIX)) return undefined;
-  const [action, week, index, round] = id.slice(DRAFT_PREFIX.length).split(":");
-  if (!["publish", "edit"].includes(action ?? "") || !week || !/^\d+$/u.test(index ?? "") || !/^\d+$/u.test(round ?? "")) {
+  const [pressed, week, index, round] = id.slice(DRAFT_PREFIX.length).split(":");
+  if (!["publish", "edit", "reason"].includes(pressed ?? "") || !week || !/^\d+$/u.test(index ?? "") || !/^\d+$/u.test(round ?? "")) {
     return { handled: true, reply_text: "ghostpen does not know that button, so nothing was done." };
   }
-  const notes = typeof event.text === "string" ? event.text : undefined;
-  // An Edit asks for the changes first; chatter sends the same press again carrying them as `text`.
-  if (action === "edit" && notes === undefined) {
+  const chip = pressed === "reason" ? chipOf(Array.isArray(event.values) ? event.values[0] : undefined, ["publish"]) : null;
+  if (pressed === "reason" && !chip) return { handled: true, reply_text: "ghostpen does not know that reason, so nothing was done." };
+  const action = chip ? "publish" : pressed!;
+  const typed = typeof event.text === "string" ? event.text : undefined;
+  // Edit asks for the changes and Publish for its reason first; chatter sends the same press again carrying them as `text`.
+  if (action === "edit" && typed === undefined) {
     return { handled: true, ask: { title: "What should change?", label: "The changes, in plain words", placeholder: "e.g. shorter intro; explain what Relay is", maxLength: 2000 } };
   }
-  const body = { week, index: Number(index), round: Number(round), user: typeof event.user_id === "string" ? event.user_id : "", ...(notes !== undefined ? { notes } : {}) };
+  if (action === "publish" && !chip && typed === undefined) {
+    return { handled: true, ask: { title: "Why publish it now?", label: "One line: why it is ready", placeholder: "e.g. accurate, and a friend could follow it", maxLength: 200 } };
+  }
+  const user = typeof event.user_id === "string" ? event.user_id : "";
+  const body = { week, index: Number(index), round: Number(round), user,
+    ...(action === "edit" ? { notes: typed } : { reason: chip?.reason ?? typed, ...(chip ? { chip: true } : {}) }) };
   // Publish can wait on a merge: the service answers when it is done (the adapter's route timeout covers it).
   let answered: { refused?: string; reply?: string };
   try {
