@@ -7,22 +7,25 @@
 #
 #   adapter/scripts/install-host.sh --instance personal-comms-host --root ~/.ductor/host-chatter/ghostpen \
 #     --port 8794 --dropin-dir ~/.ductor/host-chatter/adapters.d \
-#     --stack <Obsidian checkout>/ensemble/personal-instances/personal-comms-host/config/stack.yaml
+#     --stack <Obsidian checkout>/ensemble/personal-instances/personal-comms-host/config/stack.yaml \
+#     [--chatter-facts ~/.ductor/host-chatter/runtime/data/instance-facts.json]
 set -euo pipefail
 # Tests only: a stand-in for systemctl; skipping the build of an already built checkout; a shorter wait for a restarted
 # service to answer.
 SYSTEMCTL="${GHOSTPEN_INSTALL_SYSTEMCTL:-systemctl}"
 
-INSTANCE= ROOT= PORT= DROPIN= STACK=
+INSTANCE= ROOT= PORT= DROPIN= STACK= FACTS=
 while [ $# -gt 0 ]; do
   case "$1" in
     --instance) INSTANCE=$2 ;; --root) ROOT=$2 ;; --port) PORT=$2 ;; --dropin-dir) DROPIN=$2 ;; --stack) STACK=$2 ;;
+    --chatter-facts) FACTS=$2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift 2
 done
 for v in INSTANCE ROOT PORT DROPIN STACK; do [ -n "${!v}" ] || { echo "missing --${v,,}" >&2; exit 2; }; done
 for v in ROOT DROPIN; do case "${!v}" in /*) ;; *) echo "--${v,,} must be absolute" >&2; exit 2 ;; esac; done
+case "$FACTS" in ""|/*) ;; *) echo "--chatter-facts must be absolute" >&2; exit 2 ;; esac
 CHECKOUT="$ROOT/checkout" CONFIG="$ROOT/config" DATA="$ROOT/data"
 ADAPTER="$CHECKOUT/adapter"
 UNIT="ghostpen-$INSTANCE.service"
@@ -46,6 +49,14 @@ SETTINGS="$CONFIG/settings.json"
   "$INSTANCE" "$PORT" "$DATA" "$APP_KEY" > "$SETTINGS"
 # The settings are kept across updates, and the service listens on their port: the unit and chatter's health check
 # must name the same one, so a different --port is refused rather than half applied.
+# The key the adapter sends on the service's adapter routes (ghostpen#89), and chatter's facts (where the channel chatter
+# made for ghostpen is read): settings made before either existed gain them; every value already there is kept.
+ADAPTER_KEY="$CONFIG/adapter.key"
+[ -s "$ADAPTER_KEY" ] || node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))' > "$ADAPTER_KEY"
+node -e 'const fs=require("node:fs"); const [f,k,facts]=process.argv.slice(1); const s=JSON.parse(fs.readFileSync(f,"utf8")); let changed=false;
+  if (s.adapterKeyFile === undefined) { s.adapterKeyFile=k; changed=true; }
+  if (facts && s.instanceFactsFile === undefined) { s.instanceFactsFile=facts; changed=true; }
+  if (changed) { fs.writeFileSync(f+".tmp",JSON.stringify(s,null,2)+"\n"); fs.renameSync(f+".tmp",f); }' "$SETTINGS" "$ADAPTER_KEY" "$FACTS"
 KEPT_PORT=$(node -e 'process.stdout.write(String(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).port))' "$SETTINGS")
 [ "$KEPT_PORT" = "$PORT" ] || { echo "--port $PORT differs from port $KEPT_PORT in $SETTINGS: edit the settings file to move ghostpen" >&2; exit 1; }
 KEPT_KEY=$(node -e 'process.stdout.write(String(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).appIdentityKeyFile ?? ""))' "$SETTINGS")

@@ -30,7 +30,7 @@ function home(): string {
 }
 
 /** Runs the install with a systemctl stand-in; answers systemctl's calls, or rejects with the script's error. */
-async function install(dir: string, options: { active?: boolean; port?: string; stack?: string } = {}): Promise<string[]> {
+async function install(dir: string, options: { active?: boolean; port?: string; stack?: string; facts?: string } = {}): Promise<string[]> {
   const calls = join(dir, "systemctl.calls");
   writeFileSync(calls, "");
   const stub = join(dir, "systemctl");
@@ -38,7 +38,8 @@ async function install(dir: string, options: { active?: boolean; port?: string; 
   const stack = join(dir, "stack.yaml");
   writeFileSync(stack, options.stack ?? "version: 1\ninstance: personal-comms-host\nadapters: [tempo, ghostpen]\n");
   await promisify(execFile)("bash", [script, "--instance", "personal-comms-host", "--root", join(dir, "ghostpen"),
-    "--port", options.port ?? "8794", "--dropin-dir", join(dir, "adapters.d"), "--stack", stack], {
+    "--port", options.port ?? "8794", "--dropin-dir", join(dir, "adapters.d"), "--stack", stack,
+    ...(options.facts ? ["--chatter-facts", options.facts] : [])], {
     env: { PATH: process.env.PATH, HOME: dir, XDG_CONFIG_HOME: join(dir, "config"), GHOSTPEN_INSTALL_SYSTEMCTL: stub,
       GHOSTPEN_INSTALL_SKIP_BUILD: "1", GHOSTPEN_INSTALL_HEALTH_WAIT: "1" } });
   return readFileSync(calls, "utf8").trim().split("\n").filter(Boolean);
@@ -55,9 +56,13 @@ describe("install-host.sh", () => {
     const at = await port("personal-comms-host");
     expect(await install(dir, { port: at })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
     const appKey = join(config, "app-identity.key");
-    expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey, sources: { topics: [], references: [] } });
+    const adapterKey = join(config, "adapter.key");
+    expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey,
+      adapterKeyFile: adapterKey, sources: { topics: [], references: [] } });
     expect(readAppKey(appKey).length).toBe(32);
-    for (const file of [settingsFile, appKey]) expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(readAppKey(adapterKey, "adapterKeyFile").length).toBe(32);
+    expect(readFileSync(adapterKey, "utf8")).not.toBe(readFileSync(appKey, "utf8")); // two keys, never one reused
+    for (const file of [settingsFile, appKey, adapterKey]) expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(join(config, "chatter-adapter.json"), "utf8"))).toEqual({ settingsFile });
     expect(readFileSync(join(dir, "config", "systemd", "user", UNIT), "utf8"))
       .toMatch(new RegExp(`ExecStart=\\S+ ${join(root, "checkout")}/adapter/dist/service/main\\.js ${settingsFile}\\n`, "u"));
@@ -75,6 +80,21 @@ describe("install-host.sh", () => {
     expect((await install(dir, { active: true, port: at })).slice(-2)).toEqual([`--user is-active --quiet ${UNIT}`, `--user restart ${UNIT}`]);
     expect(readSettings(settingsFile).dataDir).toBe(join(dir, "kept"));
     expect(readFileSync(appKey, "utf8")).toBe(key);
+  });
+
+  it("gives settings made before the shortlist its adapter key and chatter's facts, keeping every value already there", async () => {
+    const dir = home(), settingsFile = join(dir, "ghostpen", "config", "settings.json");
+    await install(dir);
+    const before = JSON.parse(readFileSync(settingsFile, "utf8"));
+    delete before.adapterKeyFile;
+    writeFileSync(settingsFile, JSON.stringify({ ...before, dataDir: join(dir, "kept") }));
+    await install(dir, { facts: "/run/chatter/instance-facts.json" });
+    const after = readSettings(settingsFile);
+    expect(after.adapterKeyFile).toBe(join(dir, "ghostpen", "config", "adapter.key"));
+    expect(after.instanceFactsFile).toBe("/run/chatter/instance-facts.json");
+    expect(after.dataDir).toBe(join(dir, "kept"));
+    await install(dir, { facts: "/other/facts.json" });
+    expect(readSettings(settingsFile).instanceFactsFile).toBe("/run/chatter/instance-facts.json"); // kept, never overwritten
   });
 
   it("installs nothing where the instance's stack.yaml does not allow ghostpen", async () => {

@@ -13,6 +13,12 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
   - **`/v1/adapter/…`:** the shortlist routes the chatter adapter calls (`docs/shortlist.md`). They open only to a request carrying the adapter key (`adapterKeyFile`); anyone else gets 404.
   - Every other path is 404.
 - **Settings** (`src/settings.ts`): `instance`, `port` (1024–65535), `dataDir` (absolute, must exist), and an optional `appIdentityKeyFile`. They're written from the operator's own config; no machine-specific value lives in code. Errors name the field, never the value.
+- **Shortlist** (`src/adapter/shortlist.ts`, ghostpen#89):
+  - A heartbeat every 10 minutes (one beat at a time) asks the service for this week's shortlist (`docs/shortlist.md`). It posts each card not yet posted to ghostpen's channel, keeps where it went, and pings the operator on the week's first card only.
+  - A card posted before this adapter run and not yet answered is redrawn once, which re-arms its buttons after a chatter restart. An answered card is never redrawn.
+  - Buttons are **Write**, **Skip** (it first asks for a one-line reason through chatter's private form, then the same press comes back with it) and **Not yet**. Their ids name the owner first (`ghostpen.shortlist:<action>:<week>:<index>`).
+  - The service decides who may answer and keeps the answer. The card is then edited to show the answer, without buttons.
+  - The adapter reaches the service on loopback with the adapter key (`src/adapter/service.ts`). Nothing here throws into chatter.
 - **`status`** (a command and an agent tool) replies `ghostpen for <instance> is on and answering.`, or `ghostpen is not answering (<why>).` It never throws.
 - **Version:** the adapter's `version` is the chatter adapter API it's written against (1.0.0), not ghostpen's own (`src/version.ts`).
 - **Shortlist:** `docs/shortlist.md`: the weekly proposals, the routes the adapter calls, and who may answer.
