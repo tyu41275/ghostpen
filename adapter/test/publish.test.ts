@@ -267,7 +267,8 @@ describe("the draft's card, Publish and Edit", () => {
     expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: " " }, clock, ready)).body.refused).toBe("A Publish needs a reason, so nothing was done.");
     expect(merges).toBe(0);
     expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, clock, ready)).body.reply).toBe("Publishing now; its card says when it is on the blog.");
-    expect(readFeedback(settings.dataDir).map((e) => [e.kind, e.action, e.text])).toEqual([["reason", "publish", "ready"]]);
+    // Every operator press with its reason is kept, the refused ones (review still running, a failed check) too.
+    expect(readFeedback(settings.dataDir).map((e) => [e.kind, e.action, e.text])).toEqual([["reason", "publish", "ready"], ["reason", "publish", "ready"], ["reason", "publish", "ready"]]);
     expect(draftOf(settings)?.status).toBe("publishing");
     expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, clock, ready)).body.reply).toBe("It is being published now.");
     expect(merges).toBe(1);

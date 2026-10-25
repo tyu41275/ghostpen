@@ -117,11 +117,13 @@ describe("the adapter routes", () => {
     expect(skipped.body.text).toMatch(/\*\*Skipped\*\* \(<@234652039735541760>: too narrow\)$/u);
     await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "waiting", user: "234652039735541760" });
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "skip", reason: "x", user: "234652039735541760" })).body.already).toBe(true);
+    // A reason given on a card answered already is kept too; the answer itself does not change.
+    expect(readFeedback(dataDir).at(-1)).toMatchObject({ topic: "a", action: "skip", text: "x" });
     const choices = readChoices(dataDir);
     expect(choices.choices.map((c) => [c.candidate, c.choice, c.reason])).toEqual([["a", "write", "Others would find it useful"], ["b", "skip", "too narrow"],
       ["background:ci", "not-yet", "waiting"]]);
     // Every reason is kept for chatter's operator intake, with whether it was one of the card's choices.
-    expect(readFeedback(dataDir).map((e) => [e.topic, e.kind, e.action, e.chip, e.text, e.intake])).toEqual([
+    expect(readFeedback(dataDir).slice(0, 3).map((e) => [e.topic, e.kind, e.action, e.chip, e.text, e.intake])).toEqual([
       ["a", "reason", "write", true, "Others would find it useful", "pending"], ["b", "reason", "skip", false, "too narrow", "pending"],
       ["background:ci", "reason", "later", false, "waiting", "pending"]]);
     expect(choices.bookings.map((b) => b.decision)).toEqual(["a"]); // a decision post written books its post-mortem

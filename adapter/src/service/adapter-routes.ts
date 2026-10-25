@@ -78,18 +78,19 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
   const { state, found } = item(settings, body);
   if (!found) return { status: 404, body: { error: "no such shortlist item" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { refused: "Only the operator can answer ghostpen's shortlist, so nothing was done." } };
-  if (found.answer) return { status: 200, body: { text: answeredText(found), posted: found.posted ?? null, already: true } };
   const action = body.action as Action;
   if (!ACTIONS.includes(action)) return { status: 400, body: { error: "action must be write, skip or later" } };
   const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
   // Every press carries its reason (ADR 0101, amended 2026-10-25): a choice on the card, or typed through the button.
   if (!reason) return { status: 200, body: { refused: `${action === "write" ? "A Write" : action === "skip" ? "A Skip" : "A Not yet"} needs a reason, so nothing was done.` } };
+  // Kept whatever the press does next: a reason given on a card answered already still teaches.
+  addFeedback(settings.dataDir, { at: now.toISOString(), by: String(body.user), topic: found.id, kind: "reason", action, chip: body.chip === true, text: reason });
+  if (found.answer) return { status: 200, body: { text: answeredText(found), posted: found.posted ?? null, already: true } };
   const ranking = existsSync(join(settings.dataDir, RANKING_FILE)) ? JSON.parse(readFileSync(join(settings.dataDir, RANKING_FILE), "utf8")) as unknown : null;
   const entry = isRankingView(ranking) ? ranking.entries.find((e) => e.id === found.id) : undefined;
   recordChoice(settings.dataDir, { candidate: found.id, choice: action === "later" ? "not-yet" : action, reason, scores: entry?.scores ?? [] },
     found.kind === "decision" ? "decision" : "post-mortem", entry?.title ?? found.id, now);
   found.answer = { action, reason, by: String(body.user), at: now.toISOString() };
-  addFeedback(settings.dataDir, { at: now.toISOString(), by: String(body.user), topic: found.id, kind: "reason", action, chip: body.chip === true, text: reason });
   const drafting = action === "write" && !!jobs;
   if (drafting) found.draft = { status: "queued", round: 1, at: now.toISOString() };
   saveShortlists(settings.dataDir, state);

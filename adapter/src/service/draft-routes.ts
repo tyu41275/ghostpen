@@ -65,11 +65,13 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (!item?.draft) return { status: 404, body: { error: "no such draft" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { refused: OPERATOR_ONLY } };
   if (stale(item.draft, body)) return { status: 200, body: { refused: OLD_CARD } };
+  const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
+  if (!reason) return { status: 200, body: { refused: "A Publish needs a reason, so nothing was done." } };
+  // Kept whatever happens next (published already, not ready yet, a failed check): the reason still teaches.
+  addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
   if (item.draft.status === "published") return { status: 200, body: { reply: "It is on the blog already." } };
   if (item.draft.status === "publishing") return { status: 200, body: { reply: "It is being published now." } };
   if (item.draft.status !== "ready" || !item.draft.pr || !settings.publish) return { status: 200, body: { refused: "This draft is not ready to publish, so nothing was done." } };
-  const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
-  if (!reason) return { status: 200, body: { refused: "A Publish needs a reason, so nothing was done." } };
   const publish = settings.publish, pr = item.draft.pr.number, head = item.draft.pr.head;
   let checked: { reason: string | null; merged: boolean };
   try { checked = await ops.check(publish, pr, head); } catch (error) {
@@ -82,12 +84,10 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   }
   if (checked.merged) {
     setStatus(settings, body, now(), "published");
-    addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
     return { status: 200, body: { reply: "It is on the blog already." } };
   }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");
-  addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
   void ops.merge(publish, pr, head).then(() => setStatus(settings, body, now(), "published"),
     (error: unknown) => setStatus(settings, body, now(), "ready", `the merge failed: ${firstLine(error)}`));
   return { status: 200, body: { reply: "Publishing now; its card says when it is on the blog." } };
