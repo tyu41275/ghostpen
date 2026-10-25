@@ -95,6 +95,9 @@ export function startReview(settings: PublishSettings, pr: number, round: number
   return true;
 }
 
+const PASSED = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+const RUNNING = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"]);
+
 interface Rollup { __typename?: string; context?: string; name?: string; state?: string; status?: string; conclusion?: string }
 interface PrView { state: string; statusCheckRollup: Rollup[] }
 
@@ -108,9 +111,11 @@ export function notReady(view: PrView, reviewStatus: string): string | null {
   if (!review) return "the independent review has not reported yet";
   if (review.result === "PENDING" || review.result === "EXPECTED") return "the independent review is still running";
   if (review.result !== "SUCCESS") return "the independent review asked for changes; press Edit to make them";
-  const failing = checks.filter((c) => ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(c.result)).map((c) => c.name);
-  if (failing.length) return `these checks failed: ${failing.join(", ")}`;
-  const running = checks.filter((c) => c.result === "PENDING" || c.result === "EXPECTED" || c.result === "QUEUED").map((c) => c.name);
+  // Only a known good result passes; anything else (a failure, a check that failed at startup, a stale or unknown
+  // result) blocks, so a result GitHub adds later never slips through.
+  const running = checks.filter((c) => RUNNING.has(c.result)).map((c) => c.name);
+  const failing = checks.filter((c) => !RUNNING.has(c.result) && !PASSED.has(c.result)).map((c) => c.name);
+  if (failing.length) return `these checks did not pass: ${failing.join(", ")}`;
   if (running.length) return `these checks are still running: ${running.join(", ")}`;
   return null;
 }

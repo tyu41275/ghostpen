@@ -70,6 +70,11 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   try { checked = await ops.check(publish, pr); } catch (error) {
     return { status: 200, body: { refused: `ghostpen could not check the pull request, so nothing changed: ${firstLine(error)}` } };
   }
+  // The check took a moment: the draft must still be the one checked (no Edit, no other press since), or nothing is done.
+  const fresh = findItem(readShortlists(settings.dataDir), body.week, body.index)?.draft;
+  if (!fresh || fresh.round !== item.draft.round || fresh.status !== "ready" || fresh.pr?.number !== pr) {
+    return { status: 200, body: { refused: "The draft changed while ghostpen checked it; use the newest card. Nothing was done." } };
+  }
   if (checked.merged) { setStatus(settings, body, now(), "published"); return { status: 200, body: { reply: "It is on the blog already." } }; }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");

@@ -118,7 +118,12 @@ describe("Publish", () => {
     expect(notReady({ state: "OPEN", statusCheckRollup: [] }, r)).toBe("the independent review has not reported yet");
     expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "PENDING")] }, r)).toBe("the independent review is still running");
     expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "FAILURE")] }, r)).toBe("the independent review asked for changes; press Edit to make them");
-    expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "FAILURE" }] }, r)).toBe("these checks failed: build");
+    expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "FAILURE" }] }, r)).toBe("these checks did not pass: build");
+    for (const conclusion of ["STARTUP_FAILURE", "STALE", "SOMETHING_NEW"]) {
+      expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion }] }, r)).toBe("these checks did not pass: build");
+    }
+    expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "lint", status: "COMPLETED", conclusion: "SKIPPED" }] }, r)).toBeNull();
+    expect(notReady({ state: "OPEN", statusCheckRollup: [{ __typename: "CheckRun", name: r, status: "COMPLETED", conclusion: "NEUTRAL" }] }, r)).toBe("the independent review asked for changes; press Edit to make them");
     expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "vercel", status: "IN_PROGRESS" }] }, r)).toBe("these checks are still running: vercel");
     expect(notReady({ state: "OPEN", statusCheckRollup: [status(r, "SUCCESS"), { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS" }] }, r)).toBeNull();
   });
@@ -260,6 +265,21 @@ describe("the draft's card, Publish and Edit", () => {
     expect(draftOf(settings)?.status).toBe("published");
     expect((await draftPublish(settings, { ...at, user: OPERATOR }, clock, ready)).body.reply).toBe("It is on the blog already.");
     expect((await draftPublish(withDraft({ ...base, status: "failed" }), { ...at, user: OPERATOR }, clock, ready)).body.refused).toBe("This draft is not ready to publish, so nothing was done.");
+  });
+
+  it("does nothing when the draft changed while its pull request was being checked", async () => {
+    const settings = withDraft(base);
+    let merges = 0;
+    const reply = await draftPublish(settings, { ...at, round: 1, user: OPERATOR }, () => NOW, {
+      check: async () => {
+        // An Edit lands while the check runs.
+        draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: "Shorter." }, NOW, new DraftJobs(settings, { draft: () => new Promise(() => {}) }));
+        return { reason: null, merged: false };
+      },
+      merge: async () => { merges += 1; } });
+    expect(reply.body.refused).toBe("The draft changed while ghostpen checked it; use the newest card. Nothing was done.");
+    expect(merges).toBe(0);
+    expect(draftOf(settings)).toMatchObject({ status: "drafting", round: 2 });
   });
 
   it("puts a draft back to ready, saying why, when the merge fails; marks one merged elsewhere as published", async () => {
