@@ -5,6 +5,7 @@
  *   GET  /v1/adapter/shortlist           this week's shortlist (made on first ask from the last ranking), where to post
  *   POST /v1/adapter/shortlist/posted    {week, index, channelRef, messageRef}: a card was posted
  *   POST /v1/adapter/shortlist/answer    {week, index, action: write|skip|later, reason?, user}: a press, the operator's only
+ *   POST /v1/adapter/draft/...           a Write's draft: its card, Publish and Edit (`draft-routes.ts`)
  *
  * Every answer is JSON. The service decides; the adapter only posts and relays presses.
  */
@@ -15,7 +16,9 @@ import { isRankingView, RANKING_FILE } from "../ranking/run.js";
 import type { GhostpenSettings } from "../settings.js";
 import { picks } from "../shortlist/picks.js";
 import { currentWeek } from "../shortlist/schedule.js";
+import type { DraftJobs } from "../publish/jobs.js";
 import { answeredText, readShortlists, saveShortlists, type Action } from "../shortlist/state.js";
+import { draftCard, draftEdit, draftPosted, draftPublish } from "./draft-routes.js";
 
 export type Reply = { status: number; body: Record<string, unknown> };
 const ACTIONS: readonly Action[] = ["write", "skip", "later"];
@@ -45,8 +48,11 @@ function shortlistNow(settings: GhostpenSettings, now: Date): Reply {
     state.weeks[week] = { madeAt: now.toISOString(), items: picks(view, readChoices(settings.dataDir), shortlist.count) };
     saveShortlists(settings.dataDir, state);
   }
-  const items = state.weeks[week]!.items.map((item, index) => ({ index, id: item.id, text: answeredText(item),
-    ...(item.posted ? { posted: item.posted } : {}), answered: !!item.answer }));
+  const items = state.weeks[week]!.items.map((item, index) => {
+    const card = item.draft ? draftCard(item.draft, item.id) : null;
+    return { index, id: item.id, text: answeredText(item), ...(item.posted ? { posted: item.posted } : {}), answered: !!item.answer,
+      ...(item.draft && card ? { draft: { round: item.draft.round, status: item.draft.status, ...card, ...(item.draft.card ? { card: item.draft.card } : {}) } } : {}) };
+  });
   return { status: 200, body: { week, channel, operator: shortlist.operator, items } };
 }
 
@@ -66,7 +72,7 @@ export function posted(settings: GhostpenSettings, body: Record<string, unknown>
   return { status: 200, body: { ok: true } };
 }
 
-export function answer(settings: GhostpenSettings, body: Record<string, unknown>, now: Date): Reply {
+export function answer(settings: GhostpenSettings, body: Record<string, unknown>, now: Date, jobs?: DraftJobs): Reply {
   const { state, found } = item(settings, body);
   if (!found) return { status: 404, body: { error: "no such shortlist item" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { refused: "Only the operator can answer ghostpen's shortlist, so nothing was done." } };
@@ -80,16 +86,23 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
   recordChoice(settings.dataDir, { candidate: found.id, choice: action === "later" ? "not-yet" : action, reason, scores: entry?.scores ?? [] },
     found.kind === "decision" ? "decision" : "post-mortem", entry?.title ?? found.id, now);
   found.answer = { action, reason, by: String(body.user), at: now.toISOString() };
+  const drafting = action === "write" && !!jobs;
+  if (drafting) found.draft = { status: "queued", round: 1, at: now.toISOString() };
   saveShortlists(settings.dataDir, state);
-  const next = action === "write" ? "Noted: it is next to draft. Drafting comes with ghostpen#90." : action === "skip" ? "Skipped; the reason will tune the ranking."
-    : "It comes back in a later week.";
+  if (drafting) jobs!.enqueue(body.week as string, body.index as number);
+  const next = action === "write" ? (drafting ? "Drafting it now; the draft comes to this channel when it is ready." : "Noted. No draft writer is set here (settings.draft), so nothing is drafted.")
+    : action === "skip" ? "Skipped; the reason will tune the ranking." : "It comes back in a later week.";
   return { status: 200, body: { text: answeredText(found), posted: found.posted ?? null, reply: next } };
 }
 
-/** Routes one adapter request; null when the path is not an adapter route. */
-export function adapterRoute(settings: GhostpenSettings, method: string, path: string, body: Record<string, unknown>, now: Date): Reply | null {
+/** Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit. */
+export function adapterRoute(settings: GhostpenSettings, method: string, path: string, body: Record<string, unknown>, now: Date,
+  jobs?: DraftJobs): Reply | Promise<Reply> | null {
   if (path === "/v1/adapter/shortlist" && method === "GET") return shortlistNow(settings, now);
   if (path === "/v1/adapter/shortlist/posted" && method === "POST") return posted(settings, body);
-  if (path === "/v1/adapter/shortlist/answer" && method === "POST") return answer(settings, body, now);
+  if (path === "/v1/adapter/shortlist/answer" && method === "POST") return answer(settings, body, now, jobs);
+  if (path === "/v1/adapter/draft/posted" && method === "POST") return draftPosted(settings, body);
+  if (path === "/v1/adapter/draft/publish" && method === "POST") return draftPublish(settings, body, () => new Date());
+  if (path === "/v1/adapter/draft/edit" && method === "POST") return draftEdit(settings, body, now, jobs);
   return path.startsWith("/v1/adapter/") ? { status: 405, body: { error: "not allowed" } } : null;
 }

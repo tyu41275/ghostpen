@@ -9,7 +9,23 @@ import type { ShortlistItem } from "./picks.js";
 export type Action = "write" | "skip" | "later";
 export interface Posted { channelRef: string; messageRef: string }
 export interface Answer { action: Action; reason: string; by: string; at: string }
-export interface WeekItem extends ShortlistItem { posted?: Posted; answer?: Answer }
+/** A Write's draft (ghostpen#90): where it is, its pull request, and the card last posted about it. */
+export interface DraftState {
+  status: "queued" | "drafting" | "ready" | "held" | "failed" | "error" | "publishing" | "published";
+  /** 1 for the first draft, one more for each Edit. */
+  round: number;
+  /** The author's changes waiting for the writer (an Edit press). */
+  notes?: string;
+  title?: string;
+  /** The check report in plain words. */
+  report?: string;
+  problem?: string;
+  pr?: { number: number; url: string; branch: string; head: string; preview?: string };
+  /** The card posted about this draft, and for which round and status. */
+  card?: Posted & { round: number; status: string };
+  at: string;
+}
+export interface WeekItem extends ShortlistItem { posted?: Posted; answer?: Answer; draft?: DraftState }
 export interface ShortlistState { version: 1; weeks: Record<string, { madeAt: string; items: WeekItem[] }> }
 export const SHORTLIST_FILE = "shortlist.json";
 
@@ -33,3 +49,9 @@ const WORDS: Record<Action, string> = { write: "Write: next to draft", skip: "Sk
 export const answeredText = (item: WeekItem): string => item.answer
   ? `${item.text}\n\n**${WORDS[item.answer.action]}** (<@${item.answer.by}>${item.answer.reason ? `: ${item.answer.reason}` : ""})`
   : item.text;
+
+/** Finds a week's item; `null` when there is none. */
+export function findItem(state: ShortlistState, week: unknown, index: unknown): WeekItem | null {
+  if (typeof week !== "string" || typeof index !== "number") return null;
+  return state.weeks[week]?.items[index] ?? null;
+}

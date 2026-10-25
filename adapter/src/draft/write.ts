@@ -16,7 +16,7 @@ import { readSources, type SourcesRead } from "../sources/read.js";
 import type { TopicDocument } from "../sources/types.js";
 import { checkDraft, type CheckReport } from "./checks.js";
 import type { StackGraph } from "./diagrams.js";
-import { parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
+import { editPrompt, parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
 import { playwrightCapture, screenshotRefs, takeScreenshots, type Capturer } from "./screenshots.js";
 import { readStackMap } from "./stack-map.js";
 
@@ -95,7 +95,8 @@ function voice(settings: GhostpenSettings, read: SourcesRead, count: number): Wr
   return out;
 }
 
-export async function draftNow(settings: GhostpenSettings, id: string, seams: DraftSeams = {}): Promise<Draft> {
+/** `edit`: the author's changes to an earlier draft (an Edit press); the writer starts from that draft. */
+export async function draftNow(settings: GhostpenSettings, id: string, seams: DraftSeams = {}, edit?: { previous: Written; notes: string }): Promise<Draft> {
   const draft = settings.draft;
   if (!draft) throw new Error("no draft writer is set (settings.draft)");
   const read = await readSources(settings, seams.now);
@@ -118,7 +119,7 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
   const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));
   const context = { terms: read.terms, index: read.index, graph: map.graph, ...(goal.kind === "background" ? { subject: goal.subject } : {}) };
-  let written = parseWritten(await write(writerPrompt(brief)));
+  let written = parseWritten(await write(edit ? editPrompt(brief, edit.previous, edit.notes) : writerPrompt(brief)));
   let report = checkDraft(written, context);
   let attempts = 1;
   const problems = [...read.problems.map((p) => `${p.source}: ${p.problem}`), ...(map.problem ? [`stack map: ${map.problem}`] : [])];

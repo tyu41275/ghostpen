@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { ScorerSettings } from "./ranking/scorer.js";
 import { parseScreenshots, type ScreenshotSettings } from "./draft/screenshots.js";
+import { parsePublish, type PublishSettings } from "./publish/github.js";
 import { checkSlot, type Slot } from "./shortlist/schedule.js";
 import { parseSources, type SourcesSettings } from "./sources/config.js";
 
@@ -33,6 +34,8 @@ export interface GhostpenSettings {
   shortlist?: ShortlistSettings;
   /** The draft writer (adapter/docs/drafting.md); unset: a Write is kept but nothing is drafted. */
   draft?: DraftSettings;
+  /** Where a ready draft goes as a pull request, and how Publish lands it (adapter/docs/publishing.md); unset: drafts stay in ghostpen. */
+  publish?: PublishSettings;
 }
 
 export interface DraftSettings {
@@ -92,6 +95,7 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   if (value.instanceFactsFile !== undefined) settings.instanceFactsFile = absolute(value.instanceFactsFile, "instanceFactsFile");
   if (value.shortlist !== undefined) settings.shortlist = parseShortlist(value.shortlist);
   if (value.draft !== undefined) settings.draft = parseDraft(value.draft);
+  if (value.publish !== undefined) settings.publish = parsePublish(value.publish);
   if (value.appIdentityKeyFile !== undefined) settings.appIdentityKeyFile = absolute(value.appIdentityKeyFile, "appIdentityKeyFile");
   return settings;
 }

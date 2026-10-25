@@ -62,7 +62,7 @@ describe("the shortlist in chatter", () => {
     await syncShortlist(ctx, new Set());
     const press = (id: string, user = OPERATOR, text?: string) => answerShortlistPress({ type: "button_click", button_id: `ghostpen.${id}`, user_id: user, ...(text !== undefined ? { text } : {}) }, ctx);
     expect(await press("shortlist:write:2026-10-26:0", "999999")).toEqual({ handled: true, reply_text: "Only the operator can answer ghostpen's shortlist, so nothing was done." });
-    expect(await press("shortlist:write:2026-10-26:0")).toEqual({ handled: true, reply_text: "Noted: it is next to draft. Drafting comes with ghostpen#90." });
+    expect(await press("shortlist:write:2026-10-26:0")).toEqual({ handled: true, reply_text: "Noted. No draft writer is set here (settings.draft), so nothing is drafted." });
     expect(edits.at(-1)).toMatchObject({ messageRef: "m1", buttons: [] });
     expect(edits.at(-1)!.text).toContain("**Write: next to draft**");
     const asked = await press("shortlist:skip:2026-10-26:1");

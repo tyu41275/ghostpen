@@ -10,6 +10,7 @@ import { isRankingView, RANKING_FILE, type RankingView } from "../ranking/run.js
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { GhostpenSettings } from "../settings.js";
 import { GHOSTPEN_VERSION } from "../version.js";
+import type { DraftJobs } from "../publish/jobs.js";
 import { adapterRoute } from "./adapter-routes.js";
 import { APP_CSP, renderApp } from "./app.js";
 import { verifyAppIdentity } from "./app-identity.js";
@@ -18,6 +19,8 @@ export interface ServerOptions {
   instance: string; dataDir: string; appKey?: Buffer; now?: () => number;
   /** The whole settings and the adapter key: without both, the adapter routes answer 404 (ghostpen#89). */
   settings?: GhostpenSettings; adapterKey?: Buffer;
+  /** Drafting after a Write or an Edit (ghostpen#90); unset: a Write is kept and nothing is drafted. */
+  jobs?: DraftJobs;
 }
 
 const MAX_BODY = 64 * 1024;
@@ -84,7 +87,7 @@ export function createGhostpenServer(options: ServerOptions): Server {
       const chunks: Buffer[] = [];
       let size = 0;
       req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= MAX_BODY) chunks.push(chunk); });
-      req.on("end", () => {
+      req.on("end", async () => {
         if (size > MAX_BODY) return send(res, 413, { error: "body too large" });
         let body: Record<string, unknown> = {};
         try {
@@ -94,7 +97,7 @@ export function createGhostpenServer(options: ServerOptions): Server {
           body = parsed as Record<string, unknown>;
         } catch { return send(res, 400, { error: "the body must be a JSON object" }); }
         try {
-          const reply = adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()));
+          const reply = await adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()), options.jobs);
           send(res, reply?.status ?? 404, reply?.body ?? { error: "not found" });
         } catch (error) {
           send(res, 500, { error: error instanceof Error ? error.message : String(error) });
