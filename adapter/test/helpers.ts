@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
@@ -12,6 +12,16 @@ export function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "ghostpen-"));
   made.push(dir);
   return dir;
+}
+
+/** A fresh folder holding `files` (relative path to text). */
+export function tree(files: Record<string, string>): string {
+  const root = tempDir();
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(join(root, path, ".."), { recursive: true });
+    writeFileSync(join(root, path), text);
+  }
+  return root;
 }
 
 export const KEY = Buffer.alloc(32, 7);

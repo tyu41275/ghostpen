@@ -30,6 +30,21 @@ export interface GhostpenSettings {
   instanceFactsFile?: string;
   /** The weekly shortlist (adapter/docs/shortlist.md); unset: none is posted. */
   shortlist?: ShortlistSettings;
+  /** The draft writer (adapter/docs/drafting.md); unset: a Write is kept but nothing is drafted. */
+  draft?: DraftSettings;
+}
+
+export interface DraftSettings {
+  /** The command that writes a draft (argv, no shell; `timeoutSeconds` 10 to 3600, default 900). */
+  writer: ScorerSettings;
+  /** A writing style guide (a markdown file); unset: the published posts alone set the voice. */
+  styleGuide?: string;
+  /** How many recent published posts the writer reads for the author's voice (0 to 5, default 2). */
+  voicePosts: number;
+  /** The command that prints the stack map (`relay graph --format json`); unset: diagrams cannot be checked. */
+  stackMap?: ScorerSettings;
+  /** How many times a failed draft is sent back with the check report (0 to 3, default 2). */
+  revisions: number;
 }
 
 export interface ShortlistSettings extends Slot {
@@ -73,20 +88,21 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   if (value.adapterKeyFile !== undefined) settings.adapterKeyFile = absolute(value.adapterKeyFile, "adapterKeyFile");
   if (value.instanceFactsFile !== undefined) settings.instanceFactsFile = absolute(value.instanceFactsFile, "instanceFactsFile");
   if (value.shortlist !== undefined) settings.shortlist = parseShortlist(value.shortlist);
+  if (value.draft !== undefined) settings.draft = parseDraft(value.draft);
   if (value.appIdentityKeyFile !== undefined) settings.appIdentityKeyFile = absolute(value.appIdentityKeyFile, "appIdentityKeyFile");
   return settings;
 }
 
-/** `scorer`: `command` (argv, run without a shell) and `timeoutSeconds` (10 to 3600, default 300). */
-function parseScorer(raw: unknown): ScorerSettings {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: scorer must be an object");
+/** `scorer` (and every other command): `command` (argv, run without a shell) and `timeoutSeconds` (10 to 3600). */
+function parseScorer(raw: unknown, field = "scorer", defaultTimeout = 300): ScorerSettings {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`settings: ${field} must be an object`);
   const value = raw as Record<string, unknown>;
   if (!Array.isArray(value.command) || value.command.length === 0 || !value.command.every((a) => typeof a === "string" && a !== "")) {
-    throw new Error("settings: scorer.command must be a non-empty list of strings");
+    throw new Error(`settings: ${field}.command must be a non-empty list of strings`);
   }
-  const timeout = value.timeoutSeconds ?? 300;
+  const timeout = value.timeoutSeconds ?? defaultTimeout;
   if (typeof timeout !== "number" || !Number.isInteger(timeout) || timeout < 10 || timeout > 3600) {
-    throw new Error("settings: scorer.timeoutSeconds must be 10 to 3600");
+    throw new Error(`settings: ${field}.timeoutSeconds must be 10 to 3600`);
   }
   return { command: value.command as string[], timeoutSeconds: timeout };
 }
@@ -103,4 +119,20 @@ function parseShortlist(raw: unknown): ShortlistSettings {
   if (typeof count !== "number" || !Number.isInteger(count) || count < 3 || count > 5) throw new Error("settings: shortlist.count must be 3 to 5");
   const slot = checkSlot(value.day ?? "monday", value.time ?? "09:00", value.timeZone ?? "UTC");
   return { ...slot, operator: value.operator, count, ...(value.channel ? { channel: value.channel as string } : {}) };
+}
+
+const whole = (value: unknown, field: string, min: number, max: number): number => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) throw new Error(`settings: ${field} must be ${min} to ${max}`);
+  return value;
+};
+
+/** `draft`: `writer` (required), optional `styleGuide` and `stackMap`, `voicePosts` (default 2), `revisions` (default 2). */
+function parseDraft(raw: unknown): DraftSettings {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: draft must be an object");
+  const value = raw as Record<string, unknown>;
+  const draft: DraftSettings = { writer: parseScorer(value.writer, "draft.writer", 900), voicePosts: whole(value.voicePosts ?? 2, "draft.voicePosts", 0, 5),
+    revisions: whole(value.revisions ?? 2, "draft.revisions", 0, 3) };
+  if (value.styleGuide !== undefined) draft.styleGuide = absolute(value.styleGuide, "draft.styleGuide");
+  if (value.stackMap !== undefined) draft.stackMap = parseScorer(value.stackMap, "draft.stackMap", 60);
+  return draft;
 }

@@ -16,3 +16,31 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
   - With no map configured, a diagram with boxes can't be checked. The check fails and says so instead of passing it.
 
 The screenshot privacy check joins these with screenshots (ghostpen#90, part 3).
+
+## Writing a draft (`src/draft/write.ts`, `node dist/cli/draft.js <settings.json> <id>`)
+
+The `id` is a shortlist item's: a candidate id, or `background:<part>` for a background post.
+
+- **What the writer gets** (`src/draft/prompt.ts`), the plain-words rule first:
+  - the kind of post. A decision post whose outcome isn't known yet says so; a follow-up post-mortem tells how it went.
+  - the topic and takeaway from the last ranking, when the candidate is ranked;
+  - every stack part the sources name, each with the post to link or its glossary definition to explain it from;
+  - the stack map's arrows touching those parts. It may draw only those. With no map, it draws no diagram of the setup.
+  - the style guide (`draft.styleGuide`) and the author's recent published posts for the voice (`draft.voicePosts`; never drafts or `aiGenerated` posts);
+  - the source documents. A background post gets the part's definition and the (up to 3) documents that name it most.
+- **What it answers**: one JSON object with `title`, `summary`, `tags` and `markdown`.
+- **Checks and revisions**: every draft runs all the checks above.
+  - A failed draft goes back with the failed checks, up to `draft.revisions` times (default 2).
+  - A draft **held** for a background post stops at once, because rewording can't write that post.
+  - A failed revision keeps the last draft and says why.
+- **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map). Nothing is published from here: Tim approves every post (brief D14).
+
+Settings (`draft`):
+
+| Field | Meaning | Default |
+| --- | --- | --- |
+| `writer` | `{command, timeoutSeconds}`: the command that writes (argv, no shell). Which model and account is the operator's choice. | required; 900 s |
+| `styleGuide` | absolute path of a markdown style guide | none |
+| `voicePosts` | recent published posts read for the voice, 0 to 5 | 2 |
+| `stackMap` | `{command, timeoutSeconds}` printing `relay.stack.graph/v1` JSON (`relay graph --format json`) | none: diagrams can't be checked; 60 s |
+| `revisions` | times a failed draft is sent back, 0 to 3 | 2 |

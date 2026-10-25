@@ -54,11 +54,12 @@ export function parseAnswer(text: string): Record<string, unknown> {
 export const KILL_GRACE_MS = 2_000;
 
 /**
- * Runs the scorer once on `prompt`; resolves its stdout, rejects on a failure, a timeout or a non-zero exit. It runs in a
- * process group of its own, so a timeout stops it and anything it started: SIGTERM to the group, then SIGKILL after
- * `KILL_GRACE_MS` for whatever ignores it. Its streams are closed, so nothing it left keeps ghostpen waiting.
+ * Runs the scorer (or another command, named `name` in errors, such as the draft writer) once on `prompt`; resolves its
+ * stdout, rejects on a failure, a timeout or a non-zero exit. It runs in a process group of its own, so a timeout stops
+ * it and anything it started: SIGTERM to the group, then SIGKILL after `KILL_GRACE_MS` for whatever ignores it. Its
+ * streams are closed, so nothing it left keeps ghostpen waiting.
  */
-export function runScorer(settings: ScorerSettings, prompt: string): Promise<string> {
+export function runScorer(settings: ScorerSettings, prompt: string, name = "scorer"): Promise<string> {
   return new Promise((resolve, reject) => {
     const [command, ...args] = settings.command;
     const child = spawn(command!, args, { stdio: ["pipe", "pipe", "pipe"], detached: true });
@@ -70,15 +71,15 @@ export function runScorer(settings: ScorerSettings, prompt: string): Promise<str
       // Kept even once the scorer itself exits: a child it started may still ignore SIGTERM. A group already gone is a no-op.
       setTimeout(() => group("SIGKILL"), KILL_GRACE_MS).unref();
       child.stdout.destroy(); child.stderr.destroy(); child.stdin.destroy();
-      settle(() => reject(new Error(`the scorer did not answer within ${settings.timeoutSeconds} s`)));
+      settle(() => reject(new Error(`the ${name} did not answer within ${settings.timeoutSeconds} s`)));
     }, settings.timeoutSeconds * 1000);
     child.stdout.on("data", (chunk: Buffer) => { out += chunk.toString(); });
     child.stderr.on("data", (chunk: Buffer) => { err += chunk.toString(); });
     child.stdin.on("error", () => { /* a scorer that exits without reading its prompt */ });
-    child.on("error", (error) => settle(() => reject(new Error(`the scorer could not start (${error.message})`))));
+    child.on("error", (error) => settle(() => reject(new Error(`the ${name} could not start (${error.message})`))));
     child.on("close", (code) => settle(() => {
       if (code === 0) resolve(out);
-      else reject(new Error(`the scorer exited ${String(code)}${err.trim() ? `: ${err.trim().split("\n").pop()!.slice(0, 200)}` : ""}`));
+      else reject(new Error(`the ${name} exited ${String(code)}${err.trim() ? `: ${err.trim().split("\n").pop()!.slice(0, 200)}` : ""}`));
     }));
     child.stdin.end(prompt);
   });

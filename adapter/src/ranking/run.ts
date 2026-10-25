@@ -6,10 +6,8 @@
 import { renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GhostpenSettings } from "../settings.js";
-import { liveGithubGet, readGithubTopics } from "../sources/github.js";
-import { readGlossaries, readMarkdownTopics } from "../sources/markdown.js";
-import { buildPublishedIndex, type PublishedIndex } from "../sources/published.js";
-import type { Definition, SourceProblem, TopicDocument } from "../sources/types.js";
+import { readSources } from "../sources/read.js";
+import type { TopicDocument } from "../sources/types.js";
 import { candidatesOf } from "./candidates.js";
 import { readChoices } from "./choices.js";
 import { rank, type BackgroundPost, type OwedPostMortem } from "./rank.js";
@@ -51,26 +49,7 @@ const where = (document: TopicDocument, line: number | null) =>
 
 export async function rankNow(settings: GhostpenSettings, seams: { run?: (prompt: string) => Promise<string>; now?: Date } = {}):
   Promise<RankingView> {
-  const problems: SourceProblem[] = [];
-  const documents: TopicDocument[] = [];
-  for (const source of settings.sources.topics) {
-    const read = source.kind === "markdown" ? readMarkdownTopics(source) : await readGithubTopics(source, liveGithubGet(source), seams.now);
-    documents.push(...read.items);
-    problems.push(...read.problems);
-  }
-  const definitions: Definition[] = [];
-  for (const source of settings.sources.references) {
-    const read = readGlossaries(source);
-    definitions.push(...read.items);
-    problems.push(...read.problems);
-  }
-  const terms = definitions.map((d) => d.term);
-  let index: PublishedIndex = { version: 1, terms: "", posts: [] };
-  if (settings.sources.published) {
-    const built = buildPublishedIndex(settings.sources.published, terms, settings.dataDir);
-    index = built.index;
-    problems.push(...built.problems);
-  }
+  const { documents, terms, index, problems } = await readSources(settings, seams.now);
   const candidates = candidatesOf(documents);
   let scored = new Map<string, Scored>();
   const notes = problems.map((p) => `${p.source}: ${p.problem}`);
