@@ -3,15 +3,31 @@
  * read; it checks the data folder on every request, so a folder that went away reads as down (503, saying why).
  * `/app/` opens only to a person chatter's console signed (`app-identity.ts`); anyone else finds nothing (404).
  */
+import { timingSafeEqual } from "node:crypto";
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isRankingView, RANKING_FILE, type RankingView } from "../ranking/run.js";
 import { createServer, type Server, type ServerResponse } from "node:http";
+import type { GhostpenSettings } from "../settings.js";
 import { GHOSTPEN_VERSION } from "../version.js";
+import { adapterRoute } from "./adapter-routes.js";
 import { APP_CSP, renderApp } from "./app.js";
 import { verifyAppIdentity } from "./app-identity.js";
 
-export interface ServerOptions { instance: string; dataDir: string; appKey?: Buffer; now?: () => number }
+export interface ServerOptions {
+  instance: string; dataDir: string; appKey?: Buffer; now?: () => number;
+  /** The whole settings and the adapter key: without both, the adapter routes answer 404 (ghostpen#89). */
+  settings?: GhostpenSettings; adapterKey?: Buffer;
+}
+
+const MAX_BODY = 64 * 1024;
+
+/** Whether `header` carries the adapter key (compared in constant time). */
+function keyMatches(header: string | string[] | undefined, key: Buffer): boolean {
+  const given = typeof header === "string" && header.startsWith("Bearer ") ? Buffer.from(header.slice(7).trim()) : Buffer.alloc(0);
+  const want = Buffer.from(key.toString("base64url"));
+  return given.length === want.length && timingSafeEqual(given, want);
+}
 
 function send(res: ServerResponse, status: number, body: Record<string, unknown>): void {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -61,6 +77,29 @@ export function createGhostpenServer(options: ServerOptions): Server {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": APP_CSP,
         "x-content-type-options": "nosniff", "referrer-policy": "same-origin" });
       res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir)));
+      return;
+    }
+    if (path.startsWith("/v1/adapter/")) {
+      if (!options.settings || !options.adapterKey || !keyMatches(req.headers.authorization, options.adapterKey)) return send(res, 404, { error: "not found" });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= MAX_BODY) chunks.push(chunk); });
+      req.on("end", () => {
+        if (size > MAX_BODY) return send(res, 413, { error: "body too large" });
+        let body: Record<string, unknown> = {};
+        try {
+          const text = Buffer.concat(chunks).toString("utf8");
+          const parsed: unknown = text ? JSON.parse(text) : {};
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+          body = parsed as Record<string, unknown>;
+        } catch { return send(res, 400, { error: "the body must be a JSON object" }); }
+        try {
+          const reply = adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()));
+          send(res, reply?.status ?? 404, reply?.body ?? { error: "not found" });
+        } catch (error) {
+          send(res, 500, { error: error instanceof Error ? error.message : String(error) });
+        }
+      });
       return;
     }
     send(res, 404, { error: "not found" });
