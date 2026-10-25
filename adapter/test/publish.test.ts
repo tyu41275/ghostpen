@@ -90,6 +90,7 @@ describe("the pull request", () => {
     const again = await openPostPr(settings, draft({ title: "One timer is enough" }), "2026-10-26",
       async (argv, options) => (argv[0] !== "gh" ? runIn(argv, options) : (gh.push(argv), argv[2] === "list" ? '[{"number":7,"url":"u7"}]' : "")), pr.branch);
     expect(again).toMatchObject({ number: 7, url: "u7", branch: "ghostpen/why-we-use-one-timer" });
+    expect(again.head).toBe(execFileSync("git", ["rev-parse", pr.branch], { cwd: remote }).toString().trim());
     expect(again.head).not.toBe(pr.head);
     expect(gh.map((a) => a[2])).toEqual(["list", "edit"]);
     expect(gh[1]!.slice(0, 8)).toEqual(["gh", "pr", "edit", "7", "-R", "o/blog", "--title", "Post: One timer is enough"]);
