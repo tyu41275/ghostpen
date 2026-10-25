@@ -1,6 +1,6 @@
 # The weekly shortlist (ghostpen#89, ADR 0101 brief D13)
 
-Once a week, at the operator's slot, ghostpen proposes 3 to 5 topics in its channel. The slot is a day and time in their time zone (`settings.shortlist`: `day`, `time`, `timeZone`; Monday 09:00 UTC by default). Each proposal says, in plain words: the topic and why it ranked there (its best scores with their quotes), what a reader leaves with, and what it needs explained first. Buttons: **Write**, **Skip** (asks for a one-line reason) and **Not yet**.
+Once a week, at the operator's slot, ghostpen proposes 3 to 5 topics in its channel. The slot is a day and time in their time zone (`settings.shortlist`: `day`, `time`, `timeZone`; Monday 09:00 UTC by default). Each proposal says, in plain words: the topic and why it ranked there (its best scores with their quotes), what a reader leaves with, and what it needs explained first. Buttons: **Write**, **Skip** and **Not yet**, each asking for a one-line reason, plus a pick list of short reasons that answers the card in one pick (`docs/feedback.md`).
 
 - **The service decides** (`src/service/adapter-routes.ts`, behind the adapter key, `settings.adapterKeyFile`; without the key the routes answer 404):
   - `GET /v1/adapter/shortlist` returns this week's shortlist and where it goes.
