@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { ScorerSettings } from "./ranking/scorer.js";
+import { parseScreenshots, type ScreenshotSettings } from "./draft/screenshots.js";
 import { checkSlot, type Slot } from "./shortlist/schedule.js";
 import { parseSources, type SourcesSettings } from "./sources/config.js";
 
@@ -45,6 +46,8 @@ export interface DraftSettings {
   stackMap?: ScorerSettings;
   /** How many times a failed draft is sent back with the check report (0 to 3, default 2). */
   revisions: number;
+  /** Pages the writer may screenshot, with what to mask and what counts as private; unset: no screenshots. */
+  screenshots?: ScreenshotSettings;
 }
 
 export interface ShortlistSettings extends Slot {
@@ -134,5 +137,6 @@ function parseDraft(raw: unknown): DraftSettings {
     revisions: whole(value.revisions ?? 2, "draft.revisions", 0, 3) };
   if (value.styleGuide !== undefined) draft.styleGuide = absolute(value.styleGuide, "draft.styleGuide");
   if (value.stackMap !== undefined) draft.stackMap = parseScorer(value.stackMap, "draft.stackMap", 60);
+  if (value.screenshots !== undefined) draft.screenshots = parseScreenshots(value.screenshots);
   return draft;
 }

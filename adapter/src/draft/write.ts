@@ -17,6 +17,7 @@ import type { TopicDocument } from "../sources/types.js";
 import { checkDraft, type CheckReport } from "./checks.js";
 import type { StackGraph } from "./diagrams.js";
 import { parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
+import { playwrightCapture, screenshotRefs, takeScreenshots, type Capturer } from "./screenshots.js";
 import { readStackMap } from "./stack-map.js";
 
 export const DRAFTS_DIR = "drafts";
@@ -33,9 +34,11 @@ export interface Draft extends Written {
   madeAt: string;
   /** What could not be read (sources, the stack map), shown with the draft. */
   problems: string[];
+  /** The screenshots taken, by name: their files. */
+  screenshots: Record<string, string>;
 }
 
-export interface DraftSeams { write?: (prompt: string) => Promise<string>; stackMap?: (prompt: string) => Promise<string>; now?: Date }
+export interface DraftSeams { write?: (prompt: string) => Promise<string>; stackMap?: (prompt: string) => Promise<string>; capture?: Capturer; now?: Date }
 
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const mentions = (text: string, term: string) =>
@@ -111,7 +114,8 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
   const brief: WriterBrief = { kind: goal.kind, subject: goal.subject, documents: goal.documents, parts,
     graph: cut(map.graph, [goal.subject, ...named]), voice: voice(settings, read, draft.voicePosts),
     ...(entry ? { topic: entry.topic, takeaway: entry.takeaway } : {}),
-    ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}) };
+    ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}),
+    ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
   const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));
   const context = { terms: read.terms, index: read.index, graph: map.graph, ...(goal.kind === "background" ? { subject: goal.subject } : {}) };
   let written = parseWritten(await write(writerPrompt(brief)));
@@ -129,8 +133,16 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     report = checkDraft(written, context);
     attempts += 1;
   }
+  // Screenshots are taken once the words pass: a draft that still fails or waits needs none yet.
+  let screenshots: Record<string, string> = {};
+  if (report.passed && screenshotRefs(written.markdown).length) {
+    const shots = await takeScreenshots(written.markdown, draft.screenshots, `${draftFile(settings.dataDir, id).replace(/\.json$/u, "")}-shots`,
+      seams.capture ?? playwrightCapture);
+    screenshots = shots.files;
+    report = { ...report, passed: shots.passed, checks: [...report.checks, { name: "Screenshots show nothing private", passed: shots.passed, findings: shots.findings }] };
+  }
   const result: Draft = { id, kind: goal.kind, ...written, status: report.passed ? "ready" : report.hold.length ? "held" : "failed", report, attempts,
-    madeAt: (seams.now ?? new Date()).toISOString(), problems };
+    madeAt: (seams.now ?? new Date()).toISOString(), problems, screenshots };
   const path = draftFile(settings.dataDir, id);
   mkdirSync(join(settings.dataDir, DRAFTS_DIR), { recursive: true });
   writeFileSync(`${path}.tmp`, JSON.stringify(result, null, 2));
