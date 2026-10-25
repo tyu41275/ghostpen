@@ -189,6 +189,31 @@ describe("drafting a post", () => {
     expect(prompts[0]).toContain("A reader should leave with: simple wins");
   });
 
+  it("takes screenshots once the words pass, and fails the draft on a private one", async () => {
+    const shots = { pages: [{ name: "console", url: "http://127.0.0.1:1/", description: "the console", mask: [], width: 1280, height: 800 }], private: [], timeoutSeconds: 30 };
+    const settings = setup({ draft: { writer: { command: ["true"] }, screenshots: shots } });
+    const markdown = `${LINKED}\n\n![the console with three tasks](screenshot:console)`;
+    const prompts: string[] = [];
+    const ok = await draftNow(settings, ID, { write: async (p) => { prompts.push(p); return answer(markdown); }, capture: async () => ({ png: Buffer.from("P"), text: ["3 tasks"], unreadable: [] }) });
+    expect(prompts[0]).toContain("- console: the console");
+    expect(ok.status).toBe("ready");
+    expect(Object.keys(ok.screenshots)).toEqual(["console"]);
+    expect(ok.report.checks.at(-1)).toEqual({ name: "Screenshots show nothing private", passed: true, findings: [] });
+    const bad = await draftNow(settings, ID, { write: async () => answer(markdown), capture: async () => ({ png: Buffer.from("P"), text: ["tim@example.com"], unreadable: [] }) });
+    expect(bad).toMatchObject({ status: "failed", screenshots: {} });
+    expect(existsSync(ok.screenshots.console!)).toBe(false); // the earlier run's picture is gone too
+    expect(bad.report.passed).toBe(false);
+  });
+
+  it("takes no screenshots for a draft whose words fail", async () => {
+    let captured = 0;
+    const shots = { pages: [{ name: "console", url: "http://127.0.0.1:1/", description: "the console" }] };
+    const draft = await draftNow(setup({ draft: { writer: { command: ["true"] }, revisions: 0, screenshots: shots } }), ID,
+      { write: async () => answer(`${PLAIN} We use Clock.\n\n![x](screenshot:console)`), capture: async () => { captured += 1; return { png: Buffer.from(""), text: [], unreadable: [] }; } });
+    expect(draft.status).toBe("failed");
+    expect(captured).toBe(0);
+  });
+
   it("keeps drafts under distinct files per id", () => {
     expect(draftFile("/d", "a/b")).not.toBe(draftFile("/d", "a-b"));
     expect(draftFile("/d", "background:clock")).toMatch(/^\/d\/drafts\/background-clock-[0-9a-f]{8}\.json$/u);

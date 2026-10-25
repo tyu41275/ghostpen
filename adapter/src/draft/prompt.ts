@@ -22,6 +22,8 @@ export interface WriterBrief {
   graph: StackGraph | null;
   styleGuide?: string;
   voice: Array<{ title: string; body: string }>;
+  /** Pages the writer may screenshot, by name, with what each shows. */
+  screenshots?: Array<{ name: string; description: string }>;
 }
 /** What the writer answers: one JSON object. */
 export interface Written { title: string; summary: string; tags: string[]; markdown: string }
@@ -62,6 +64,11 @@ export function writerPrompt(brief: WriterBrief): string {
     "Parts of the author's setup the sources name:", ...partLines(brief.parts),
     "",
     ...graphLines(brief.graph),
+    "",
+    ...(brief.screenshots?.length
+      ? ["You may add screenshots of these pages, written `![<what it shows, in plain words>](screenshot:<name>)`:",
+        ...brief.screenshots.map((s) => `- ${s.name}: ${s.description}`)]
+      : ["Add no screenshots or images."]),
     "",
     "Use only facts from the source documents. Do not invent numbers, names or events.",
     brief.styleGuide ? `\nThe author's style guide (the first rule above wins where they differ):\n${brief.styleGuide}` : "",

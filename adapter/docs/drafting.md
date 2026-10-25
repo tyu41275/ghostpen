@@ -15,7 +15,18 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
   - Arrows to boxes the map doesn't know are left alone, so concept diagrams pass.
   - With no map configured, a diagram with boxes can't be checked. The check fails and says so instead of passing it.
 
-The screenshot privacy check joins these with screenshots (ghostpen#90, part 3).
+- **Screenshots show nothing private** (`src/draft/screenshots.ts`): runs once the words pass, only when the draft asks for a screenshot.
+  - The writer may place `![what it shows](screenshot:<name>)` only for a page in `draft.screenshots.pages`.
+  - Each page is opened in Chromium (Playwright). Its `mask` selectors are painted over with a solid grey box, not blurred, because a blur can sometimes be undone.
+  - Every piece of text the page draws is read from Chrome's own layout snapshot, including text inside web components (open or closed shadow roots) and field values. Text wholly inside a masked area, or styled to draw nothing, is left out. It is checked for private details: email addresses, IP addresses, long id numbers, keys and tokens, home folder paths, and the operator's own `private` patterns. The report names the kind of detail, never the detail itself.
+  - **It fails closed.** No picture is kept (none at all, if any one screenshot fails), and the draft fails, if any of these is true:
+    - the page doesn't load;
+    - it shows content whose text can't be read (a canvas, a video, a frame) outside the masks;
+    - its text matches a private pattern;
+    - the page isn't configured;
+    - the screenshot has no words saying what it shows.
+  - What it can't see: text inside pictures (images, icons). Mask those, or don't configure the page.
+  - Pictures are kept next to the draft, in `drafts/<id>-<hash>-shots/<name>.png`.
 
 ## Writing a draft (`src/draft/write.ts`, `node dist/cli/draft.js <settings.json> <id>`)
 
@@ -44,3 +55,4 @@ Settings (`draft`):
 | `voicePosts` | recent published posts read for the voice, 0 to 5 | 2 |
 | `stackMap` | `{command, timeoutSeconds}` printing `relay.stack.graph/v1` JSON (`relay graph --format json`) | none: diagrams can't be checked; 60 s |
 | `revisions` | times a failed draft is sent back, 0 to 3 | 2 |
+| `screenshots` | `{pages, private, timeoutSeconds}`: each page `{name, url, description, mask?, waitFor?, width?, height?}` (1 to 20 pages; 1280×800 by default); `private` adds regular expressions; timeout 5 to 300 s | none: no screenshots; 30 s |
