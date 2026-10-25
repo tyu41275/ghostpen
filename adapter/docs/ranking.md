@@ -16,7 +16,7 @@ ghostpen ranks possible posts by the value they give a reader. It doesn't use wh
   - The cost orders the **background posts**: each part, by how many of the top 15 candidates it would unlock.
   - It also lists the **post-mortems owed**: a decision post written before its outcome books one, which becomes due once a post-mortem source (experiment, incident, measured PR) names the decision by its file name or ADR number.
 - **Tim's choices** (`src/ranking/choices.ts`, `dataDir/choices.json`):
-  - Every Write and Skip is kept. A Skip needs its one-line reason.
+  - Every Write, Skip and Not yet is kept with its reason (every press needs one, `docs/feedback.md`).
   - A Write on a decision post books its post-mortem.
   - **Weight suggestions** come from what's written versus skipped: a third of the score gap, at most half a point, within 0.25–3. They're shown with their reason, and apply only through `applyWeights` once the operator agrees.
 
