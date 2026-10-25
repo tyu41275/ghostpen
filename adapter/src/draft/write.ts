@@ -5,7 +5,7 @@
  * report, ready, held or failed; nothing is published from here (Tim approves every post, brief D14).
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { candidatesOf } from "../ranking/candidates.js";
 import { isRankingView, RANKING_FILE } from "../ranking/run.js";
@@ -134,10 +134,12 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     attempts += 1;
   }
   // Screenshots are taken once the words pass: a draft that still fails or waits needs none yet.
+  // An earlier run's pictures never outlive it: this run keeps only what it takes itself.
+  const shotsDir = `${draftFile(settings.dataDir, id).replace(/\.json$/u, "")}-shots`;
+  rmSync(shotsDir, { recursive: true, force: true });
   let screenshots: Record<string, string> = {};
   if (report.passed && screenshotRefs(written.markdown).length) {
-    const shots = await takeScreenshots(written.markdown, draft.screenshots, `${draftFile(settings.dataDir, id).replace(/\.json$/u, "")}-shots`,
-      seams.capture ?? playwrightCapture);
+    const shots = await takeScreenshots(written.markdown, draft.screenshots, shotsDir, seams.capture ?? playwrightCapture);
     screenshots = shots.files;
     report = { ...report, passed: shots.passed, checks: [...report.checks, { name: "Screenshots show nothing private", passed: shots.passed, findings: shots.findings }] };
   }
