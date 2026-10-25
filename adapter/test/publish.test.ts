@@ -302,6 +302,8 @@ describe("the draft's card, Publish and Edit", () => {
     expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: "it is published already", merged: true }), merge: async () => {} })).body.reply).toBe("It is on the blog already.");
     expect(draftOf(settings)).toMatchObject({ status: "published" });
     expect(draftOf(settings)?.problem).toBeUndefined();
+    // The reason is kept whether ghostpen merges it or finds it merged already.
+    expect(readFeedback(settings.dataDir).map((e) => [e.action, e.text])).toEqual([["publish", "ready"], ["publish", "ready"]]);
   });
 
   it("after a stop mid-publish, the draft is ready again and says to press Publish again", () => {

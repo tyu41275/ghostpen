@@ -80,7 +80,11 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (!fresh || fresh.round !== item.draft.round || fresh.status !== "ready" || fresh.pr?.number !== pr) {
     return { status: 200, body: { refused: "The draft changed while ghostpen checked it; use the newest card. Nothing was done." } };
   }
-  if (checked.merged) { setStatus(settings, body, now(), "published"); return { status: 200, body: { reply: "It is on the blog already." } }; }
+  if (checked.merged) {
+    setStatus(settings, body, now(), "published");
+    addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
+    return { status: 200, body: { reply: "It is on the blog already." } };
+  }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");
   addFeedback(settings.dataDir, { at: now().toISOString(), by: String(body.user), topic: item.id, kind: "reason", action: "publish", chip: body.chip === true, text: reason });
