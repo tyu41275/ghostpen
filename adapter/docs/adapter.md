@@ -10,10 +10,12 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
     - a key file that's named but unreadable or under 32 bytes stops the start;
     - it sends a strict CSP, `no-store` and `nosniff`, and escapes every value;
     - it's styled by the shared site look. The ranking view comes with ghostpen#88.
+  - **`/v1/adapter/…`:** the shortlist routes the chatter adapter calls (`docs/shortlist.md`). They open only to a request carrying the adapter key (`adapterKeyFile`); anyone else gets 404.
   - Every other path is 404.
 - **Settings** (`src/settings.ts`): `instance`, `port` (1024–65535), `dataDir` (absolute, must exist), and an optional `appIdentityKeyFile`. They're written from the operator's own config; no machine-specific value lives in code. Errors name the field, never the value.
 - **`status`** (a command and an agent tool) replies `ghostpen for <instance> is on and answering.`, or `ghostpen is not answering (<why>).` It never throws.
 - **Version:** the adapter's `version` is the chatter adapter API it's written against (1.0.0), not ghostpen's own (`src/version.ts`).
+- **Shortlist:** `docs/shortlist.md`: the weekly proposals, the routes the adapter calls, and who may answer.
 - **Ranking:** `docs/ranking.md`: candidates, quote-checked scores, background posts, post-mortems owed and weight suggestions.
 - **Sources:** `docs/sources.md`: what ghostpen reads, as the settings' `sources` block names it.
 - **Install:** `docs/install.md` covers `scripts/install-host.sh`, Relay's `scripts/relay-install.mjs`, and the drop-in with the app.

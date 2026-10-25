@@ -12,7 +12,10 @@ export async function startService(settingsPath: string, port?: number): Promise
   checkDataDir(settings.dataDir);
   // A key file named but unreadable or too short stops the start (pattern adapter-app); none named opens the app to nobody.
   const appKey = settings.appIdentityKeyFile ? readAppKey(settings.appIdentityKeyFile) : undefined;
-  const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, ...(appKey ? { appKey } : {}) });
+  // The adapter key, like the app key: named but unreadable or short stops the start; none named closes the routes.
+  const adapterKey = settings.adapterKeyFile ? readAppKey(settings.adapterKeyFile, "adapterKeyFile") : undefined;
+  const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
+    ...(adapterKey ? { adapterKey } : {}) });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });
   const address = server.address();
   return { server, port: typeof address === "object" && address ? address.port : settings.port };

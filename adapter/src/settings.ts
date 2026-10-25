@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { ScorerSettings } from "./ranking/scorer.js";
+import { checkSlot, type Slot } from "./shortlist/schedule.js";
 import { parseSources, type SourcesSettings } from "./sources/config.js";
 
 export interface GhostpenSettings {
@@ -23,6 +24,21 @@ export interface GhostpenSettings {
   sources: SourcesSettings;
   /** The command that proposes scores (adapter/docs/ranking.md); unset: ghostpen ranks nothing. */
   scorer?: ScorerSettings;
+  /** The key the chatter adapter sends on its routes (base64url, at least 32 bytes); unset: the routes answer 404. */
+  adapterKeyFile?: string;
+  /** chatter's instance facts (its `instance-facts.json`): where the channel chatter made for ghostpen is read. */
+  instanceFactsFile?: string;
+  /** The weekly shortlist (adapter/docs/shortlist.md); unset: none is posted. */
+  shortlist?: ShortlistSettings;
+}
+
+export interface ShortlistSettings extends Slot {
+  /** The one person whose presses count (a Discord user id). */
+  operator: string;
+  /** Where to post (a channel id); unset: the channel chatter made for ghostpen. */
+  channel?: string;
+  /** How many proposals a week (3 to 5, default 5). */
+  count: number;
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
@@ -54,6 +70,9 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   const settings: GhostpenSettings = { instance: value.instance, port: value.port, dataDir: absolute(value.dataDir, "dataDir"),
     sources: parseSources(value.sources) };
   if (value.scorer !== undefined) settings.scorer = parseScorer(value.scorer);
+  if (value.adapterKeyFile !== undefined) settings.adapterKeyFile = absolute(value.adapterKeyFile, "adapterKeyFile");
+  if (value.instanceFactsFile !== undefined) settings.instanceFactsFile = absolute(value.instanceFactsFile, "instanceFactsFile");
+  if (value.shortlist !== undefined) settings.shortlist = parseShortlist(value.shortlist);
   if (value.appIdentityKeyFile !== undefined) settings.appIdentityKeyFile = absolute(value.appIdentityKeyFile, "appIdentityKeyFile");
   return settings;
 }
@@ -70,4 +89,18 @@ function parseScorer(raw: unknown): ScorerSettings {
     throw new Error("settings: scorer.timeoutSeconds must be 10 to 3600");
   }
   return { command: value.command as string[], timeoutSeconds: timeout };
+}
+
+/** `shortlist`: `operator` (required), optional `channel`, and the slot (`day` monday, `time` 09:00, `timeZone` UTC by default). */
+function parseShortlist(raw: unknown): ShortlistSettings {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: shortlist must be an object");
+  const value = raw as Record<string, unknown>;
+  if (typeof value.operator !== "string" || !/^\d{5,25}$/u.test(value.operator)) throw new Error("settings: shortlist.operator must be a Discord user id");
+  if (value.channel !== undefined && (typeof value.channel !== "string" || !/^\d{5,25}$/u.test(value.channel))) {
+    throw new Error("settings: shortlist.channel must be a channel id");
+  }
+  const count = value.count ?? 5;
+  if (typeof count !== "number" || !Number.isInteger(count) || count < 3 || count > 5) throw new Error("settings: shortlist.count must be 3 to 5");
+  const slot = checkSlot(value.day ?? "monday", value.time ?? "09:00", value.timeZone ?? "UTC");
+  return { ...slot, operator: value.operator, count, ...(value.channel ? { channel: value.channel as string } : {}) };
 }
