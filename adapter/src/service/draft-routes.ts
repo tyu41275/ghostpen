@@ -1,7 +1,7 @@
 /**
  * The draft routes the chatter adapter calls (ghostpen#90), behind the same adapter key as the shortlist's:
  *
- *   POST /v1/adapter/draft/posted   {week, index, round, status, channelRef, messageRef}: a draft card was posted
+ *   POST /v1/adapter/draft/posted   {week, index, round, status, channelRef, messageRef, threadRef?}: a draft card was posted
  *   POST /v1/adapter/draft/publish  {week, index, round, user, reason, chip?}: Publish with its reason, the operator's only;
  *                                   lands the post once it is ready
  *   POST /v1/adapter/draft/edit     {week, index, round, user, notes}: Edit, the operator's only; the writer makes the changes
@@ -48,7 +48,8 @@ export function draftPosted(settings: GhostpenSettings, body: Record<string, unk
   if (typeof body.channelRef !== "string" || typeof body.messageRef !== "string" || !body.messageRef || typeof body.round !== "number" || typeof body.status !== "string") {
     return { status: 400, body: { error: "round, status, channelRef and messageRef are needed" } };
   }
-  item.draft.card = { channelRef: body.channelRef, messageRef: body.messageRef, round: body.round, status: body.status };
+  item.draft.card = { channelRef: body.channelRef, messageRef: body.messageRef, round: body.round, status: body.status,
+    ...(typeof body.threadRef === "string" && body.threadRef ? { threadRef: body.threadRef } : {}) };
   saveShortlists(settings.dataDir, state);
   return { status: 200, body: { ok: true } };
 }

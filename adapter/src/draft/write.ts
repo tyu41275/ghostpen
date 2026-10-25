@@ -14,6 +14,7 @@ import type { GhostpenSettings } from "../settings.js";
 import { frontmatter, postsAbout } from "../sources/published.js";
 import { readSources, type SourcesRead } from "../sources/read.js";
 import type { TopicDocument } from "../sources/types.js";
+import { contextFor } from "../feedback/store.js";
 import { checkDraft, type CheckReport } from "./checks.js";
 import type { StackGraph } from "./diagrams.js";
 import { editPrompt, parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
@@ -115,6 +116,7 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
   const brief: WriterBrief = { kind: goal.kind, subject: goal.subject, documents: goal.documents, parts,
     graph: cut(map.graph, [goal.subject, ...named]), voice: voice(settings, read, draft.voicePosts),
     ...(entry ? { topic: entry.topic, takeaway: entry.takeaway } : {}),
+    ...(contextFor(settings.dataDir, id).length ? { context: contextFor(settings.dataDir, id) } : {}),
     ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}),
     ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
   const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));

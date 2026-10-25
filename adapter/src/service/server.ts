@@ -3,6 +3,7 @@
  * read; it checks the data folder on every request, so a folder that went away reads as down (503, saying why).
  * `/app/` opens only to a person chatter's console signed (`app-identity.ts`); anyone else finds nothing (404).
  */
+import { readFeedback, type FeedbackEntry } from "../feedback/store.js";
 import { timingSafeEqual } from "node:crypto";
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -58,6 +59,11 @@ function lastRanking(dataDir: string): RankingView | null | Error {
   }
 }
 
+/** What the operator told ghostpen, for the app page; an unreadable file is shown as such, never as nothing. */
+function notesOf(dataDir: string): FeedbackEntry[] | Error {
+  try { return readFeedback(dataDir); } catch (error) { return error instanceof Error ? error : new Error(String(error)); }
+}
+
 export function createGhostpenServer(options: ServerOptions): Server {
   return createServer((req, res) => {
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
@@ -79,7 +85,7 @@ export function createGhostpenServer(options: ServerOptions): Server {
       if (!viewer) return send(res, 404, { error: "not found" });
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": APP_CSP,
         "x-content-type-options": "nosniff", "referrer-policy": "same-origin" });
-      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir)));
+      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir), notesOf(options.dataDir)));
       return;
     }
     if (path.startsWith("/v1/adapter/")) {

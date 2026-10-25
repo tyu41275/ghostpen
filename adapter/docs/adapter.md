@@ -24,6 +24,7 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
 - **Draft cards** (`src/adapter/drafts.ts`, ghostpen#90): after a Write, each new state of its draft gets a new card in the same channel: ready, waiting, failed, stopped, publishing or published, in the service's words. The card before it loses its buttons. Buttons: **Publish** and **Edit**. Publish asks for its reason (or takes one from the card's pick list), and Edit asks for the changes, each through chatter's private form; the press then comes back carrying them. Each button names its draft's round (`ghostpen.draft:<action>:<week>:<index>:<round>`), so an old card can't act on a newer draft. After a chatter restart, a card with buttons is redrawn once, like shortlist cards.
 - **Shortlist:** `docs/shortlist.md`: the weekly proposals, the routes the adapter calls, and who may answer.
 - **Publishing:** `docs/publishing.md`: from a Write to the blog, Publish and Edit.
+- **Threads and reasons:** `docs/feedback.md`: a reason on every press, and each card's thread for questions and context.
 - **Ranking:** `docs/ranking.md`: candidates, quote-checked scores, background posts, post-mortems owed and weight suggestions.
 - **Sources:** `docs/sources.md`: what ghostpen reads, as the settings' `sources` block names it.
 - **Install:** `docs/install.md` covers `scripts/install-host.sh`, Relay's `scripts/relay-install.mjs`, and the drop-in with the app.

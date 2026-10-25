@@ -18,15 +18,16 @@ export const CARDS_PER_BEAT = 5;
 export interface Button { label: string; style?: "primary" | "secondary" | "success" | "danger"; id: string }
 /** A dropdown on a post (chatter #5054): its choice comes back as a press whose `values` hold the option's value. */
 export interface Select { id: string; placeholder?: string; options: Array<{ label: string; value: string }> }
-export interface PostContent { text: string; singleUserNotification?: { userId: string }; selects?: Select[] }
+/** `thread`: open a thread under the post (chatter #5252); an older chatter ignores it and returns no `threadRef`. */
+export interface PostContent { text: string; singleUserNotification?: { userId: string }; selects?: Select[]; thread?: { name: string } }
 export interface ShortlistContext {
   config: Record<string, unknown>;
   log: (level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) => void;
   postToChannel?: (channel: string, content: PostContent, buttons?: Button[]) =>
-    Promise<{ channelRef?: string; messageRef?: string } | undefined>;
+    Promise<{ channelRef?: string; messageRef?: string; threadRef?: string } | undefined>;
   updatePostedMessage?: (channelRef: string, messageRef: string, content: PostContent, buttons?: Button[]) => Promise<boolean>;
 }
-export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown; values?: unknown }
+export interface PressEvent { type?: unknown; button_id?: unknown; user_id?: unknown; text?: unknown; values?: unknown; channel_id?: unknown; is_thread?: unknown }
 interface Item { index: number; id: string; text: string; posted?: { channelRef: string; messageRef: string }; answered: boolean; draft?: DraftView }
 interface Week { week?: string; channel?: string; operator?: string; items?: Item[]; off?: string; waiting?: string }
 
@@ -38,6 +39,12 @@ const ASK: Record<string, { title: string; label: string; placeholder: string }>
   write: { title: "Why write this one?", label: "One line: what makes it worth a post", placeholder: "e.g. people keep asking how this works" },
   skip: { title: "Why skip this topic?", label: "One line: what makes it not worth a post", placeholder: "e.g. too narrow, already covered" },
   later: { title: "Why not yet?", label: "One line: what it is waiting for", placeholder: "e.g. the outcome is not known yet" } };
+
+/** The card's thread name: its first line without markdown, at most 100 characters (Discord's limit). */
+export const threadName = (text: string) => {
+  const line = text.split("\n")[0]!.replace(/\*\*/gu, "").replace(/^#\d+\s+/u, "").trim();
+  return (line.length > 100 ? `${line.slice(0, 99)}…` : line) || "This topic";
+};
 
 const buttons = (week: string, index: number): Button[] => [
   { label: "Write", style: "success", id: `${BUTTON_OWNER}${BUTTON_PREFIX}write:${week}:${index}` },
@@ -65,11 +72,14 @@ export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>,
     if (posted >= CARDS_PER_BEAT) continue;
     // The week's first card pings the operator once; the rest arrive quietly under it.
     const ping = item.index === 0 && state.operator ? { singleUserNotification: { userId: state.operator } } : {};
-    const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping, selects: reasons(state.week, item.index) }, buttons(state.week, item.index));
+    // Each card opens its thread (ADR 0101, amended 2026-10-25): where the operator asks about the topic or adds context.
+    const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping, selects: reasons(state.week, item.index), thread: { name: threadName(item.text) } },
+      buttons(state.week, item.index));
     if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${state.channel}`);
     posted += 1;
     redrawn.add(key);
-    await callAdapterRoute(ctx.config, "POST", "shortlist/posted", { week: state.week, index: item.index, channelRef: refs.channelRef, messageRef: refs.messageRef });
+    await callAdapterRoute(ctx.config, "POST", "shortlist/posted", { week: state.week, index: item.index, channelRef: refs.channelRef, messageRef: refs.messageRef,
+      ...(refs.threadRef ? { threadRef: refs.threadRef } : {}) });
     ctx.log("info", "ghostpen.shortlist.posted", { week: state.week, index: item.index, id: item.id });
   }
   // Then each Write's draft card (ghostpen#90), under the cards it came from.

@@ -3,10 +3,12 @@
  * key in the settings' `adapterKeyFile`; without one they answer 404, as for routes that do not exist):
  *
  *   GET  /v1/adapter/shortlist           this week's shortlist (made on first ask from the last ranking), where to post
- *   POST /v1/adapter/shortlist/posted    {week, index, channelRef, messageRef}: a card was posted
+ *   POST /v1/adapter/shortlist/posted    {week, index, channelRef, messageRef, threadRef?}: a card (and its thread) was posted
  *   POST /v1/adapter/shortlist/answer    {week, index, action: write|skip|later, reason, chip?, user}: a press with its reason,
  *                                        the operator's only
  *   POST /v1/adapter/draft/...           a Write's draft: its card, Publish and Edit (`draft-routes.ts`)
+ *   POST /v1/adapter/thread/match        {thread}: whether it is a card's thread (quick, no model)
+ *   POST /v1/adapter/thread/message      {thread, user, text}: the operator wrote in a card's thread; answers `{reply}`
  *
  * Every answer is JSON. The service decides; the adapter only posts and relays presses.
  */
@@ -18,6 +20,7 @@ import type { GhostpenSettings } from "../settings.js";
 import { picks } from "../shortlist/picks.js";
 import { currentWeek } from "../shortlist/schedule.js";
 import { addFeedback } from "../feedback/store.js";
+import { answerInThread, threadTopic } from "../feedback/thread.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import { answeredText, readShortlists, saveShortlists, type Action } from "../shortlist/state.js";
 import { draftCard, draftEdit, draftPosted, draftPublish } from "./draft-routes.js";
@@ -69,7 +72,7 @@ export function posted(settings: GhostpenSettings, body: Record<string, unknown>
   const { state, found } = item(settings, body);
   if (!found) return { status: 404, body: { error: "no such shortlist item" } };
   if (typeof body.channelRef !== "string" || typeof body.messageRef !== "string" || !body.messageRef) return { status: 400, body: { error: "channelRef and messageRef are needed" } };
-  found.posted = { channelRef: body.channelRef, messageRef: body.messageRef };
+  found.posted = { channelRef: body.channelRef, messageRef: body.messageRef, ...(typeof body.threadRef === "string" && body.threadRef ? { threadRef: body.threadRef } : {}) };
   saveShortlists(settings.dataDir, state);
   return { status: 200, body: { ok: true } };
 }
@@ -100,6 +103,16 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
   return { status: 200, body: { text: answeredText(found), posted: found.posted ?? null, reply: next } };
 }
 
+/** A message in a card's thread: the operator's only; kept, and answered in plain words. */
+async function threadMessage(settings: GhostpenSettings, body: Record<string, unknown>, now: Date): Promise<Reply> {
+  const found = threadTopic(settings.dataDir, typeof body.thread === "string" ? body.thread : "");
+  if (!found) return { status: 404, body: { error: "no card has that thread" } };
+  if (body.user !== settings.shortlist?.operator) return { status: 200, body: { reply: "ghostpen takes questions and context from the operator only." } };
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return { status: 200, body: { reply: "That message was empty, so nothing was kept." } };
+  return { status: 200, body: { reply: await answerInThread(settings, { ...found, user: String(body.user), text, now }) } };
+}
+
 /** Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit. */
 export function adapterRoute(settings: GhostpenSettings, method: string, path: string, body: Record<string, unknown>, now: Date,
   jobs?: DraftJobs): Reply | Promise<Reply> | null {
@@ -109,5 +122,9 @@ export function adapterRoute(settings: GhostpenSettings, method: string, path: s
   if (path === "/v1/adapter/draft/posted" && method === "POST") return draftPosted(settings, body);
   if (path === "/v1/adapter/draft/publish" && method === "POST") return draftPublish(settings, body, () => new Date());
   if (path === "/v1/adapter/draft/edit" && method === "POST") return draftEdit(settings, body, now, jobs);
+  if (path === "/v1/adapter/thread/match" && method === "POST") {
+    return { status: 200, body: { ours: threadTopic(settings.dataDir, typeof body.thread === "string" ? body.thread : "") !== null } };
+  }
+  if (path === "/v1/adapter/thread/message" && method === "POST") return threadMessage(settings, body, now);
   return path.startsWith("/v1/adapter/") ? { status: 405, body: { error: "not allowed" } } : null;
 }
