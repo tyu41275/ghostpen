@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import type { ScorerSettings } from "./ranking/scorer.js";
 import { parseSources, type SourcesSettings } from "./sources/config.js";
 
 export interface GhostpenSettings {
@@ -20,6 +21,8 @@ export interface GhostpenSettings {
   appIdentityKeyFile?: string;
   /** What ghostpen reads (adapter/docs/sources.md); none configured: nothing to rank yet. */
   sources: SourcesSettings;
+  /** The command that proposes scores (adapter/docs/ranking.md); unset: ghostpen ranks nothing. */
+  scorer?: ScorerSettings;
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
@@ -50,6 +53,21 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   }
   const settings: GhostpenSettings = { instance: value.instance, port: value.port, dataDir: absolute(value.dataDir, "dataDir"),
     sources: parseSources(value.sources) };
+  if (value.scorer !== undefined) settings.scorer = parseScorer(value.scorer);
   if (value.appIdentityKeyFile !== undefined) settings.appIdentityKeyFile = absolute(value.appIdentityKeyFile, "appIdentityKeyFile");
   return settings;
+}
+
+/** `scorer`: `command` (argv, run without a shell) and `timeoutSeconds` (10 to 3600, default 300). */
+function parseScorer(raw: unknown): ScorerSettings {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: scorer must be an object");
+  const value = raw as Record<string, unknown>;
+  if (!Array.isArray(value.command) || value.command.length === 0 || !value.command.every((a) => typeof a === "string" && a !== "")) {
+    throw new Error("settings: scorer.command must be a non-empty list of strings");
+  }
+  const timeout = value.timeoutSeconds ?? 300;
+  if (typeof timeout !== "number" || !Number.isInteger(timeout) || timeout < 10 || timeout > 3600) {
+    throw new Error("settings: scorer.timeoutSeconds must be 10 to 3600");
+  }
+  return { command: value.command as string[], timeoutSeconds: timeout };
 }
