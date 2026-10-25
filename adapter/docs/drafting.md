@@ -19,7 +19,7 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
   - The writer may place `![what it shows](screenshot:<name>)` only for a page in `draft.screenshots.pages`.
   - Each page is opened in Chromium (Playwright). Its `mask` selectors are painted over with a solid grey box, not blurred, because a blur can sometimes be undone.
   - The page's visible text outside the masks (field values too) is checked for private details: email addresses, IP addresses, long id numbers, keys and tokens, home folder paths, and the operator's own `private` patterns. The report names the kind of detail, never the detail itself.
-  - **It fails closed.** No picture is kept, and the draft fails, if any of these is true:
+  - **It fails closed.** No picture is kept (none at all, if any one screenshot fails), and the draft fails, if any of these is true:
     - the page doesn't load;
     - it shows content whose text can't be read (a canvas, a video, a frame) outside the masks;
     - its text matches a private pattern;

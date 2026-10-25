@@ -84,6 +84,15 @@ describe("taking screenshots", () => {
     expect(existsSync(dir)).toBe(false);
   });
 
+  it("keeps no picture at all when any one screenshot fails", async () => {
+    const dir = join(tempDir(), "shots");
+    const result = await takeScreenshots("![the console](screenshot:console) ![Tempo's grades](screenshot:tempo)", SETTINGS, dir,
+      fake({ tempo: { ...clean, text: ["tim@example.com"] } }));
+    expect(result.passed).toBe(false);
+    expect(result.files).toEqual({});
+    expect(existsSync(dir)).toBe(false);
+  });
+
   it("keeps no picture of a page with content it cannot read", async () => {
     const result = await takeScreenshots("![Tempo's chart](screenshot:tempo)", SETTINGS, tempDir(), fake({ tempo: { ...clean, unreadable: ["canvas", "canvas", "iframe"] } }));
     expect(result).toEqual({ passed: false, files: {},

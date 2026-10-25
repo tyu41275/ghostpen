@@ -41,6 +41,7 @@ export async function takeScreenshots(markdown: string, settings: ScreenshotSett
   const findings: string[] = [];
   const files: Record<string, string> = {};
   const seen = new Set<string>();
+  const pictures = new Map<string, Buffer>();
   const extra = (settings?.private ?? []).map((p) => new RegExp(p, "iu"));
   for (const { alt, name } of screenshotRefs(markdown)) {
     if (seen.has(name)) continue;
@@ -59,11 +60,16 @@ export async function takeScreenshots(markdown: string, settings: ScreenshotSett
     }
     const found = privacyFindings(shot.text, extra);
     if (found.length) { findings.push(`screenshot ${name} shows something private (${found.join(", ")}): mask it (settings.draft.screenshots.pages[].mask)`); continue; }
+    pictures.set(name, shot.png);
+  }
+  // All or nothing: one failing screenshot keeps none, so a failed draft leaves no picture behind.
+  if (findings.length) return { passed: false, findings, files: {} };
+  for (const [name, png] of pictures) {
     mkdirSync(dir, { recursive: true });
     files[name] = join(dir, `${name}.png`);
-    writeFileSync(files[name]!, shot.png);
+    writeFileSync(files[name]!, png);
   }
-  return { passed: findings.length === 0, findings, files };
+  return { passed: true, findings, files };
 }
 
 /** The real capture: Chromium through Playwright (loaded only when a screenshot is asked for). */
