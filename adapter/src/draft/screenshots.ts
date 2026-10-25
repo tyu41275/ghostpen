@@ -1,10 +1,10 @@
 /**
- * Screenshots in drafts (ADR 0101, brief D11): the writer may place `![what it shows](screenshot:<name>)` for a page the
- * operator configured (`settings.draft.screenshots.pages`). Each is taken in a real browser with the page's `mask` selectors
- * painted over, and is kept only if the page's visible text outside the masks shows nothing private. The check fails
- * closed: a page that cannot be loaded, that holds content it cannot read (a canvas, a video, a frame) outside the masks,
- * or whose text matches a private pattern gives no screenshot, and the draft fails saying which kind of detail it saw,
- * never the detail itself.
+ * Screenshots in drafts (ADR 0101, brief D11): the writer may place `![what it shows](screenshot:<name>)` for a page
+ * the operator configured (`settings.draft.screenshots.pages`). Each is taken in a real browser with the page's `mask`
+ * selectors painted over, and is kept only if the text the page draws outside the masks (read from Chrome's layout
+ * snapshot, web components included) shows nothing private. The check fails closed: a page that cannot be loaded, that
+ * holds content it cannot read (a canvas, a video, a frame) outside the masks, or whose text matches a private pattern
+ * gives no screenshot, and the draft fails saying which kind of detail it saw, never the detail itself.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -72,32 +72,70 @@ export async function takeScreenshots(markdown: string, settings: ScreenshotSett
   return { passed: true, findings, files };
 }
 
+interface Rect { x: number; y: number; width: number; height: number }
+const UNREADABLE = new Set(["CANVAS", "VIDEO", "IFRAME", "EMBED", "OBJECT"]);
+const within = (inner: Rect, outer: Rect) => inner.x >= outer.x - 1 && inner.y >= outer.y - 1
+  && inner.x + inner.width <= outer.x + outer.width + 1 && inner.y + inner.height <= outer.y + outer.height + 1;
+
+/** Chrome's `DOMSnapshot.captureSnapshot` answer, the parts read here. */
+export interface DomSnapshot {
+  strings: string[];
+  documents: Array<{
+    nodes: { nodeName?: number[]; inputValue?: { index: number[]; value: number[] } };
+    layout: { nodeIndex: number[]; bounds: number[][]; text: number[]; styles: number[][] };
+  }>;
+}
+
+/**
+ * What a page draws, from Chrome's own snapshot of its layout: every piece of text that has a box (inside web
+ * components' shadow roots too, open or closed), field values, and content whose text can't be read. Text and content
+ * wholly inside a masked area are left out; text styled `visibility: hidden` draws nothing and is left out too.
+ */
+export function readSnapshot(snapshot: DomSnapshot, masks: Rect[]): { text: string[]; unreadable: string[] } {
+  const str = (i: number | undefined) => (i === undefined || i < 0 ? "" : snapshot.strings[i] ?? "");
+  const text: string[] = [], unreadable: string[] = [];
+  for (const doc of snapshot.documents) {
+    const boxes = new Map<number, Rect>();
+    doc.layout.nodeIndex.forEach((node, i) => {
+      const [x = 0, y = 0, width = 0, height = 0] = doc.layout.bounds[i] ?? [];
+      const box = { x, y, width, height };
+      if (!boxes.has(node)) boxes.set(node, box);
+      if (masks.some((m) => within(box, m)) || doc.layout.styles[i]?.some((s) => ["hidden", "collapse"].includes(str(s)))) return;
+      const words = str(doc.layout.text[i]).trim();
+      if (words) text.push(words);
+      const name = str(doc.nodes.nodeName?.[node]);
+      if (UNREADABLE.has(name) && width > 0 && height > 0) unreadable.push(name.toLowerCase());
+    });
+    doc.nodes.inputValue?.index.forEach((node, i) => {
+      const value = str(doc.nodes.inputValue!.value[i]).trim();
+      const box = boxes.get(node);
+      if (value && box && !masks.some((m) => within(box, m))) text.push(value);
+    });
+  }
+  return { text, unreadable };
+}
+
 /** The real capture: Chromium through Playwright (loaded only when a screenshot is asked for). */
 export const playwrightCapture: Capturer = async (page, timeoutMs) => {
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {
-    const tab = await (await browser.newContext({ viewport: { width: page.width, height: page.height } })).newPage();
+    const context = await browser.newContext({ viewport: { width: page.width, height: page.height } });
+    const tab = await context.newPage();
     await tab.goto(page.url, { timeout: timeoutMs, waitUntil: "load" });
     if (page.waitFor) await tab.waitForSelector(page.waitFor, { timeout: timeoutMs });
-    const seen = await tab.evaluate((selectors: string[]) => {
-      const masked = selectors.flatMap((s) => [...document.querySelectorAll(s)]);
-      const hidden = (el: Element) => masked.some((m) => m.contains(el)) || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-      const text: string[] = [];
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const parent = node.parentElement;
-        if (parent && node.textContent?.trim() && !hidden(parent)) text.push(node.textContent.trim());
-      }
-      for (const field of document.querySelectorAll("input, textarea, select")) {
-        const value = field instanceof HTMLSelectElement ? field.selectedOptions[0]?.text ?? "" : (field as HTMLInputElement).value;
-        if (value.trim() && !hidden(field)) text.push(value.trim());
-      }
-      const unreadable = [...document.querySelectorAll("canvas, video, iframe, embed, object")].filter((el) => !hidden(el)).map((el) => el.tagName.toLowerCase());
-      return { text, unreadable };
-    }, page.mask);
+    // Playwright's selectors reach into open shadow roots, so masks can cover parts of web components.
+    const masks: Rect[] = [];
+    for (const selector of page.mask) {
+      masks.push(...await tab.locator(selector).evaluateAll((els) => els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x + window.scrollX, y: r.y + window.scrollY, width: r.width, height: r.height };
+      })));
+    }
+    const cdp = await context.newCDPSession(tab);
+    const snapshot = await cdp.send("DOMSnapshot.captureSnapshot", { computedStyles: ["visibility"] }) as unknown as DomSnapshot;
     const png = await tab.screenshot({ mask: page.mask.map((s) => tab.locator(s)), maskColor: "#808080" });
-    return { png, ...seen };
+    return { png, ...readSnapshot(snapshot, masks) };
   } finally {
     await browser.close();
   }

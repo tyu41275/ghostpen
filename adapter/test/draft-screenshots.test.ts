@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { writerPrompt } from "../src/draft/prompt.js";
-import { parseScreenshots, privacyFindings, screenshotRefs, takeScreenshots, type Capture, type ScreenshotSettings } from "../src/draft/screenshots.js";
+import { parseScreenshots, privacyFindings, readSnapshot, screenshotRefs, takeScreenshots, type Capture, type ScreenshotSettings } from "../src/draft/screenshots.js";
 import { parseSettings } from "../src/settings.js";
 import { tempDir } from "./helpers.js";
 
@@ -113,5 +113,19 @@ describe("taking screenshots", () => {
     expect(writerPrompt({ ...brief, screenshots: [{ name: "console", description: "the operator console" }] }))
       .toContain("written `![<what it shows, in plain words>](screenshot:<name>)`:\n- console: the operator console");
     expect(writerPrompt(brief)).toContain("Add no screenshots or images.");
+  });
+});
+
+describe("reading what a page draws", () => {
+  // strings: 0 "", 1 "#text", 2 "Tasks", 3 "tim@example.com", 4 "visible", 5 "hidden", 6 "CANVAS", 7 "INPUT", 8 "x@example.com", 9 "IFRAME"
+  const strings = ["", "#text", "Tasks", "tim@example.com", "visible", "hidden", "CANVAS", "INPUT", "x@example.com", "IFRAME"];
+  const snapshot = { strings, documents: [{
+    nodes: { nodeName: [1, 1, 1, 6, 7, 9], inputValue: { index: [4], value: [8] } },
+    layout: { nodeIndex: [0, 1, 2, 3, 4, 5], bounds: [[0, 0, 100, 20], [0, 30, 100, 20], [0, 60, 100, 20], [0, 90, 50, 50], [0, 150, 100, 20], [0, 200, 0, 0]],
+      text: [2, 3, 3, -1, -1, -1], styles: [[4], [4], [5], [4], [4], [4]] } }] };
+
+  it("keeps drawn text and field values, flags unreadable content, and leaves out hidden or masked parts", () => {
+    expect(readSnapshot(snapshot, [])).toEqual({ text: ["Tasks", "tim@example.com", "x@example.com"], unreadable: ["canvas"] });
+    expect(readSnapshot(snapshot, [{ x: 0, y: 25, width: 100, height: 150 }])).toEqual({ text: ["Tasks"], unreadable: [] });
   });
 });

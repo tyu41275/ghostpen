@@ -18,14 +18,14 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
 - **Screenshots show nothing private** (`src/draft/screenshots.ts`): runs once the words pass, only when the draft asks for a screenshot.
   - The writer may place `![what it shows](screenshot:<name>)` only for a page in `draft.screenshots.pages`.
   - Each page is opened in Chromium (Playwright). Its `mask` selectors are painted over with a solid grey box, not blurred, because a blur can sometimes be undone.
-  - The page's visible text outside the masks (field values too) is checked for private details: email addresses, IP addresses, long id numbers, keys and tokens, home folder paths, and the operator's own `private` patterns. The report names the kind of detail, never the detail itself.
+  - Every piece of text the page draws is read from Chrome's own layout snapshot, including text inside web components (open or closed shadow roots) and field values. Text wholly inside a masked area, or styled to draw nothing, is left out. It is checked for private details: email addresses, IP addresses, long id numbers, keys and tokens, home folder paths, and the operator's own `private` patterns. The report names the kind of detail, never the detail itself.
   - **It fails closed.** No picture is kept (none at all, if any one screenshot fails), and the draft fails, if any of these is true:
     - the page doesn't load;
     - it shows content whose text can't be read (a canvas, a video, a frame) outside the masks;
     - its text matches a private pattern;
     - the page isn't configured;
     - the screenshot has no words saying what it shows.
-  - What it can't see: text drawn by CSS (`::before`) and text inside pictures. Mask those, or don't configure the page.
+  - What it can't see: text inside pictures (images, icons). Mask those, or don't configure the page.
   - Pictures are kept next to the draft, in `drafts/<id>-<hash>-shots/<name>.png`.
 
 ## Writing a draft (`src/draft/write.ts`, `node dist/cli/draft.js <settings.json> <id>`)

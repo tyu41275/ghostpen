@@ -11,6 +11,10 @@ const PAGES: Record<string, string> = {
   "/masked": "<main><h1>Tasks</h1><p class=who>Signed in as tim@example.com</p><p style='display:none'>secret@example.com</p></main>",
   "/open": "<main><h1>Tasks</h1><input value='tim@example.com'></main>",
   "/canvas": "<main><h1>Chart</h1><canvas width=100 height=100></canvas></main>",
+  "/shadow": "<main><h1>Tasks</h1><x-open></x-open><x-closed></x-closed></main><script>"
+    + "customElements.define('x-open', class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<p class=who>open@example.com</p>'; } });"
+    + "customElements.define('x-closed', class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: 'closed' }).innerHTML = '<p>closed@example.com</p>'; } });</script>",
+  "/styles": "<main><h1>Tasks</h1><p style='visibility:hidden'>vis@example.com</p><p style='display:none'>none@example.com</p></main>",
 };
 let server: Server;
 let origin = "";
@@ -34,6 +38,16 @@ describe("screenshot capture", () => {
   it("sees unmasked text and field values", async () => {
     expect(privacyFindings((await playwrightCapture(page("/masked"), 15_000)).text, [])).toEqual(["an email address"]);
     expect(privacyFindings((await playwrightCapture(page("/open"), 15_000)).text, [])).toEqual(["an email address"]);
+  });
+
+  it("reads text inside web components, open or closed, and masks reach into open ones", async () => {
+    expect((await playwrightCapture(page("/shadow"), 15_000)).text).toEqual(expect.arrayContaining(["open@example.com", "closed@example.com"]));
+    const masked = await playwrightCapture(page("/shadow", [".who", "x-closed"]), 15_000);
+    expect(masked.text).toEqual(["Tasks"]);
+  });
+
+  it("leaves out text that draws nothing", async () => {
+    expect((await playwrightCapture(page("/styles"), 15_000)).text).toEqual(["Tasks"]);
   });
 
   it("reports a canvas it cannot read, unless masked", async () => {
