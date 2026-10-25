@@ -87,6 +87,12 @@ export function revisePrompt(brief: WriterBrief, previous: Written, report: Chec
     ...findings, "", "Your last draft:", JSON.stringify(previous)].join("\n");
 }
 
+/** The author's changes to a draft (an Edit press): the whole brief again, the draft, and what to change. */
+export function editPrompt(brief: WriterBrief, previous: Written, notes: string): string {
+  return [writerPrompt(brief), "", "The author read your draft and asked for these changes. Make them, keep every rule above, and answer the whole",
+    "post again, in the same JSON shape:", notes.trim(), "", "Your draft:", JSON.stringify(previous)].join("\n");
+}
+
 const text = (value: unknown, field: string, max: number): string => {
   if (typeof value !== "string" || !value.trim()) throw new Error(`the writer's answer has no ${field}`);
   return value.trim().slice(0, max);

@@ -1,5 +1,6 @@
 /** Starting the service: settings, the data folder and the app key are checked before it listens; any failure starts nothing. */
 import type { Server } from "node:http";
+import { DraftJobs } from "../publish/jobs.js";
 import { readSettings } from "../settings.js";
 import { readAppKey } from "./app-identity.js";
 import { checkDataDir, createGhostpenServer } from "./server.js";
@@ -14,8 +15,11 @@ export async function startService(settingsPath: string, port?: number): Promise
   const appKey = settings.appIdentityKeyFile ? readAppKey(settings.appIdentityKeyFile) : undefined;
   // The adapter key, like the app key: named but unreadable or short stops the start; none named closes the routes.
   const adapterKey = settings.adapterKeyFile ? readAppKey(settings.adapterKeyFile, "adapterKeyFile") : undefined;
+  // Drafting runs here, one draft at a time; drafts a stopped service left unfinished start again.
+  const jobs = settings.draft ? new DraftJobs(settings) : undefined;
+  jobs?.resume();
   const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
-    ...(adapterKey ? { adapterKey } : {}) });
+    ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}) });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });
   const address = server.address();
   return { server, port: typeof address === "object" && address ? address.port : settings.port };
