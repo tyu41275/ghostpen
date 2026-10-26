@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateOf, candidatesOf, partsOf } from "../src/ranking/candidates.js";
 import { applyWeights, CHOICES_FILE, readChoices, recordChoice, suggestWeights } from "../src/ranking/choices.js";
-import { explanationCost, owedPostMortems, rank, TOP } from "../src/ranking/rank.js";
+import { explanationCost, naming, owedPostMortems, rank, TOP } from "../src/ranking/rank.js";
+import type { Definition } from "../src/sources/types.js";
 import { checkScores, DEFAULT_WEIGHTS, total } from "../src/ranking/scores.js";
 import type { PublishedIndex } from "../src/sources/published.js";
 import type { TopicDocument } from "../src/sources/types.js";
@@ -17,6 +18,9 @@ const ADR = doc("dh/0022-live-trading-parity", ["# ADR 0022: Diamond Hands live 
   "- Separate rule sets per mode", "", "## Decision", "1. **Match decisions, not returns.**", "2. **Never round risk up.**",
   "", "## Consequences", "- Real-money trading waits for a parity check", "- chatter shows a Relay card"]);
 const EMPTY_INDEX: PublishedIndex = { version: 1, terms: "", posts: [] };
+const def = (term: string, text: string, path = `/g/${term.toLowerCase()}/docs/CONTEXT.md`, line = 5): Definition =>
+  ({ term, text, location: { path, line }, source: "glossaries" });
+const GLOSSARY = [def("chatter", "The Discord bot."), def("Relay", "The fleet's deploy and promotion tool.\nIt runs on always-on-dev."), def("Tempo", "Delivery metrics.")];
 
 describe("candidates", () => {
   it("one per document: its decisions, the options it turned down and what it says happened, each with its line", () => {
@@ -70,17 +74,52 @@ describe("the ranking", () => {
   const index: PublishedIndex = { version: 1, terms: "", posts: [{ file: "c.mdx", hash: "", url: "https://x/blog/c", title: "Chatter",
     date: "2026-03-01", tags: [], draft: false, about: ["chatter"], mentions: [] }] };
   it("orders by weighted total, lists what needs explaining (never lowering a score), and orders background posts by what they unlock", () => {
-    const a = candidateOf(ADR);
+    const a = candidateOf(ADR); // names Relay once, in passing: no cost (ghostpen#111)
     const b = candidateOf(doc("relay/0024", ["# ADR 0024: stacks in Relay", "Relay and Tempo and chatter.", "Big change across the fleet here."]));
+    const c = candidateOf(doc("tempo/0031", ["# ADR 0031: delivery metrics", "Tempo grades each task.", "Tempo keeps the baseline.", "Tempo shows history."]));
     const scored = new Map([[a.id, checkScores(a, { stakes: { score: 2, quote: "Real-money trading waits for a parity check" } })],
-      [b.id, checkScores(b, { stakes: { score: 3, quote: "Big change across the fleet here." } })]]);
-    const ranking = rank([a, b], scored, DEFAULT_WEIGHTS, ["chatter", "Relay", "Tempo"], index);
+      [b.id, checkScores(b, { stakes: { score: 3, quote: "Big change across the fleet here." } })],
+      [c.id, checkScores(c, { stakes: { score: 1, quote: "Tempo grades each task." } })]]);
+    const ranking = rank([a, b, c], scored, DEFAULT_WEIGHTS, GLOSSARY, index);
+    // relay is in b's title and tempo is named three times in c: central. chatter has a post: not explained again.
     expect(ranking.ranked.map((r) => [r.candidate.id, r.total, r.explain])).toEqual([
-      ["relay/0024", 3, ["relay", "tempo"]], ["dh/0022-live-trading-parity", 2, ["relay"]]]); // chatter has a post: not explained again
-    expect(ranking.background).toEqual([{ part: "relay", unlocks: ["relay/0024", "dh/0022-live-trading-parity"] },
-      { part: "tempo", unlocks: ["relay/0024"] }]);
-    expect(explanationCost(a, ["chatter"], EMPTY_INDEX)).toEqual(["chatter"]);
+      ["relay/0024", 3, ["relay"]], ["dh/0022-live-trading-parity", 2, []], ["tempo/0031", 1, ["tempo"]]]);
+    // Each background post carries its references: where the part is defined (first sentence) and the line that names it.
+    expect(ranking.background).toEqual([
+      { part: "relay", unlocks: ["relay/0024"], mentions: [{ id: "relay/0024", line: 1, quote: "# ADR 0024: stacks in Relay" }],
+        defined: [{ where: "/g/relay/docs/CONTEXT.md:5", text: "The fleet's deploy and promotion tool." }] },
+      { part: "tempo", unlocks: ["tempo/0031"], mentions: [{ id: "tempo/0031", line: 2, quote: "Tempo grades each task." }],
+        defined: [{ where: "/g/tempo/docs/CONTEXT.md:5", text: "Delivery metrics." }] }]);
+    expect(ranking.problems).toEqual([]);
     expect(TOP).toBe(15);
+  });
+
+  it("counts a part only where the document uses it as one: in its title, or named three times or more", () => {
+    expect(naming(ADR, "relay")).toEqual({ count: 1, central: false, line: 16, quote: "- chatter shows a Relay card" });
+    expect(naming(ADR, "Diamond Hands")).toEqual({ count: 1, central: true, line: 1, quote: "# ADR 0022: Diamond Hands live trading parity policy" });
+    expect(naming(ADR, "parity")).toMatchObject({ count: 2, central: true, line: 1 }); // in the title: central at any count
+    expect(naming(ADR, "paritys")).toBeNull(); // whole words only
+    expect(explanationCost(candidateOf(ADR), ["chatter", "relay", "parity"], EMPTY_INDEX)).toEqual(["parity"]);
+    const twice = candidateOf(doc("x/1", ["# ADR 1: a title", "The candidate build. A candidate again.", "nothing more"]));
+    expect(explanationCost(twice, ["candidate"], EMPTY_INDEX)).toEqual([]); // two passing mentions are still passing
+  });
+
+  it("counts a term two glossaries define differently for no topic and reports it, while one definition copied twice is one", () => {
+    const build = candidateOf(doc("relay/0005", ["# ADR 0005: the candidate build", "What a candidate is here."]));
+    const scored = new Map([[build.id, checkScores(build, { stakes: { score: 2, quote: "What a candidate is here." } })]]);
+    const clash = [def("Candidate", "A possible post, built from one document.", "/g/ghostpen/docs/CONTEXT.md", 25),
+      def("Candidate", "A discretionary trade proposal produced by a scan.", "/g/diamond-hands/docs/CONTEXT.md", 42)];
+    const ranking = rank([build], scored, DEFAULT_WEIGHTS, clash, EMPTY_INDEX);
+    expect(ranking.ranked[0]!.explain).toEqual([]);
+    expect(ranking.background).toEqual([]);
+    expect(ranking.problems).toEqual(['glossaries: "candidate" is defined differently at /g/ghostpen/docs/CONTEXT.md:25 and /g/diamond-hands/docs/CONTEXT.md:42: '
+      + "it counts for no topic and no background post is proposed for it until one definition wins"]);
+    const copied = [clash[0]!, def("candidate", "A possible  post,\nbuilt from one document.", "/g/other/docs/CONTEXT.md", 9)];
+    const same = rank([build], scored, DEFAULT_WEIGHTS, copied, EMPTY_INDEX);
+    expect(same.ranked[0]!.explain).toEqual(["candidate"]);
+    expect(same.background[0]).toMatchObject({ part: "candidate", defined: [{ where: "/g/ghostpen/docs/CONTEXT.md:25", text: "A possible post, built from one document." },
+      { where: "/g/other/docs/CONTEXT.md:9", text: "A possible post, built from one document." }] });
+    expect(same.problems).toEqual([]);
   });
 
   it("books a post-mortem for a decision post and marks it due once a source shows the outcome", () => {

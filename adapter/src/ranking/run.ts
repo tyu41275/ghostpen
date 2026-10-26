@@ -10,7 +10,7 @@ import { readSources } from "../sources/read.js";
 import type { TopicDocument } from "../sources/types.js";
 import { candidatesOf } from "./candidates.js";
 import { readChoices } from "./choices.js";
-import { rank, type BackgroundPost, type OwedPostMortem } from "./rank.js";
+import { rank, type BackgroundPost, type Mention, type OwedPostMortem } from "./rank.js";
 import type { Score } from "./scores.js";
 import { scoreAll, type Scored } from "./scorer.js";
 
@@ -21,7 +21,8 @@ export interface RankingView {
   ranAt: string;
   entries: Array<{ id: string; kind: string; title: string; topic: string; takeaway: string; total: number; explain: string[];
     location: string; scores: Array<Score & { location: string }> }>;
-  background: BackgroundPost[];
+  /** Each background post with its references: where the part is defined and where each top topic names it. */
+  background: Array<Omit<BackgroundPost, "mentions"> & { mentions: Array<Mention & { location: string }> }>;
   owed: OwedPostMortem[];
   problems: string[];
 }
@@ -37,7 +38,10 @@ export function isRankingView(value: unknown): value is RankingView {
     && (s.line === null || typeof s.line === "number") && (s.note === undefined || str(s.note));
   const entry = (e: unknown) => rec(e) && [e.id, e.kind, e.title, e.topic, e.takeaway, e.location].every(str)
     && typeof e.total === "number" && strs(e.explain) && Array.isArray(e.scores) && e.scores.every(score);
-  const background = (b: unknown) => rec(b) && str(b.part) && strs(b.unlocks);
+  const mention = (m: unknown) => rec(m) && str(m.id) && typeof m.line === "number" && str(m.quote) && str(m.location);
+  const defined = (d: unknown) => rec(d) && str(d.where) && str(d.text);
+  const background = (b: unknown) => rec(b) && str(b.part) && strs(b.unlocks) && Array.isArray(b.mentions) && b.mentions.every(mention)
+    && Array.isArray(b.defined) && b.defined.every(defined);
   const owed = (o: unknown) => rec(o) && str(o.decision) && str(o.title) && str(o.bookedAt) && typeof o.due === "boolean" && strs(o.evidence);
   return Array.isArray(value.entries) && value.entries.every(entry) && Array.isArray(value.background) && value.background.every(background)
     && Array.isArray(value.owed) && value.owed.every(owed);
@@ -49,7 +53,7 @@ const where = (document: TopicDocument, line: number | null) =>
 
 export async function rankNow(settings: GhostpenSettings, seams: { run?: (prompt: string) => Promise<string>; now?: Date } = {}):
   Promise<RankingView> {
-  const { documents, terms, index, problems } = await readSources(settings, seams.now);
+  const { documents, definitions, index, problems } = await readSources(settings, seams.now);
   const candidates = candidatesOf(documents);
   let scored = new Map<string, Scored>();
   const notes = problems.map((p) => `${p.source}: ${p.problem}`);
@@ -60,13 +64,16 @@ export async function rankNow(settings: GhostpenSettings, seams: { run?: (prompt
     notes.push(...result.failures.map((f) => `scorer: ${f.candidate}: ${f.problem}`));
   }
   const choices = readChoices(settings.dataDir);
-  const ranking = rank(candidates, new Map([...scored].map(([id, s]) => [id, s.scores])), choices.weights, terms, index, choices.bookings);
+  const ranking = rank(candidates, new Map([...scored].map(([id, s]) => [id, s.scores])), choices.weights, definitions, index, choices.bookings);
+  notes.push(...ranking.problems);
+  const byId = new Map(candidates.map((c) => [c.id, c.document]));
   const view: RankingView = {
     ranAt: (seams.now ?? new Date()).toISOString(),
     entries: ranking.ranked.map((r) => ({ id: r.candidate.id, kind: r.candidate.kind, title: r.candidate.title,
       topic: scored.get(r.candidate.id)!.topic, takeaway: scored.get(r.candidate.id)!.takeaway, total: r.total, explain: r.explain,
       location: where(r.candidate.document, 1), scores: r.scores.map((s) => ({ ...s, location: where(r.candidate.document, s.line) })) })),
-    background: ranking.background, owed: ranking.owed, problems: notes };
+    background: ranking.background.map((b) => ({ ...b, mentions: b.mentions.map((m) => ({ ...m, location: where(byId.get(m.id)!, m.line) })) })),
+    owed: ranking.owed, problems: notes };
   const path = join(settings.dataDir, RANKING_FILE);
   writeFileSync(`${path}.tmp`, JSON.stringify(view, null, 2));
   renameSync(`${path}.tmp`, path);

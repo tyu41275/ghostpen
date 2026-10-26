@@ -87,7 +87,8 @@ describe("a ranking run", () => {
   it("reads the sources, ranks the scored candidates, keeps every problem, and writes the result for the app", async () => {
     const root = tempDir(), data = tempDir();
     mkdirSync(join(root, "chatter", "decisions"), { recursive: true });
-    writeFileSync(join(root, "chatter", "decisions", "0028.md"), ADR.lines.join("\n"));
+    // CI named three times: central, so it is a cost (one passing mention would not be, ghostpen#111).
+    writeFileSync(join(root, "chatter", "decisions", "0028.md"), [...ADR.lines, "CI runs on the check runner.", "Every change waits for CI."].join("\n"));
     mkdirSync(join(root, "chatter", "docs"), { recursive: true });
     writeFileSync(join(root, "chatter", "docs", "CONTEXT.md"), "# g\n\n## CI\nThe checks that run on every change.\n");
     const settings = parseSettings({ instance: "host", port: 8794, dataDir: data, scorer: { command: ["unused"] },
@@ -96,7 +97,9 @@ describe("a ranking run", () => {
     const view = await rankNow(settings, { run: async () => answer(), now: new Date("2026-10-25T00:00:00Z") });
     expect(view.entries.map((e) => [e.id, e.total, e.explain, e.topic])).toEqual([["decisions:chatter/decisions/0028.md", 5, ["ci"], "Why slow tests moved out of the way"]]);
     expect(view.entries[0]!.scores[0]!.location).toBe(`${join(root, "chatter", "decisions", "0028.md")}:2`);
-    expect(view.background).toEqual([{ part: "ci", unlocks: ["decisions:chatter/decisions/0028.md"] }]);
+    expect(view.background).toEqual([{ part: "ci", unlocks: ["decisions:chatter/decisions/0028.md"],
+      mentions: [{ id: "decisions:chatter/decisions/0028.md", line: 2, quote: "CI is the main delivery bottleneck across every repo.", location: `${join(root, "chatter", "decisions", "0028.md")}:2` }],
+      defined: [{ where: `${join(root, "chatter", "docs", "CONTEXT.md")}:3`, text: "The checks that run on every change." }] }]);
     expect(view.problems).toEqual(["decisions: its pattern none/*.md matches no file"]);
     expect(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")).ranAt).toBe("2026-10-25T00:00:00.000Z");
     expect(isRankingView(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")))).toBe(true); // what a run writes, the page reads

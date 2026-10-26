@@ -12,8 +12,9 @@ ghostpen ranks possible posts by the value they give a reader. It doesn't use wh
   - **Every score quotes the source line that earns it, and the quote is checked against the document word for word** (whitespace aside, at least 8 characters). A missing, out-of-range or unmatched score counts as 0, and says why. Whoever proposes scores can't raise a candidate with words the source doesn't hold.
   - The total is weighted. Every weight starts at 1.
 - **The ranking** (`src/ranking/rank.ts`): candidates by total.
-  - Each candidate carries its **explanation cost**: the stack parts it names (glossary terms) that no published post is about. Cost never lowers a score.
-  - The cost orders the **background posts**: each part, by how many of the top 15 candidates it would unlock.
+  - Each candidate carries its **explanation cost**: the stack parts (glossary terms) central to its document that no published post is about. A part is central where the draft check calls it central (`docs/drafting.md`): in the document's title, or named three times or more as a whole word. One passing mention of a word that is also a term is no cost (ghostpen#111). Cost never lowers a score.
+  - The cost orders the **background posts**: each part, by how many of the top 15 candidates it would unlock. Each carries its references: where every glossary defines the part (`path:line`, first sentence) and, per unlocked candidate, the first line that names it, quoted.
+  - A term two glossaries define differently (same heading, different text) counts for no candidate and gets no background post; the run reports it under problems until one definition wins. The same text under two headings is one definition.
   - It also lists the **post-mortems owed**: a decision post written before its outcome books one, which becomes due once a post-mortem source (experiment, incident, measured PR) names the decision by its file name or ADR number.
 - **Tim's choices** (`src/ranking/choices.ts`, `dataDir/choices.json`):
   - Every Write, Skip and Not yet is kept with its reason (every press needs one, `docs/feedback.md`).

@@ -58,7 +58,8 @@ describe("ghostpen app page", () => {
           { factor: "thoughtProcess", score: 0, quote: "", line: null, note: "its quote is not in the source", location: "/o/0028.md" }] },
       { id: "e:trial", kind: "post-mortem", title: "Trial", topic: "A trial that failed", takeaway: "", total: 2, explain: [], location: "/o/t.md:1",
         scores: [{ factor: "evidence", score: 2, quote: "fell 28% against the baseline", line: 3, location: "/o/t.md:3" }] }],
-      background: [{ part: "ci", unlocks: ["d:0028", "x"] }],
+      background: [{ part: "ci", unlocks: ["d:0028", "x"], mentions: [{ id: "d:0028", line: 2, quote: "CI is slow", location: "/o/0028.md:2" }],
+        defined: [{ where: "/g/chatter/docs/CONTEXT.md:3", text: "The checks on every change." }] }],
       owed: [{ decision: "d:0022", title: "ADR 0022", bookedAt: "2026-10-01T00:00:00Z", due: true, evidence: ["gh:o/r#9"] }],
       problems: ["github: o/r cannot be read (GitHub answered 404)"] };
     const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
@@ -78,7 +79,7 @@ describe("ghostpen app page", () => {
     await thinking.locator("summary").click();
     expect(await thinking.innerText()).toContain("its quote is not in the source");
     expect(await rows.nth(0).locator("td").nth(5).innerText()).toBe("ci, check runner");
-    expect(await page.locator("[data-section=background] li").innerText()).toBe("ci: unlocks 2 topics");
+    expect(await page.locator("[data-section=background] li").innerText()).toBe("ci: unlocks 2 topics (defined at /g/chatter/docs/CONTEXT.md:3)");
     expect(await page.locator("[data-section=owed] li").innerText()).toBe("ADR 0022: due now (gh:o/r#9)");
     expect(await page.locator("[data-section=problems] li").innerText()).toBe("github: o/r cannot be read (GitHub answered 404)");
   });
