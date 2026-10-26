@@ -57,7 +57,8 @@ export function picks(view: RankingView, choices: ChoicesState, count: number): 
   // A background post takes one of the `count` places: it is judged against the topics that stay beside it.
   const beside = open.slice(0, Math.max(count - 1, 0));
   const besideIds = new Set(beside.map((e) => e.id));
-  const background = view.background.find((b) => !answered.has(`background:${b.part}`) && b.unlocks.filter((id) => besideIds.has(id)).length >= 2);
+  // Judged by its mentions, the evidence the card quotes: a ranking from before references existed has none and proposes nothing.
+  const background = view.background.find((b) => !answered.has(`background:${b.part}`) && b.mentions.filter((m) => besideIds.has(m.id)).length >= 2);
   const items: ShortlistItem[] = [];
   if (background) items.push({ id: `background:${background.part}`, kind: "background", text: backgroundText(background, beside) });
   for (const [i, entry] of open.slice(0, count - items.length).entries()) items.push({ id: entry.id, kind: entry.kind as "decision" | "post-mortem", text: proposalText(entry, i + 1) });

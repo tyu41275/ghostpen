@@ -67,6 +67,9 @@ describe("the picks", () => {
     expect(fourth.map((i) => i.id)).toEqual(["background:ci", "a", "b", "c", "d"]);
     expect(fourth[0]!.text).toContain("2 of this week's topics mention ci");
     expect(fourth[0]!.text).toContain('#4 names it at /o/d.md:2');
+    // A ranking written before references existed unlocks topics but quotes nothing: no card without evidence.
+    const legacy = picks(view({ background: [{ part: "ci", unlocks: ["a", "b"], mentions: [], defined: [] }] }), fresh, 5);
+    expect(legacy.map((i) => i.id)).toEqual(["a", "b", "c", "d", "e"]);
   });
 });
 
