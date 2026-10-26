@@ -107,7 +107,7 @@ describe("the ranking", () => {
   it("counts only prose, as the draft check does: not code, front matter, subheadings, tables or inline code", () => {
     const noisy = candidateOf(doc("x/2", ["---", "candidate: front matter", "---", "# ADR 2: a title", "## The candidate step",
       "```", "candidate = pick(candidate)", "candidate.run()", "```", "| candidate | yes |", "Use `candidate` here: see [candidate](https://x/candidate).",
-      "> candidate", "One candidate in prose."], { title: "ADR 2: a title" }));
+      ">", "One candidate in prose."], { title: "ADR 2: a title" }));
     expect(naming(noisy.document, "candidate")).toEqual({ count: 2, central: false, line: 11, quote: "Use `candidate` here: see [candidate](https://x/candidate)." });
     expect(explanationCost(noisy, ["candidate"], EMPTY_INDEX)).toEqual([]);
     const prose = candidateOf(doc("x/3", ["# ADR 3: a title", "```", "candidate", "```", "A candidate.", "The candidate.", "That candidate."]));
