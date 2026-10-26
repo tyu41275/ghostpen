@@ -32,19 +32,35 @@ export function proposalText(entry: Entry, rank: number): string {
     entry.takeaway ? `A reader leaves with: ${entry.takeaway}` : "", needs].filter(Boolean).join("\n");
 }
 
-/** The items for this week: up to `count`, a background post first when one unlocks two or more of the picks. */
+type Background = RankingView["background"][number];
+
+/**
+ * A background post's card, with what it rests on (ghostpen#111): where each glossary defines the part (its first
+ * sentence quoted) and, for each topic shown with it, the line where that topic names the part. `shown` are the topics
+ * the card is posted beside, in their order; the count is of those, never of a topic the card itself displaces.
+ */
+export function backgroundText(background: Background, shown: Entry[]): string {
+  const named = shown.map((entry, i) => ({ rank: i + 1, entry, mention: background.mentions.find((m) => m.id === entry.id) }))
+    .filter((x): x is typeof x & { mention: Background["mentions"][number] } => !!x.mention);
+  const defined = background.defined.length
+    ? background.defined.map((d) => `Defined at ${d.where}: "${d.text}"`)
+    : [`No glossary defines ${background.part}; the topics below name it.`];
+  return [`**Background post: what ${background.part} is**`,
+    `Why: ${named.length} of this week's topics mention ${background.part}, and no post explains it yet. Writing this first lets them link to it instead of explaining it again.`,
+    ...defined, ...named.map((x) => `#${x.rank} names it at ${x.mention.location}: "${x.mention.quote}"`)].join("\n");
+}
+
+/** The items for this week: up to `count`, a background post first when it unlocks two or more of the topics shown with it. */
 export function picks(view: RankingView, choices: ChoicesState, count: number): ShortlistItem[] {
   const answered = new Set(choices.choices.filter((c) => c.choice !== "not-yet").map((c) => c.candidate));
   const open = view.entries.filter((e) => !answered.has(e.id));
-  const top = open.slice(0, count);
-  const topIds = new Set(top.map((e) => e.id));
-  const background = view.background.find((b) => !answered.has(`background:${b.part}`) && b.unlocks.filter((id) => topIds.has(id)).length >= 2);
+  // A background post takes one of the `count` places: it is judged against the topics that stay beside it.
+  const beside = open.slice(0, Math.max(count - 1, 0));
+  const besideIds = new Set(beside.map((e) => e.id));
+  // Judged by its mentions, the evidence the card quotes: a ranking from before references existed has none and proposes nothing.
+  const background = view.background.find((b) => !answered.has(`background:${b.part}`) && b.mentions.filter((m) => besideIds.has(m.id)).length >= 2);
   const items: ShortlistItem[] = [];
-  if (background) {
-    const unlocked = background.unlocks.filter((id) => topIds.has(id)).length;
-    items.push({ id: `background:${background.part}`, kind: "background",
-      text: `**Background post: what ${background.part} is**\nWhy: ${unlocked} of this week's topics mention ${background.part}, and no post explains it yet. Writing this first lets them link to it instead of explaining it again.` });
-  }
+  if (background) items.push({ id: `background:${background.part}`, kind: "background", text: backgroundText(background, beside) });
   for (const [i, entry] of open.slice(0, count - items.length).entries()) items.push({ id: entry.id, kind: entry.kind as "decision" | "post-mortem", text: proposalText(entry, i + 1) });
   return items;
 }

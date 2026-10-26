@@ -7,7 +7,7 @@ import { readChoices } from "../src/ranking/choices.js";
 import { RANKING_FILE, type RankingView } from "../src/ranking/run.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { parseSettings } from "../src/settings.js";
-import { picks, proposalText } from "../src/shortlist/picks.js";
+import { backgroundText, picks, proposalText } from "../src/shortlist/picks.js";
 import { checkSlot, currentWeek } from "../src/shortlist/schedule.js";
 import { KEY, tempDir } from "./helpers.js";
 
@@ -15,8 +15,11 @@ const entry = (id: string, total: number, explain: string[] = [], kind = "decisi
   takeaway: `Takeaway ${id}`, total, explain, location: `/o/${id}.md:1`,
   scores: [{ factor: "stakes", score: 3, quote: "CI is the main delivery bottleneck", line: 2, location: `/o/${id}.md:2` },
     { factor: "carryOver", score: 0, quote: "", line: null, note: "its quote is not in the source", location: `/o/${id}.md` }] });
+const mention = (id: string) => ({ id, line: 2, quote: "CI is the main delivery bottleneck", location: `/o/${id}.md:2` });
+const ci = (unlocks: string[]) => ({ part: "ci", unlocks, mentions: unlocks.map(mention),
+  defined: [{ where: "/g/chatter/docs/CONTEXT.md:3", text: "The checks that run on every change." }] });
 const view = (over: Partial<RankingView> = {}): RankingView => ({ ranAt: "2026-10-25T07:40:00Z", problems: [], owed: [],
-  entries: ["a", "b", "c", "d", "e", "f"].map((id, i) => entry(id, 10 - i, id === "a" || id === "b" ? ["ci"] : [])), background: [{ part: "ci", unlocks: ["a", "b"] }], ...over });
+  entries: ["a", "b", "c", "d", "e", "f"].map((id, i) => entry(id, 10 - i, id === "a" || id === "b" ? ["ci"] : [])), background: [ci(["a", "b"])], ...over });
 
 describe("the weekly slot", () => {
   const slot = checkSlot("monday", "09:00", "America/New_York");
@@ -42,7 +45,12 @@ describe("the picks", () => {
   it("takes the top open topics and ranks in a background post that unlocks two of them", () => {
     const items = picks(view(), fresh, 5);
     expect(items.map((i) => i.id)).toEqual(["background:ci", "a", "b", "c", "d"]);
-    expect(items[0]!.text).toContain("2 of this week's topics mention ci");
+    // The card says what it rests on (ghostpen#111): where the part is defined, and the line where each shown topic names it.
+    expect(items[0]!.text).toBe(["**Background post: what ci is**",
+      "Why: 2 of this week's topics mention ci, and no post explains it yet. Writing this first lets them link to it instead of explaining it again.",
+      'Defined at /g/chatter/docs/CONTEXT.md:3: "The checks that run on every change."',
+      '#1 names it at /o/a.md:2: "CI is the main delivery bottleneck"', '#2 names it at /o/b.md:2: "CI is the main delivery bottleneck"'].join("\n"));
+    expect(backgroundText({ ...ci(["a"]), defined: [] }, [entry("a", 10, ["ci"])])).toContain("No glossary defines ci; the topics below name it.");
     const text = proposalText(entry("a", 10, ["ci"]), 1);
     expect(text).toBe('**#1 Topic a** (Decision post, score 10)\nWhy: stakes 3/3: "CI is the main delivery bottleneck"\nA reader leaves with: Takeaway a\nNeeds first: a post explaining ci.');
   });
@@ -50,6 +58,18 @@ describe("the picks", () => {
     const answered = { ...fresh, choices: [{ candidate: "a", choice: "write" as const, reason: "", at: "", scores: [] },
       { candidate: "c", choice: "skip" as const, reason: "narrow", at: "", scores: [] }, { candidate: "d", choice: "not-yet" as const, reason: "", at: "", scores: [] }] };
     expect(picks(view(), answered, 3).map((i) => i.id)).toEqual(["b", "d", "e"]);
+  });
+  it("counts the topics it is shown beside, never the one its own place displaces", () => {
+    // With five places, a background post stands beside four topics: e, the fifth, is not one of them.
+    const fifth = picks(view({ background: [ci(["a", "e"])] }), fresh, 5);
+    expect(fifth.map((i) => i.id)).toEqual(["a", "b", "c", "d", "e"]);
+    const fourth = picks(view({ background: [ci(["a", "d"])] }), fresh, 5);
+    expect(fourth.map((i) => i.id)).toEqual(["background:ci", "a", "b", "c", "d"]);
+    expect(fourth[0]!.text).toContain("2 of this week's topics mention ci");
+    expect(fourth[0]!.text).toContain('#4 names it at /o/d.md:2');
+    // A ranking written before references existed unlocks topics but quotes nothing: no card without evidence.
+    const legacy = picks(view({ background: [{ part: "ci", unlocks: ["a", "b"], mentions: [], defined: [] }] }), fresh, 5);
+    expect(legacy.map((i) => i.id)).toEqual(["a", "b", "c", "d", "e"]);
   });
 });
 
