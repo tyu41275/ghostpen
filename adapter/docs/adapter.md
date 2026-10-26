@@ -38,3 +38,7 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
 cd adapter && npm ci && npm run typecheck && npm test
 npx playwright install --only-shell chromium && npm run test:browser   # the app page in real Chromium (e2e/)
 ```
+
+## Checks on every PR
+
+The check runner (chatter-ops) runs on each PR head: `test` (the fast unit tests, ADR 0028), `adapter-smoke` (chatter's adapter smoke over a real ghostpen service), `browser-e2e` (the app page in real Chromium, `.github/browser-e2e.json`: a UI change under `adapter/src/service/app*.ts` or `server.ts` needs a browser test change beside it, or a `no-browser-test: <reason>` line the reviewer accepts), `sizing`, `closing-keyword` and `e2e-gate`. The suite's JUnit report is `test-results/browser-e2e.xml` at the repository root; vitest resolves the path from its root, the repository, not from `adapter/` (ghostpen#113).
