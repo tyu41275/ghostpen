@@ -46,16 +46,41 @@ const token = (text: string, handle: string) =>
 
 export interface Naming { count: number; central: boolean; line: number; quote: string }
 
-/** How a document names `term` as a whole word: how often, the first line that does, and whether that makes it central. */
+/**
+ * The document's prose, line by line (the draft check's `prose`, draft/plain.ts, kept per line so a mention keeps its
+ * line number): nothing inside fenced code or front matter, no heading, table or quote-only line, and inline code,
+ * images, link addresses and HTML taken out of the lines that stay. A term named only in code or subheadings is not
+ * named in prose.
+ */
+export function proseLines(lines: string[]): Array<{ line: number; text: string }> {
+  const out: Array<{ line: number; text: string }> = [];
+  let fenced = false, front = lines[0] === "---";
+  for (const [i, raw] of lines.entries()) {
+    if (front) { if (i > 0 && raw === "---") front = false; continue; }
+    if (/^\s*```/u.test(raw)) { fenced = !fenced; continue; }
+    if (fenced || /^\s*(#|\||>?\s*$)/u.test(raw)) continue;
+    const text = raw.replace(/`[^`\n]*`/gu, " code ").replace(/!\[[^\]]*\]\([^)]*\)/gu, " ").replace(/\[([^\]]*)\]\([^)]*\)/gu, "$1")
+      .replace(/https?:\/\/[^\s)>\]]+/gu, " link ").replace(/<[^>]+>/gu, " ");
+    out.push({ line: i + 1, text });
+  }
+  return out;
+}
+
+/**
+ * How a document names `term` as a whole word, in its title and its prose (the draft check's count): how often, the
+ * first line that does, and whether that makes it central: in the title, or three times or more.
+ */
 export function naming(document: TopicDocument, term: string): Naming | null {
-  let count = 0, line = 0, quote = "";
-  for (const [i, text] of document.lines.entries()) {
+  const inTitle = termRe(term, "iu").test(document.title);
+  let count = inTitle ? 1 : 0, line = 0, quote = "";
+  for (const { line: at, text } of proseLines(document.lines)) {
     const n = (text.match(termRe(term)) ?? []).length;
-    if (n > 0 && line === 0) { line = i + 1; quote = text.trim().slice(0, QUOTE); }
+    if (n > 0 && line === 0) { line = at; quote = document.lines[at - 1]!.trim().slice(0, QUOTE); }
     count += n;
   }
-  if (line === 0) return null;
-  return { count, central: termRe(term, "iu").test(document.title) || count >= 3, line, quote };
+  if (count === 0) return null;
+  if (inTitle && (line === 0 || termRe(term, "iu").test(document.lines[0] ?? ""))) { line = 1; quote = document.lines[0]!.trim().slice(0, QUOTE); }
+  return { count, central: inTitle || count >= 3, line, quote };
 }
 
 /** The stack parts (from `terms`) central to a candidate's document that no published post is about. */

@@ -97,11 +97,21 @@ describe("the ranking", () => {
   it("counts a part only where the document uses it as one: in its title, or named three times or more", () => {
     expect(naming(ADR, "relay")).toEqual({ count: 1, central: false, line: 16, quote: "- chatter shows a Relay card" });
     expect(naming(ADR, "Diamond Hands")).toEqual({ count: 1, central: true, line: 1, quote: "# ADR 0022: Diamond Hands live trading parity policy" });
-    expect(naming(ADR, "parity")).toMatchObject({ count: 2, central: true, line: 1 }); // in the title: central at any count
+    expect(naming(ADR, "parity")).toMatchObject({ count: 2, central: true, line: 1 }); // in the title: central at any count, quoted from it
     expect(naming(ADR, "paritys")).toBeNull(); // whole words only
     expect(explanationCost(candidateOf(ADR), ["chatter", "relay", "parity"], EMPTY_INDEX)).toEqual(["parity"]);
     const twice = candidateOf(doc("x/1", ["# ADR 1: a title", "The candidate build. A candidate again.", "nothing more"]));
     expect(explanationCost(twice, ["candidate"], EMPTY_INDEX)).toEqual([]); // two passing mentions are still passing
+  });
+
+  it("counts only prose, as the draft check does: not code, front matter, subheadings, tables or inline code", () => {
+    const noisy = candidateOf(doc("x/2", ["---", "candidate: front matter", "---", "# ADR 2: a title", "## The candidate step",
+      "```", "candidate = pick(candidate)", "candidate.run()", "```", "| candidate | yes |", "Use `candidate` here: see [candidate](https://x/candidate).",
+      "> candidate", "One candidate in prose."], { title: "ADR 2: a title" }));
+    expect(naming(noisy.document, "candidate")).toEqual({ count: 2, central: false, line: 11, quote: "Use `candidate` here: see [candidate](https://x/candidate)." });
+    expect(explanationCost(noisy, ["candidate"], EMPTY_INDEX)).toEqual([]);
+    const prose = candidateOf(doc("x/3", ["# ADR 3: a title", "```", "candidate", "```", "A candidate.", "The candidate.", "That candidate."]));
+    expect(naming(prose.document, "candidate")).toMatchObject({ count: 3, central: true, line: 5 });
   });
 
   it("counts a term two glossaries define differently for no topic and reports it, while one definition copied twice is one", () => {
