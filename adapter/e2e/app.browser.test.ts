@@ -112,3 +112,5 @@ describe("ghostpen app page", () => {
     }
   });
 });
+
+// ghostpen#110 proof: a test file changed beside a UI change, so only the suite can catch the broken page.

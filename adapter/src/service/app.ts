@@ -56,7 +56,7 @@ ${notes.length > MAX_NOTES ? `<p class="look-muted">${notes.length - MAX_NOTES} 
 
 function backgroundSection(view: RankingView | null | Error): string {
   if (!view || view instanceof Error || view.background.length === 0) return "";
-  return `<section class="look-card" data-section="background"><h2>Posts to write first</h2>
+  return `<section class="look-card" data-section="backgrounds"><h2>Posts to write first</h2>
 <p class="look-muted">Parts of your setup that top topics mention but no post explains yet. Writing these first lets those topics link to them.</p>
 <ol>${view.background.map((b) => `<li data-part="${escape(b.part)}">${escape(b.part)}: unlocks ${b.unlocks.length} topic${b.unlocks.length === 1 ? "" : "s"}${b.defined.length ? ` (defined at ${escape(b.defined.map((d) => d.where).join(", "))})` : " (no glossary defines it)"}</li>`).join("")}</ol></section>`;
 }
