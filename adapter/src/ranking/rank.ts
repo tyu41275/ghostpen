@@ -79,7 +79,11 @@ export function naming(document: TopicDocument, term: string): Naming | null {
     count += n;
   }
   if (count === 0) return null;
-  if (inTitle && (line === 0 || termRe(term, "iu").test(document.lines[0] ?? ""))) { line = 1; quote = document.lines[0]!.trim().slice(0, QUOTE); }
+  if (inTitle) { // cite the title's own heading line (wherever front matter puts it), or the title itself when no line holds it
+    const heading = document.lines.findIndex((l) => /^#\s/u.test(l) && termRe(term, "iu").test(l));
+    if (heading >= 0) { line = heading + 1; quote = document.lines[heading]!.trim().slice(0, QUOTE); }
+    else if (line === 0) { line = 1; quote = document.title.slice(0, QUOTE); }
+  }
   return { count, central: inTitle || count >= 3, line, quote };
 }
 

@@ -103,6 +103,11 @@ describe("a ranking run", () => {
     expect(view.problems).toEqual(["decisions: its pattern none/*.md matches no file"]);
     expect(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")).ranAt).toBe("2026-10-25T00:00:00.000Z");
     expect(isRankingView(JSON.parse(readFileSync(join(data, RANKING_FILE), "utf8")))).toBe(true); // what a run writes, the page reads
+    // A ranking written before references existed still reads, with empty references, until the next run.
+    const older: any = { ...view, background: [{ part: "ci", unlocks: ["decisions:chatter/decisions/0028.md"] }] };
+    expect(isRankingView(older)).toBe(true);
+    expect(older.background[0]).toEqual({ part: "ci", unlocks: ["decisions:chatter/decisions/0028.md"], mentions: [], defined: [] });
+    expect(isRankingView({ ...view, background: [{ part: "ci", unlocks: [], mentions: [{ id: "x" }], defined: [] }] })).toBe(false);
     const unset = await rankNow({ ...settings, scorer: undefined }, { now: new Date() });
     expect(unset.entries).toEqual([]);
     expect(unset.problems).toContain("no scorer is set (settings.scorer): nothing is ranked");

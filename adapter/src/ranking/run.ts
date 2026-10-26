@@ -40,8 +40,12 @@ export function isRankingView(value: unknown): value is RankingView {
     && typeof e.total === "number" && strs(e.explain) && Array.isArray(e.scores) && e.scores.every(score);
   const mention = (m: unknown) => rec(m) && str(m.id) && typeof m.line === "number" && str(m.quote) && str(m.location);
   const defined = (d: unknown) => rec(d) && str(d.where) && str(d.text);
-  const background = (b: unknown) => rec(b) && str(b.part) && strs(b.unlocks) && Array.isArray(b.mentions) && b.mentions.every(mention)
-    && Array.isArray(b.defined) && b.defined.every(defined);
+  // A ranking written before references existed (no mentions, no defined) still reads, with empty references, until the next run.
+  const background = (b: unknown) => {
+    if (rec(b) && b.mentions === undefined && b.defined === undefined) Object.assign(b, { mentions: [], defined: [] });
+    return rec(b) && str(b.part) && strs(b.unlocks) && Array.isArray(b.mentions) && b.mentions.every(mention)
+      && Array.isArray(b.defined) && b.defined.every(defined);
+  };
   const owed = (o: unknown) => rec(o) && str(o.decision) && str(o.title) && str(o.bookedAt) && typeof o.due === "boolean" && strs(o.evidence);
   return Array.isArray(value.entries) && value.entries.every(entry) && Array.isArray(value.background) && value.background.every(background)
     && Array.isArray(value.owed) && value.owed.every(owed);

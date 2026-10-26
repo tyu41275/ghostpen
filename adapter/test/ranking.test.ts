@@ -112,6 +112,11 @@ describe("the ranking", () => {
     expect(explanationCost(noisy, ["candidate"], EMPTY_INDEX)).toEqual([]);
     const prose = candidateOf(doc("x/3", ["# ADR 3: a title", "```", "candidate", "```", "A candidate.", "The candidate.", "That candidate."]));
     expect(naming(prose.document, "candidate")).toMatchObject({ count: 3, central: true, line: 5 });
+    // A part in the title is cited from the title's own heading line, after any front matter; a title held by no line is quoted itself.
+    const fronted = doc("x/4", ["---", "tags: [candidate]", "---", "# ADR 4: the candidate build", "Nothing else."], { title: "ADR 4: the candidate build" });
+    expect(naming(fronted, "candidate")).toEqual({ count: 1, central: true, line: 4, quote: "# ADR 4: the candidate build" });
+    const issue = doc("gh:o/r#1", ["Body with no heading."], { title: "The candidate build", kind: "issue" });
+    expect(naming(issue, "candidate")).toEqual({ count: 1, central: true, line: 1, quote: "The candidate build" });
   });
 
   it("counts a term two glossaries define differently for no topic and reports it, while one definition copied twice is one", () => {
