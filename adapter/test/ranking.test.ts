@@ -98,7 +98,8 @@ describe("the ranking", () => {
     expect(naming(ADR, "relay")).toEqual({ count: 1, central: false, line: 16, quote: "- chatter shows a Relay card" });
     expect(naming(ADR, "Diamond Hands")).toEqual({ count: 1, central: true, line: 1, quote: "# ADR 0022: Diamond Hands live trading parity policy" });
     expect(naming(ADR, "parity")).toMatchObject({ count: 2, central: true, line: 1 }); // in the title: central at any count, quoted from it
-    expect(naming(ADR, "paritys")).toBeNull(); // whole words only
+    expect(naming(ADR, "pari")).toBeNull(); // whole words only: "parity" is not a mention of pari
+    expect(naming(ADR, "rading")).toBeNull(); // nor "trading" of rading
     expect(explanationCost(candidateOf(ADR), ["chatter", "relay", "parity"], EMPTY_INDEX)).toEqual(["parity"]);
     const twice = candidateOf(doc("x/1", ["# ADR 1: a title", "The candidate build. A candidate again.", "nothing more"]));
     expect(explanationCost(twice, ["candidate"], EMPTY_INDEX)).toEqual([]); // two passing mentions are still passing
