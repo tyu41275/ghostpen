@@ -1,6 +1,6 @@
 {
   "setup": "bash adapter/scripts/browser-e2e-setup.sh",
-  "run": "cd adapter && GHOSTPEN_BROWSER_ARTIFACTS=../test-results/browser npx vitest run --config vitest.browser.config.ts --reporter=default --reporter=junit --outputFile.junit=../test-results/browser-e2e.xml",
+  "run": "cd adapter && GHOSTPEN_BROWSER_ARTIFACTS=../test-results/browser npx vitest run --config vitest.browser.config.ts --reporter=default --reporter=junit --outputFile.junit=test-results/browser-e2e.xml",
   "report": "test-results/browser-e2e.xml",
   "ui": [
     "adapter/src/service/app*.ts",
