@@ -13,6 +13,8 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { GhostpenSettings } from "../settings.js";
 import { GHOSTPEN_VERSION } from "../version.js";
 import type { DraftJobs } from "../publish/jobs.js";
+import { readAttempt } from "../ranking/attempt.js";
+import type { RankJobs } from "../ranking/jobs.js";
 import { adapterRoute } from "./adapter-routes.js";
 import { APP_CSP, renderApp } from "./app.js";
 import { verifyAppIdentity } from "./app-identity.js";
@@ -24,6 +26,8 @@ export interface ServerOptions {
   settings?: GhostpenSettings; adapterKey?: Buffer;
   /** Drafting after a Write or an Edit (ghostpen#90); unset: a Write is kept and nothing is drafted. */
   jobs?: DraftJobs;
+  /** Ranking on its own when a keyed shortlist ask finds one due (ghostpen#118); unset (no scorer or no topics): nothing ranks here. */
+  ranker?: RankJobs;
   /** The readiness list's facts beyond the settings and keys: the settings file and when the service started; unset (or no settings): no such route. */
   readiness?: { settingsFile?: string | undefined; started: Date };
 }
@@ -91,7 +95,8 @@ export function createGhostpenServer(options: ServerOptions): Server {
       if (!viewer) return send(res, 404, { error: "not found" });
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": APP_CSP,
         "x-content-type-options": "nosniff", "referrer-policy": "same-origin" });
-      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir), notesOf(options.dataDir)));
+      res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir), notesOf(options.dataDir),
+        { attempt: readAttempt(options.dataDir), now: new Date((options.now ?? Date.now)()) }));
       return;
     }
     if (path === READINESS_PATH && req.method === "GET" && options.readiness && options.settings) {
@@ -116,7 +121,7 @@ export function createGhostpenServer(options: ServerOptions): Server {
           body = parsed as Record<string, unknown>;
         } catch { return send(res, 400, { error: "the body must be a JSON object" }); }
         try {
-          const reply = await adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()), options.jobs);
+          const reply = await adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()), options.jobs, options.ranker);
           send(res, reply?.status ?? 404, reply?.body ?? { error: "not found" });
         } catch (error) {
           send(res, 500, { error: error instanceof Error ? error.message : String(error) });

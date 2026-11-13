@@ -6,7 +6,7 @@
  * not at all, so it always gets one with every need.
  */
 import type { GhostpenSettings } from "../settings.js";
-import { failing, type Facts, line, type Need, rankingOnce, type Reading, shortlistsOnce } from "./readiness-reading.js";
+import { attemptOnce, failing, type Facts, line, type Need, rankingOnce, type Reading, shortlistsOnce } from "./readiness-reading.js";
 import { JOB_NEEDS } from "./readiness-jobs.js";
 import { SCORER_NEED, SETTING_NEEDS } from "./readiness-settings.js";
 import { SOURCE_NEEDS } from "./readiness-sources.js";
@@ -52,7 +52,7 @@ export async function readinessList(options: ReadinessOptions): Promise<Readines
   const { settings } = options;
   const facts: Facts = { settings, settingsFile: options.settingsFile, appKey: options.appKey, adapterKey: options.adapterKey,
     now: options.now?.() ?? new Date(), started: options.started, lastKeyedCall: options.lastKeyedCall,
-    ranking: rankingOnce(settings.dataDir), shortlists: shortlistsOnce(settings.dataDir) };
+    ranking: rankingOnce(settings.dataDir), attempt: attemptOnce(settings.dataDir), shortlists: shortlistsOnce(settings.dataDir) };
   const needs = await Promise.all(NEEDS.map(async (need) => {
     const { id, label, kind, required, spends, fix } = need;
     return { id, label, kind, required, spends, fix, ...(await reading(need, facts)) };

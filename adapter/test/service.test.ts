@@ -1,7 +1,10 @@
 import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ATTEMPT_FILE, readAttempt } from "../src/ranking/attempt.js";
+import { RANKING_FILE } from "../src/ranking/run.js";
+import { renderApp } from "../src/service/app.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { startService } from "../src/service/start.js";
 import { identity, KEY, keyFile, settingsFile, tempDir } from "./helpers.js";
@@ -82,5 +85,41 @@ describe("service", () => {
     } finally {
       chmodSync(dir, 0o700);
     }
+  });
+});
+
+describe("ranking on its own (ghostpen#118)", () => {
+  const keyed = { headers: { authorization: `Bearer ${KEY.toString("base64url")}` } };
+  const start = async (over: Record<string, unknown>) => {
+    const dir = tempDir();
+    const running = await startService(settingsFile(dir, { adapterKeyFile: keyFile(dir), shortlist: { operator: "12345", channel: "67890" }, ...over }), 0);
+    servers.push(running.server);
+    return { dir, ask: async () => (await fetch(`http://127.0.0.1:${running.port}/v1/adapter/shortlist`, keyed)).json() };
+  };
+
+  it("starts a ranking from the keyed shortlist ask only with a scorer and topics, and the next ask makes the week from it", async () => {
+    expect(await (await start({})).ask()).toEqual({ waiting: "nothing is ranked yet" });
+    // Topics in an empty folder: nothing to score, so no scorer runs.
+    const { dir, ask } = await start({ scorer: { command: ["unused"] }, sources: { topics: [{ name: "notes", kind: "markdown", root: tempDir(), include: ["*.md"] }] } });
+    expect(await ask()).toEqual({ waiting: "ranking the topics now" });
+    await vi.waitFor(() => expect(readAttempt(dir)?.outcome).toBe("ok"));
+    expect(await ask()).toMatchObject({ channel: "67890", items: [] });
+  });
+
+  it("shows on the app page what the last try did and how old an old ranking is, every value escaped", async () => {
+    const dataDir = tempDir();
+    writeFileSync(join(dataDir, RANKING_FILE), JSON.stringify({ ranAt: "2026-10-06T22:00:00.000Z", entries: [], background: [], owed: [], problems: [] }));
+    writeFileSync(join(dataDir, ATTEMPT_FILE), JSON.stringify({ by: "service", startedAt: "2026-10-24T21:00:00.000Z", endedAt: "2026-10-24T21:01:00.000Z",
+      outcome: "failed", problem: "scorer: <b>died</b>" }));
+    const base = await listen(createGhostpenServer({ instance: "host", dataDir, appKey: KEY, now: () => NOW }));
+    const html = await (await fetch(`${base}/app/`, { headers: { "x-chatter-identity": identity(claims()) } })).text();
+    expect(html).toContain('<p class="look-danger" data-field="ranking-run">The last try, at 2026-10-24T21:00:00.000Z, failed: scorer: &lt;b&gt;died&lt;/b&gt;. '
+      + '<span class="look-danger">This ranking is 18 days old.</span></p>');
+    const viewer = { login: "tim", sub: "1" } as never, at = new Date(NOW);
+    const line = (attempt: unknown, view: unknown = null) => /data-field="ranking-run">([^\n]*)<\/p>/u.exec(renderApp("h", viewer, view as never, [], { attempt: attempt as never, now: at }))?.[1];
+    expect(line({ by: "service", startedAt: "2026-10-24T21:00:00.000Z", outcome: "running" })).toBe("Ranking now, since 2026-10-24T21:00:00.000Z.");
+    expect(line({ by: "hand", startedAt: "2026-10-24T21:00:00.000Z", outcome: "skipped", problem: "a ranking is running already" }))
+      .toBe("The last try, at 2026-10-24T21:00:00.000Z, was skipped: a ranking is running already.");
+    expect(line({ by: "hand", startedAt: "2026-10-24T21:00:00.000Z", outcome: "ok" }, { ranAt: "2026-10-17T22:00:00.000Z", entries: [], background: [], owed: [], problems: [] })).toBeUndefined();
   });
 });

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RANKING_FILE } from "../src/ranking/run.js";
-import { line, rankingOnce, shortlistsOnce, type Facts, type Need } from "../src/service/readiness-reading.js";
+import { attemptOnce, line, rankingOnce, shortlistsOnce, type Facts, type Need } from "../src/service/readiness-reading.js";
 import { NEED_LIMIT_MS, NEED_OF_SETTING, NEEDS, READINESS_PATH, readinessList, reading } from "../src/service/readiness.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { startService } from "../src/service/start.js";
@@ -142,7 +142,7 @@ describe("GET /readiness", () => {
 describe("one bad need", () => {
   const settings = parseSettings({ instance: "host", port: 8794, dataDir: "/nowhere" });
   const facts: Facts = { settings, settingsFile: undefined, appKey: undefined, adapterKey: undefined, now: after(MINUTE), started: STARTED,
-    lastKeyedCall: undefined, ranking: rankingOnce("/nowhere"), shortlists: shortlistsOnce("/nowhere") };
+    lastKeyedCall: undefined, ranking: rankingOnce("/nowhere"), attempt: attemptOnce("/nowhere"), shortlists: shortlistsOnce("/nowhere") };
   const need = (check: Need["check"]): Need => ({ id: "bad", label: "Bad", kind: "source", required: false, spends: "none", fix: "x", check });
 
   it("reads failing when its check throws, saying nothing of the error", async () => {

@@ -7,7 +7,7 @@ sends none. Code: `src/service/readiness*.ts`.
 - **It reads, and does nothing else.** It reads the settings and local files. It calls nothing outside: no GitHub, no
   `gh`, no scorer, no writer. It writes nothing. It never makes this week's shortlist, never reads a source's documents and
   never builds the published-post index, since each of those writes. A folder or file is asked with one call that does not
-  block (`fs/promises`), and the list reads `ranking.json` and `shortlist.json` once each.
+  block (`fs/promises`), and the list reads `ranking.json`, `ranking-attempt.json` and `shortlist.json` once each.
 - **Unknown is not fine.** A need whose check throws reads `failing`, and a need that has not answered in 4 s reads
   `failing`. The list always carries all 13 needs and answers well inside chatter's 5 s.
 - **A reason holds no value.** It names a setting (`sources.topics[1].root`), with counts and times. It never quotes a
@@ -50,11 +50,14 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
 
 ## Jobs
 
-- `ranking` has no schedule: it runs when someone runs `node dist/cli/rank.js <settings>`, and the shortlist only reads the
-  `ranking.json` it writes. `not_set_up` with no topics, `chosen_off` with no scorer. With no `ranking.json` yet it is
-  `short_of_data`, due 8 days after the service started. A file that is not a ranking ghostpen wrote is `failing`, and so
-  is a ranking whose `ranAt` is over 8 days old. Otherwise `working`, since its `ranAt`. The fix names the rank command and
-  says nothing schedules it yet.
+- `ranking`: the service ranks on its own when the keyed shortlist ask finds a ranking due (`docs/ranking.md`), and
+  `node dist/cli/rank.js <settings>` ranks by hand. `not_set_up` with no topics, `chosen_off` with no scorer. A last try
+  (`ranking-attempt.json`) that failed after the last `ranAt` is `failing`, since that try, never quoting its problem. A
+  try running for under a day is `working`, since it started. A record that is not one ghostpen wrote is `failing`.
+  Otherwise: with no `ranking.json` yet it is `short_of_data`, due 8 days after the service started. A file that is not a
+  ranking ghostpen wrote is `failing`, and so is a ranking whose `ranAt` is over 8 days old. Otherwise `working`, since its
+  `ranAt`. With `shortlist` or `adapterKeyFile` unset these states stay, and the reason adds that nothing asks for the
+  shortlist, so no ranking starts on its own.
 - `weekly-shortlist` (`shortlist`): chatter's adapter asks the service for the week's shortlist on a 10-minute heartbeat,
   with the adapter key. The service keeps, in memory, when a call with the key last came. `not_set_up` with no `shortlist`
   or no `adapterKeyFile`. With no keyed call since the start it is `short_of_data`, due 20 minutes after the start. A last
