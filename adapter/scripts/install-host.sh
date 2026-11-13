@@ -70,10 +70,21 @@ umask 022
 
 # The service runs node's programs, gh and git by name (src/publish/github.ts), and the user manager's PATH holds none
 # of a user's own bin folders (ghostpen#122): the unit's PATH starts with the folders this install finds them in. One it
-# does not find is left out, and the readiness list's `publishing` need names it.
+# does not find is left out, and the readiness list's `publishing` need names it. Each tool is the first one on PATH
+# that runs on its own with an empty environment: a wrapper needing the installing shell's variables, as chatter's gh
+# shim in a task's shell, would not run under the unit (ghostpen#124).
 UNIT_PATH=
 for tool in node gh git; do
-  found=$(command -v "$tool" || true)
+  found=
+  IFS=: read -r -a path_dirs <<< "$PATH"
+  for path_dir in "${path_dirs[@]}"; do
+    case "$path_dir" in /*) ;; *) continue ;; esac
+    candidate="$path_dir/$tool"
+    if [ -f "$candidate" ] && [ -x "$candidate" ] && timeout 10 env -i "$candidate" --version > /dev/null 2>&1; then
+      found=$candidate
+      break
+    fi
+  done
   case "$found" in /*) folder=$(dirname "$found"); case ":$UNIT_PATH:" in *":$folder:"*) ;; *) UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}$folder" ;; esac ;; esac
 done
 UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}/usr/local/bin:/usr/bin:/bin"
