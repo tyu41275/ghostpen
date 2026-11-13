@@ -30,7 +30,7 @@ function home(): string {
 }
 
 /** Runs the install with a systemctl stand-in; answers systemctl's calls, or rejects with the script's error. */
-async function install(dir: string, options: { active?: boolean; port?: string; stack?: string; facts?: string } = {}): Promise<string[]> {
+async function install(dir: string, options: { active?: boolean; port?: string; stack?: string; facts?: string; readiness?: string } = {}): Promise<string[]> {
   const calls = join(dir, "systemctl.calls");
   writeFileSync(calls, "");
   const stub = join(dir, "systemctl");
@@ -39,7 +39,7 @@ async function install(dir: string, options: { active?: boolean; port?: string; 
   writeFileSync(stack, options.stack ?? "version: 1\ninstance: personal-comms-host\nadapters: [tempo, ghostpen]\n");
   await promisify(execFile)("bash", [script, "--instance", "personal-comms-host", "--root", join(dir, "ghostpen"),
     "--port", options.port ?? "8794", "--dropin-dir", join(dir, "adapters.d"), "--stack", stack,
-    ...(options.facts ? ["--chatter-facts", options.facts] : [])], {
+    ...(options.facts ? ["--chatter-facts", options.facts] : []), ...(options.readiness === undefined ? [] : ["--readiness", options.readiness])], {
     env: { PATH: process.env.PATH, HOME: dir, XDG_CONFIG_HOME: join(dir, "config"), GHOSTPEN_INSTALL_SYSTEMCTL: stub,
       GHOSTPEN_INSTALL_SKIP_BUILD: "1", GHOSTPEN_INSTALL_HEALTH_WAIT: "1" } });
   return readFileSync(calls, "utf8").trim().split("\n").filter(Boolean);
@@ -71,6 +71,7 @@ describe("install-host.sh", () => {
       module: join(root, "checkout", "adapter"), config: join(config, "chatter-adapter.json"), namespaces: ["ghostpen"],
       optional: { label: "ghostpen", start: ["systemctl", "--user", "enable", "--now", UNIT],
         stop: ["systemctl", "--user", "disable", "--now", UNIT], cancelJobs: ["/bin/true"], health: { port: Number(at), path: "/health" },
+        readiness: { port: Number(at), path: "/readiness" },
         app: { kind: "standalone-app", port: Number(at), path: "/app/", identityKeyFile: appKey } } } });
     expect(statSync(dropin).mode & 0o777).toBe(0o600);
 
@@ -82,19 +83,40 @@ describe("install-host.sh", () => {
     expect(readFileSync(appKey, "utf8")).toBe(key);
   });
 
-  it("gives settings made before the shortlist its adapter key and chatter's facts, keeping every value already there", async () => {
-    const dir = home(), settingsFile = join(dir, "ghostpen", "config", "settings.json");
+  it("gives settings made before the shortlist its adapter key, app key and chatter's facts, keeping every value already there", async () => {
+    const dir = home(), config = join(dir, "ghostpen", "config"), settingsFile = join(config, "settings.json");
+    const dropin = () => JSON.parse(readFileSync(join(dir, "adapters.d", "ghostpen.json"), "utf8")).entry.optional;
     await install(dir);
     const before = JSON.parse(readFileSync(settingsFile, "utf8"));
     delete before.adapterKeyFile;
+    delete before.appIdentityKeyFile;
     writeFileSync(settingsFile, JSON.stringify({ ...before, dataDir: join(dir, "kept") }));
-    await install(dir, { facts: "/run/chatter/instance-facts.json" });
+    // --readiness off leaves the readiness list out of the drop-in; health and the app stay.
+    await install(dir, { facts: "/run/chatter/instance-facts.json", readiness: "off" });
     const after = readSettings(settingsFile);
-    expect(after.adapterKeyFile).toBe(join(dir, "ghostpen", "config", "adapter.key"));
+    expect(after.adapterKeyFile).toBe(join(config, "adapter.key"));
+    expect(after.appIdentityKeyFile).toBe(join(config, "app-identity.key"));
     expect(after.instanceFactsFile).toBe("/run/chatter/instance-facts.json");
     expect(after.dataDir).toBe(join(dir, "kept"));
-    await install(dir, { facts: "/other/facts.json" });
+    expect(dropin().readiness).toBeUndefined();
+    expect(dropin().health).toEqual({ port: 8794, path: "/health" });
+    expect(dropin().app.identityKeyFile).toBe(join(config, "app-identity.key"));
+    writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, "utf8")), appIdentityKeyFile: join(dir, "kept.key") }));
+    await install(dir, { facts: "/other/facts.json", readiness: "on" });
     expect(readSettings(settingsFile).instanceFactsFile).toBe("/run/chatter/instance-facts.json"); // kept, never overwritten
+    expect(readSettings(settingsFile).appIdentityKeyFile).toBe(join(dir, "kept.key"));
+    expect(dropin().app.identityKeyFile).toBe(join(dir, "kept.key"));
+    expect(dropin().readiness).toEqual({ port: 8794, path: "/readiness" });
+  });
+
+  it("refuses a --readiness other than on or off before writing anything", async () => {
+    for (const readiness of ["yes", ""]) {
+      const dir = home();
+      expect(await refusal(() => install(dir, { readiness }))).toContain("--readiness must be on or off");
+      expect(existsSync(join(dir, "ghostpen", "config"))).toBe(false);
+      expect(existsSync(join(dir, "adapters.d"))).toBe(false);
+      expect(existsSync(join(dir, "config", "systemd"))).toBe(false);
+    }
   });
 
   it("installs nothing where the instance's stack.yaml does not allow ghostpen", async () => {

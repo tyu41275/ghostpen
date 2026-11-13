@@ -10,7 +10,7 @@ ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatte
     - a key file that's named but unreadable or under 32 bytes stops the start;
     - it sends a strict CSP, `no-store` and `nosniff`, and escapes every value;
     - it's styled by the shared site look. The ranking view comes with ghostpen#88.
-  - **`GET /readiness`:** chatter's readiness list, with no key, like `/health`: each of ghostpen's needs and how it stands (`docs/readiness.md`).
+  - **`GET /readiness`:** chatter's readiness list, with no key, like `/health`: each of ghostpen's needs and how it stands (`docs/readiness.md`). The install declares it in the drop-in's `optional.readiness`, so chatter reads it (`docs/install.md`).
   - **`/v1/adapter/…`:** the shortlist routes the chatter adapter calls (`docs/shortlist.md`). They open only to a request carrying the adapter key (`adapterKeyFile`); anyone else gets 404.
   - Every other path is 404.
 - **Settings** (`src/settings.ts`): `instance`, `port` (1024–65535), `dataDir` (absolute, must exist), and an optional `appIdentityKeyFile`. They're written from the operator's own config; no machine-specific value lives in code. Errors name the field, never the value.
