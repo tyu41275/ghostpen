@@ -6,7 +6,8 @@
 // builds that checkout's adapter/ and restarts a running service. Beside a container chatter (its facts file
 // `instance-facts.json` beside <root>) it refuses: ghostpen has no container install yet.
 //
-//   inputs: port, dropin_dir (an absolute path); optional: chatter_facts (chatter's instance-facts.json, absolute)
+//   inputs: port, dropin_dir (an absolute path); optional: chatter_facts (chatter's instance-facts.json, absolute),
+//   readiness (on or off: whether the drop-in declares the readiness list; absent: install-host.sh's default, on)
 // The stack is the instance's config/stack.yaml.
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
@@ -14,7 +15,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const INPUTS = ["port", "dropin_dir"];
-export const OPTIONAL_INPUTS = ["chatter_facts"];
+export const OPTIONAL_INPUTS = ["chatter_facts", "readiness"];
 const INSTANCE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 // The repository root: this file is <checkout>/adapter/scripts/relay-install.mjs.
 const CHECKOUT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -44,8 +45,11 @@ export function installArgs(env, cwd, checkout = CHECKOUT) {
     throw new Error(`chatter's facts ${besideFacts} sit beside ${ghostpenRoot}: ghostpen beside a container chatter is not installable yet`);
   const facts = env.RELAY_INPUT_CHATTER_FACTS;
   if (facts !== undefined && facts !== "" && !isAbsolute(facts)) throw new Error("the chatter_facts input must be an absolute path");
+  const readiness = env.RELAY_INPUT_READINESS;
+  if (readiness && readiness !== "on" && readiness !== "off") throw new Error("the readiness input must be on or off");
   return ["--instance", instance, "--root", ghostpenRoot, "--port", port, "--dropin-dir", dropin,
-    "--stack", join(root, instance, "config", "stack.yaml"), ...(facts ? ["--chatter-facts", facts] : [])];
+    "--stack", join(root, instance, "config", "stack.yaml"), ...(facts ? ["--chatter-facts", facts] : []),
+    ...(readiness ? ["--readiness", readiness] : [])];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

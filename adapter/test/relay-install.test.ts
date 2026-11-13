@@ -20,11 +20,22 @@ describe("relay-install.mjs", () => {
   it("maps Relay's inputs onto install-host.sh for the checkout it runs in", () => {
     const { home, checkout, instances, env } = world();
     expect(INPUTS).toEqual(["port", "dropin_dir"]);
-    expect(OPTIONAL_INPUTS).toEqual(["chatter_facts"]);
+    expect(OPTIONAL_INPUTS).toEqual(["chatter_facts", "readiness"]);
     expect(installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "/run/facts.json" }, checkout, checkout).slice(-2)).toEqual(["--chatter-facts", "/run/facts.json"]);
     expect(() => installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "facts.json" }, checkout, checkout)).toThrow("chatter_facts input must be an absolute path");
     expect(installArgs(env, checkout, checkout)).toEqual(["--instance", "personal-comms-host", "--root", join(home, "ghostpen"),
       "--port", "8794", "--dropin-dir", join(home, "adapters.d"), "--stack", join(instances, "personal-comms-host", "config", "stack.yaml")]);
+  });
+
+  it("hands the readiness input to install-host.sh only when given, and refuses one that is not on or off", () => {
+    const { checkout, env } = world();
+    expect(installArgs(env, checkout, checkout)).not.toContain("--readiness");
+    for (const readiness of ["on", "off"])
+      expect(installArgs({ ...env, RELAY_INPUT_READINESS: readiness }, checkout, checkout).slice(-2)).toEqual(["--readiness", readiness]);
+    expect(installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "/run/facts.json", RELAY_INPUT_READINESS: "off" }, checkout, checkout).slice(-4))
+      .toEqual(["--chatter-facts", "/run/facts.json", "--readiness", "off"]);
+    for (const readiness of ["yes", "ON", "true"])
+      expect(() => installArgs({ ...env, RELAY_INPUT_READINESS: readiness }, checkout, checkout)).toThrow("the readiness input must be on or off");
   });
 
   it("runs only in the checkout the script is from, named checkout, an alias of it included", () => {
