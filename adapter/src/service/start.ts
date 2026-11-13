@@ -9,6 +9,7 @@ export interface RunningService { server: Server; port: number }
 
 /** `port` overrides the settings' (0 in tests). */
 export async function startService(settingsPath: string, port?: number): Promise<RunningService> {
+  const started = new Date();
   const settings = readSettings(settingsPath);
   checkDataDir(settings.dataDir);
   // A key file named but unreadable or too short stops the start (pattern adapter-app); none named opens the app to nobody.
@@ -19,7 +20,7 @@ export async function startService(settingsPath: string, port?: number): Promise
   const jobs = settings.draft ? new DraftJobs(settings) : undefined;
   jobs?.resume();
   const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
-    ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}) });
+    ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}), readiness: { settingsFile: settingsPath, started } });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });
   const address = server.address();
   return { server, port: typeof address === "object" && address ? address.port : settings.port };
