@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PR_OPEN_FAILED, WRITE_FAILED } from "../src/publish/jobs.js";
+import { ATTEMPT_FILE } from "../src/ranking/attempt.js";
 import { RANKING_FILE } from "../src/ranking/run.js";
 import { MERGE_FAILED } from "../src/service/draft-routes.js";
 import { RANKING_STALE_MS, SHORTLIST_DUE_MS, SHORTLIST_STALE_MS } from "../src/service/readiness-jobs.js";
@@ -14,7 +15,9 @@ afterEach(() => { vi.unstubAllEnvs(); });
 const DAY = 24 * 60 * MINUTE;
 const sh = () => join(programIn("run"), "run");
 const ranked = (extra: Record<string, unknown> = {}) => installed({ sources: { topics: [{ name: "notes", kind: "markdown", root: folder(), include: ["*.md"] }] },
-  scorer: { command: [sh()] }, ...extra });
+  scorer: { command: [sh()] }, shortlist: { operator: "12345" }, ...extra });
+const tried = (dataDir: string, outcome: string, at: Date, problem?: string) => writeFileSync(join(dataDir, ATTEMPT_FILE),
+  JSON.stringify({ by: "service", startedAt: at.toISOString(), outcome, ...(outcome === "running" ? {} : { endedAt: at.toISOString() }), ...(problem ? { problem } : {}) }));
 const rankedAt = (dataDir: string, at: Date) =>
   writeFileSync(join(dataDir, RANKING_FILE), JSON.stringify({ ranAt: at.toISOString(), entries: [], background: [], owed: [], problems: [] }));
 const item = (over: Partial<WeekItem> = {}): WeekItem => ({ id: "a", kind: "decision", text: "A", ...over });
@@ -28,11 +31,37 @@ describe("ranking", () => {
     expect((await installed({ sources: { topics: [{ name: "notes", kind: "markdown", root: folder(), include: ["*.md"] }] } }).read("ranking")).state).toBe("chosen_off");
   });
 
-  it("is short of data until 8 days after the service started, naming the rank command and that nothing schedules it", async () => {
+  it("is short of data until 8 days after the service started, saying it ranks on its own and naming the rank command", async () => {
     const read = await ranked().read("ranking");
-    expect(read).toMatchObject({ state: "short_of_data", since: STARTED.toISOString(), expected_by: after(RANKING_STALE_MS).toISOString() });
+    expect(read).toMatchObject({ state: "short_of_data", since: STARTED.toISOString(), expected_by: after(RANKING_STALE_MS).toISOString(), why: "no ranking has run yet" });
+    expect(read.fix).toContain("ranks on its own when chatter's adapter asks for the weekly shortlist");
     expect(read.fix).toContain("node dist/cli/rank.js <settings>");
-    expect(read.fix).toContain("nothing schedules");
+    expect(read.fix).not.toContain("nothing schedules");
+  });
+
+  it("says nothing starts a ranking on its own with no shortlist or no adapter key, keeping the state", async () => {
+    const world = ranked({ shortlist: undefined });
+    expect(await world.read("ranking")).toMatchObject({ state: "short_of_data",
+      why: "no ranking has run yet; shortlist is not set, so nothing asks for the shortlist and no ranking starts on its own" });
+    rankedAt(world.dataDir, after(0));
+    expect((await world.read("ranking", { now: after(RANKING_STALE_MS + 1) })).state).toBe("failing");
+  });
+
+  it("reads failing on a try that failed after the last ranking, quoting none of its problem, and working while one runs", async () => {
+    const world = ranked(), at = after(0);
+    rankedAt(world.dataDir, at);
+    tried(world.dataDir, "failed", after(-MINUTE), "/private/scorer died");
+    expect((await world.read("ranking")).state).toBe("working"); // older than the ranking: that one ran since
+    tried(world.dataDir, "failed", after(2 * MINUTE), "/private/scorer died");
+    const read = await world.read("ranking", { now: after(3 * MINUTE) });
+    expect(read).toMatchObject({ state: "failing", since: after(2 * MINUTE).toISOString(), why: `the ranking tried at ${after(2 * MINUTE).toISOString()} failed` });
+    expect(JSON.stringify(read)).not.toContain("private");
+    tried(world.dataDir, "running", after(2 * MINUTE));
+    expect(await world.read("ranking", { now: after(3 * MINUTE) })).toMatchObject({ state: "working", why: `a ranking started at ${after(2 * MINUTE).toISOString()}` });
+    // A try a stopped service left running reads as the ranking itself once it is a day old.
+    expect(await world.read("ranking", { now: after(RANKING_STALE_MS + 1) })).toMatchObject({ state: "failing", why: expect.stringContaining("over 8 days ago") });
+    writeFileSync(join(world.dataDir, ATTEMPT_FILE), "{ private");
+    expect(await world.read("ranking")).toMatchObject({ state: "failing", why: expect.stringContaining("ranking-attempt.json") });
   });
 
   it("reads working since its ranAt, then failing 8 days on", async () => {

@@ -2,7 +2,8 @@
  * The routes ghostpen's chatter adapter calls (ghostpen#89), behind the adapter key (`Authorization: Bearer <key>`, the
  * key in the settings' `adapterKeyFile`; without one they answer 404, as for routes that do not exist):
  *
- *   GET  /v1/adapter/shortlist           this week's shortlist (made on first ask from the last ranking), where to post
+ *   GET  /v1/adapter/shortlist           this week's shortlist (made on first ask from the last ranking), where to post;
+ *                                        it starts a ranking when one is due (`ranking/jobs.ts`) and answers `waiting` meanwhile
  *   POST /v1/adapter/shortlist/posted    {week, index, channelRef, messageRef, threadRef?}: a card (and its thread) was posted
  *   POST /v1/adapter/shortlist/answer    {week, index, action: write|skip|later, reason, chip?, user}: a press with its reason,
  *                                        the operator's only
@@ -22,6 +23,7 @@ import { currentWeek } from "../shortlist/schedule.js";
 import { addFeedback } from "../feedback/store.js";
 import { answerInThread, threadTopic } from "../feedback/thread.js";
 import type { DraftJobs } from "../publish/jobs.js";
+import type { RankJobs } from "../ranking/jobs.js";
 import { answeredText, readShortlists, saveShortlists, type Action } from "../shortlist/state.js";
 import { draftCard, draftEdit, draftPosted, draftPublish } from "./draft-routes.js";
 
@@ -39,13 +41,15 @@ function channelOf(settings: GhostpenSettings): string | null {
   } catch { return null; }
 }
 
-function shortlistNow(settings: GhostpenSettings, now: Date): Reply {
+function shortlistNow(settings: GhostpenSettings, now: Date, ranker?: RankJobs): Reply {
   const shortlist = settings.shortlist;
   if (!shortlist) return { status: 200, body: { off: "no shortlist is set (settings.shortlist)" } };
   const channel = channelOf(settings);
   if (!channel) return { status: 200, body: { off: "ghostpen has no channel yet (settings.shortlist.channel, or chatter's instance facts)" } };
   const week = currentWeek(shortlist, now);
   const state = readShortlists(settings.dataDir);
+  // A due ranking starts here and runs on: a week not made yet waits for it, and the next ask makes it (ghostpen#118).
+  if (ranker?.startIfDue(week, !!state.weeks[week], now) && !state.weeks[week]) return { status: 200, body: { waiting: "ranking the topics now" } };
   if (!state.weeks[week]) {
     const path = join(settings.dataDir, RANKING_FILE);
     const view = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as unknown : null;
@@ -113,10 +117,10 @@ async function threadMessage(settings: GhostpenSettings, body: Record<string, un
   return { status: 200, body: { reply: await answerInThread(settings, { ...found, user: String(body.user), text, now }) } };
 }
 
-/** Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit. */
+/** Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit; `ranker` ranks when due. */
 export function adapterRoute(settings: GhostpenSettings, method: string, path: string, body: Record<string, unknown>, now: Date,
-  jobs?: DraftJobs): Reply | Promise<Reply> | null {
-  if (path === "/v1/adapter/shortlist" && method === "GET") return shortlistNow(settings, now);
+  jobs?: DraftJobs, ranker?: RankJobs): Reply | Promise<Reply> | null {
+  if (path === "/v1/adapter/shortlist" && method === "GET") return shortlistNow(settings, now, ranker);
   if (path === "/v1/adapter/shortlist/posted" && method === "POST") return posted(settings, body);
   if (path === "/v1/adapter/shortlist/answer" && method === "POST") return answer(settings, body, now, jobs);
   if (path === "/v1/adapter/draft/posted" && method === "POST") return draftPosted(settings, body);

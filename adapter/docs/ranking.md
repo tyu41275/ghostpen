@@ -27,11 +27,17 @@ ghostpen ranks possible posts by the value they give a reader. It doesn't use wh
   - Results are kept in `dataDir/scores.json` by document hash, so a run scores only documents that changed.
   - A candidate the scorer fails on (an exit, a timeout, no JSON) is left out and its failure reported. It never gets made-up scores.
   - A scorer that times out is stopped with everything it started: it runs in its own process group, which gets SIGTERM and then, after 2 s, SIGKILL.
-- **A run** (`src/ranking/run.ts`, `node dist/cli/rank.js <settings.json>`): it reads every source, makes candidates, scores the changed ones and ranks them. It writes `dataDir/ranking.json` with every source problem and scorer failure. With no scorer set, nothing is ranked and the run says so.
+- **A run** (`src/ranking/run.ts`): it reads every source, makes candidates, scores the changed ones and ranks them. It writes `dataDir/ranking.json` with every source problem and scorer failure. With no scorer set, nothing is ranked and the run says so.
+- **When it runs** (`src/ranking/jobs.ts`, ghostpen#118): the service ranks on its own. There's no timer. Each keyed ask for the weekly shortlist (chatter's adapter asks every 10 minutes) checks whether a ranking is due, which needs a scorer, at least one topic source, no ranking running, and no failed try in the last hour. Then either this week's shortlist isn't made yet and the ranking is over a day old (or there's none), or the ranking is over 7 days old (or there's none). The 7 days stay under the readiness list's 8, so a ranking that keeps working never reads as stale.
+  - A due ranking starts and the ask answers `waiting` at once. The next ask makes the week from the fresh ranking. If this week's try failed, the week is made from the last readable ranking. A week once made is never changed.
+  - **By hand:** `node dist/cli/rank.js <settings.json>`.
+  - **One at a time:** the service and the rank command both take `dataDir/ranking.lock` (the taker's pid and start time). A lock whose process isn't alive, or that is over 12 hours old (its pid may belong to another process by then), is taken over. While a live one holds it, the rank command exits 1 saying `a ranking is running already`, and the service keeps its try as skipped, unless the holder's own record says it is running: that record stays.
+  - **The last try** is kept in `dataDir/ranking-attempt.json`: who ran it (`service` or `hand`), the week, when it started and ended, and its outcome (`running`, `ok`, `failed` with its problem, or `skipped`).
 - **The app page** shows the last ranking:
   - each topic with its takeaway, kind and score;
   - each factor's score, opening to the quoted line and where it is (or why it counts for nothing);
   - what needs explaining;
-  - the posts to write first, the post-mortems owed, and the problems.
+  - the posts to write first, the post-mortems owed, and the problems;
+  - a ranking running now, a last try that failed (with its problem) or was skipped, and the ranking's age once it's over 8 days old.
 
   A ranking file that can't be read says so. It never shows as empty.

@@ -3,10 +3,12 @@ import type { Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readFeedback } from "../src/feedback/store.js";
+import { readAttempt } from "../src/ranking/attempt.js";
 import { readChoices } from "../src/ranking/choices.js";
+import { RankJobs } from "../src/ranking/jobs.js";
 import { RANKING_FILE, type RankingView } from "../src/ranking/run.js";
 import { createGhostpenServer } from "../src/service/server.js";
-import { parseSettings } from "../src/settings.js";
+import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { backgroundText, picks, proposalText } from "../src/shortlist/picks.js";
 import { checkSlot, currentWeek } from "../src/shortlist/schedule.js";
 import { KEY, tempDir } from "./helpers.js";
@@ -76,7 +78,8 @@ describe("the picks", () => {
 const servers: Server[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map((s) => new Promise((done) => s.close(done)))); });
 
-async function service(over: Record<string, unknown> = {}, ranking: unknown = view(), nowIso = "2026-10-26T13:05:00Z") {
+async function service(over: Record<string, unknown> = {}, ranking: unknown = view(), nowIso = "2026-10-26T13:05:00Z",
+  rank?: (settings: GhostpenSettings) => Promise<RankingView>) {
   const dataDir = tempDir();
   if (ranking) writeFileSync(join(dataDir, RANKING_FILE), JSON.stringify(ranking));
   const facts = join(dataDir, "instance-facts.json");
@@ -84,7 +87,8 @@ async function service(over: Record<string, unknown> = {}, ranking: unknown = vi
   const settings = parseSettings({ instance: "host", port: 8794, dataDir, instanceFactsFile: facts,
     shortlist: { operator: "234652039735541760", day: "monday", time: "09:00", timeZone: "America/New_York", count: 3 }, ...over });
   let now = Date.parse(nowIso);
-  const server = createGhostpenServer({ instance: "host", dataDir, settings, adapterKey: KEY, now: () => now });
+  const ranker = rank ? new RankJobs(settings, { rank, now: () => new Date(now) }) : undefined;
+  const server = createGhostpenServer({ instance: "host", dataDir, settings, adapterKey: KEY, now: () => now, ...(ranker ? { ranker } : {}) });
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -93,7 +97,7 @@ async function service(over: Record<string, unknown> = {}, ranking: unknown = vi
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: res.status, body: await res.json() as Record<string, any> };
   };
-  return { call, dataDir, setNow: (iso: string) => { now = Date.parse(iso); } };
+  return { call, dataDir, ranker, setNow: (iso: string) => { now = Date.parse(iso); } };
 }
 
 describe("the adapter routes", () => {
@@ -158,4 +162,40 @@ describe("the adapter routes", () => {
     expect(() => parseSettings({ ...base, shortlist: { operator: "123456", count: 6 } })).toThrow("shortlist.count must be 3 to 5");
     expect(parseSettings({ ...base, shortlist: { operator: "123456" } }).shortlist).toEqual({ day: "monday", time: "09:00", timeZone: "UTC", operator: "123456", count: 5 });
   });
+});
+
+describe("the ranking before a week's shortlist (ghostpen#118)", () => {
+  const scoring = { scorer: { command: ["unused"] }, sources: { topics: [{ name: "notes", kind: "markdown", root: "/nowhere", include: ["*.md"] }] } };
+  const old = view({ ranAt: "2026-10-08T13:05:00Z" }); // 18 days before the week's first ask
+  /** A rank that waits for the test, then writes a ranking of x, y, z as the real run does. */
+  const held = () => {
+    let release!: () => void, fail!: (e: Error) => void, calls = 0;
+    const rank = (settings: GhostpenSettings) => { calls += 1; return new Promise<RankingView>((res, rej) => {
+      release = () => { const fresh = view({ ranAt: "2026-10-26T13:05:00.000Z", background: [], entries: ["x", "y", "z"].map((id, i) => entry(id, 9 - i)) });
+        writeFileSync(join(settings.dataDir, RANKING_FILE), JSON.stringify(fresh)); res(fresh); };
+      fail = rej; }); };
+    return { rank, release: () => release(), fail: (e: Error) => fail(e), calls: () => calls };
+  };
+
+  it("answers waiting at once while it ranks, then makes the week from the fresh ranking", async () => {
+    const fake = held(), { call, dataDir, ranker } = await service(scoring, old, undefined, fake.rank);
+    expect((await call("GET", "/v1/adapter/shortlist")).body).toEqual({ waiting: "ranking the topics now" });
+    expect((await call("GET", "/v1/adapter/shortlist")).body).toEqual({ waiting: "ranking the topics now" });
+    expect(fake.calls()).toBe(1);
+    fake.release();
+    await ranker!.idle();
+    expect(readAttempt(dataDir)).toMatchObject({ by: "service", week: "2026-10-26", outcome: "ok" });
+    expect((await call("GET", "/v1/adapter/shortlist")).body.items.map((i: any) => i.id)).toEqual(["x", "y", "z"]);
+    expect(fake.calls()).toBe(1);
+  }, 2_000);
+
+  it("makes the week from the last readable ranking once this week's try failed", async () => {
+    const fake = held(), { call, dataDir, ranker } = await service(scoring, old, undefined, fake.rank);
+    expect((await call("GET", "/v1/adapter/shortlist")).body).toEqual({ waiting: "ranking the topics now" });
+    fake.fail(new Error("scorer: it died"));
+    await ranker!.idle();
+    expect(readAttempt(dataDir)).toMatchObject({ outcome: "failed", problem: "scorer: it died" });
+    expect((await call("GET", "/v1/adapter/shortlist")).body.items.map((i: any) => i.id)).toEqual(["background:ci", "a", "b"]);
+    expect(fake.calls()).toBe(1);
+  }, 2_000);
 });

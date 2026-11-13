@@ -3,9 +3,11 @@
  * `<console>/apps/ghostpen/`, which proxies to `/app/` here. One server-rendered page, every value escaped, styled by
  * the host's shared site look two levels above the app's address. It shows the last ranking (ghostpen#88): every candidate
  * with its scores and the quote behind each, the background posts to write first, the post-mortems owed, and every
- * problem with the sources or the scorer. All in plain words (ADR 0101: a 10-year-old could follow it).
+ * problem with the sources or the scorer, and what the last ranking try did (ghostpen#118). All in plain words (ADR 0101:
+ * a 10-year-old could follow it).
  */
 import type { FeedbackEntry } from "../feedback/store.js";
+import type { RankingAttempt } from "../ranking/attempt.js";
 import type { RankingView } from "../ranking/run.js";
 import type { AppViewer } from "./app-identity.js";
 
@@ -17,6 +19,25 @@ export const escape = (text: string): string => text.replace(/[&<>"']/gu, (c) =>
 const MAX_NOTES = 50;
 const FACTOR_WORDS: Record<string, string> = { stakes: "Stakes", carryOver: "Carry-over", thoughtProcess: "Thinking",
   evidence: "Evidence", surprise: "Surprise", completeness: "Complete" };
+
+const DAY_MS = 24 * 60 * 60_000;
+/** A ranking older than this shows its age as a danger: the readiness list's RANKING_STALE_MS. */
+const OLD_MS = 8 * DAY_MS;
+/** What the last ranking try did, and the ranking's age once it is old. */
+export interface RankingRun { attempt: RankingAttempt | null; now: Date }
+
+/** One line: a ranking running now, the last try failed (its problem) or skipped, and how old an old ranking is. Nothing when all is well. */
+function rankingRunLine(view: RankingView | null | Error, run: RankingRun): string {
+  const a = run.attempt, parts: string[] = [];
+  if (a?.outcome === "running") parts.push(`Ranking now, since ${escape(a.startedAt)}.`);
+  if (a?.outcome === "failed") parts.push(`The last try, at ${escape(a.startedAt)}, failed: ${escape(a.problem ?? "no reason was kept")}.`);
+  if (a?.outcome === "skipped") parts.push(`The last try, at ${escape(a.startedAt)}, was skipped: ${escape(a.problem ?? "a ranking was running already")}.`);
+  const ranAt = view && !(view instanceof Error) ? Date.parse(view.ranAt) : Number.NaN;
+  const age = run.now.getTime() - ranAt;
+  if (age > OLD_MS) parts.push(`<span class="look-danger">This ranking is ${Math.floor(age / DAY_MS)} days old.</span>`);
+  if (parts.length === 0) return "";
+  return `<p class="${a?.outcome === "failed" ? "look-danger" : "look-muted"}" data-field="ranking-run">${parts.join(" ")}</p>\n`;
+}
 
 function rankingSection(view: RankingView | null | Error, notes: FeedbackEntry[] = []): string {
   if (view instanceof Error) return `<p class="look-danger" data-error="ranking">The last ranking cannot be read: ${escape(view.message)}</p>`;
@@ -74,7 +95,8 @@ function problemsSection(view: RankingView | null | Error): string {
 <ul>${view.problems.map((p) => `<li>${escape(p)}</li>`).join("")}</ul></section>`;
 }
 
-export function renderApp(instance: string, viewer: AppViewer, view: RankingView | null | Error = null, notes: FeedbackEntry[] | Error = []): string {
+export function renderApp(instance: string, viewer: AppViewer, view: RankingView | null | Error = null, notes: FeedbackEntry[] | Error = [],
+  run: RankingRun = { attempt: null, now: new Date() }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ghostpen — ${escape(instance)}</title><link rel="stylesheet" href="../../look/ghostpen.css"><script src="../../look/mode.js"></script></head>
 <body><main class="look-main">
@@ -84,7 +106,7 @@ export function renderApp(instance: string, viewer: AppViewer, view: RankingView
 <p>ghostpen helps write the blog. It reads the decisions behind the work, picks the ones most worth a post, and drafts
 posts that explain every part of the setup they mention. Nothing is published until you press Publish.</p></section>
 <section class="look-card" data-section="ranking"><h2>Topic ranking</h2>
-${rankingSection(view, notes instanceof Error ? [] : notes)}</section>
+${rankingRunLine(view, run)}${rankingSection(view, notes instanceof Error ? [] : notes)}</section>
 ${backgroundSection(view)}${owedSection(view)}${notesSection(notes)}${problemsSection(view)}
 </main></body></html>`;
 }

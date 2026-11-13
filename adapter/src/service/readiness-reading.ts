@@ -6,6 +6,7 @@
 import { constants } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { delimiter, join } from "node:path";
+import { ATTEMPT_FILE, parseAttempt, type RankingAttempt } from "../ranking/attempt.js";
 import { isRankingView, RANKING_FILE, type RankingView } from "../ranking/run.js";
 import type { GhostpenSettings } from "../settings.js";
 import { parseShortlists, SHORTLIST_FILE, type ShortlistState } from "../shortlist/state.js";
@@ -18,12 +19,12 @@ export type Kept<T> = { state: "none" } | { state: "bad" } | { state: "ok"; valu
 /**
  * What a need is checked against. `settings` and the keys are what the service started on, the ones every request uses:
  * it takes up a changed file only on a restart. `lastKeyedCall`: the last request that carried the adapter key, since the
- * service started. `ranking` and `shortlists` read their file once per list, without blocking.
+ * service started. `ranking`, `attempt` (the last ranking try) and `shortlists` read their file once per list, without blocking.
  */
 export interface Facts {
   settings: GhostpenSettings; settingsFile: string | undefined; appKey: Buffer | undefined; adapterKey: Buffer | undefined;
   now: Date; started: Date; lastKeyedCall: Date | undefined;
-  ranking: () => Promise<Kept<RankingView>>; shortlists: () => Promise<Kept<ShortlistState>>;
+  ranking: () => Promise<Kept<RankingView>>; attempt: () => Promise<Kept<RankingAttempt>>; shortlists: () => Promise<Kept<ShortlistState>>;
 }
 export interface Need {
   id: string; label: string; kind: "setting" | "source" | "job"; required: boolean; spends: "usage" | "behaviour" | "none"; fix: string;
@@ -112,4 +113,5 @@ export const rankingOnce = (dataDir: string) => once(() => keptFile(dataDir, RAN
   const view: unknown = JSON.parse(text);
   return isRankingView(view) ? view : undefined;
 }));
+export const attemptOnce = (dataDir: string) => once(() => keptFile(dataDir, ATTEMPT_FILE, parseAttempt));
 export const shortlistsOnce = (dataDir: string) => once(() => keptFile(dataDir, SHORTLIST_FILE, parseShortlists));
