@@ -18,6 +18,8 @@ import { findItem, readShortlists, saveShortlists, type DraftState } from "../sh
 import type { Reply } from "./adapter-routes.js";
 
 const MAX_CARD = 1900;
+/** How a draft's `problem` starts when Publish's merge failed (the readiness list counts them). */
+export const MERGE_FAILED = "the merge failed: ";
 const OPERATOR_ONLY = "Only the operator can publish or edit ghostpen's drafts, so nothing was done.";
 const OLD_CARD = "This card is for an older draft; use the newest card. Nothing was done.";
 /** A press must name its card's round, and it must be the draft's: a missing round counts as an old card. */
@@ -90,7 +92,7 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
   setStatus(settings, body, now(), "publishing");
   void ops.merge(publish, pr, head).then(() => setStatus(settings, body, now(), "published"),
-    (error: unknown) => setStatus(settings, body, now(), "ready", `the merge failed: ${firstLine(error)}`));
+    (error: unknown) => setStatus(settings, body, now(), "ready", `${MERGE_FAILED}${firstLine(error)}`));
   return { status: 200, body: { reply: "Publishing now; its card says when it is on the blog." } };
 }
 

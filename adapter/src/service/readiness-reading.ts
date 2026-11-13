@@ -8,6 +8,7 @@ import { access, readFile, stat } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { isRankingView, RANKING_FILE, type RankingView } from "../ranking/run.js";
 import type { GhostpenSettings } from "../settings.js";
+import { parseShortlists, SHORTLIST_FILE, type ShortlistState } from "../shortlist/state.js";
 
 export type NeedState = "working" | "short_of_data" | "waiting_for_operator" | "not_set_up" | "failing" | "chosen_off";
 /** `fix`, when this reading has a better one than its need's. */
@@ -16,11 +17,13 @@ export interface Reading { state: NeedState; why: string; since: string; expecte
 export type Kept<T> = { state: "none" } | { state: "bad" } | { state: "ok"; value: T };
 /**
  * What a need is checked against. `settings` and the keys are what the service started on, the ones every request uses:
- * it takes up a changed file only on a restart. `ranking` reads its file once per list, without blocking.
+ * it takes up a changed file only on a restart. `lastKeyedCall`: the last request that carried the adapter key, since the
+ * service started. `ranking` and `shortlists` read their file once per list, without blocking.
  */
 export interface Facts {
   settings: GhostpenSettings; settingsFile: string | undefined; appKey: Buffer | undefined; adapterKey: Buffer | undefined;
-  now: Date; started: Date; ranking: () => Promise<Kept<RankingView>>;
+  now: Date; started: Date; lastKeyedCall: Date | undefined;
+  ranking: () => Promise<Kept<RankingView>>; shortlists: () => Promise<Kept<ShortlistState>>;
 }
 export interface Need {
   id: string; label: string; kind: "setting" | "source" | "job"; required: boolean; spends: "usage" | "behaviour" | "none"; fix: string;
@@ -40,6 +43,9 @@ export const working = (why: string, at: number): Reading => ({ state: "working"
 export const failing = (why: string, at: number, fix?: string): Reading => ({ state: "failing", why, since: iso(at), ...(fix === undefined ? {} : { fix }) });
 export const chosenOff = (why: string, facts: Facts): Reading => ({ state: "chosen_off", why, since: facts.started.toISOString() });
 export const notSetUp = (why: string, facts: Facts): Reading => ({ state: "not_set_up", why, since: facts.started.toISOString() });
+/** No data yet, due `within` after the service started: nothing here keeps an earlier first sight. */
+export const short = (why: string, facts: Facts, within: number): Reading =>
+  ({ state: "short_of_data", why, since: facts.started.toISOString(), expected_by: iso(facts.started.getTime() + within) });
 /** A time a file holds, as milliseconds; undefined when it is no time. A reason shows it only re-written, never as the file said it. */
 export const timeOf = (text: unknown): number | undefined => {
   const at = typeof text === "string" ? Date.parse(text) : Number.NaN;
@@ -106,3 +112,4 @@ export const rankingOnce = (dataDir: string) => once(() => keptFile(dataDir, RAN
   const view: unknown = JSON.parse(text);
   return isRankingView(view) ? view : undefined;
 }));
+export const shortlistsOnce = (dataDir: string) => once(() => keptFile(dataDir, SHORTLIST_FILE, parseShortlists));

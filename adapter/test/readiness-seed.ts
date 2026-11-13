@@ -12,7 +12,7 @@ export const after = (ms: number) => new Date(STARTED.getTime() + ms);
 export const MINUTE = 60_000;
 export const ADAPTER_KEY = Buffer.alloc(32, 3);
 
-export interface ListAt { now?: Date }
+export interface ListAt { now?: Date; lastKeyedCall?: Date }
 
 /** The four settings the install writes, and `extra`. `read(id, at)` is one need of the list as of `at.now`. */
 export function installed(extra: Record<string, unknown> = {}) {
@@ -24,7 +24,7 @@ export function installed(extra: Record<string, unknown> = {}) {
   const settings = readSettings(file);
   const appKey = readAppKey(appIdentityKeyFile), adapterKey = readAppKey(adapterKeyFile, "adapterKeyFile");
   const list = (at: ListAt = {}): Promise<ReadinessList> => readinessList({ settings, settingsFile: file, appKey, adapterKey, started: STARTED,
-    now: () => at.now ?? after(MINUTE) });
+    now: () => at.now ?? after(MINUTE), lastKeyedCall: at.lastKeyedCall });
   const read = async (id: string, at?: ListAt) => (await list(at)).needs.find((need) => need.id === id)!;
   return { config, dataDir, appIdentityKeyFile, adapterKeyFile, file, settings, list, read };
 }
@@ -35,7 +35,7 @@ export function bare(over: Record<string, unknown> = {}) {
   const file = settingsFile(config, { dataDir: tempDir(), ...over });
   const settings = readSettings(file);
   return async (id: string, at: ListAt = {}) => (await readinessList({ settings, settingsFile: file, started: STARTED,
-    now: () => at.now ?? after(MINUTE) })).needs.find((need) => need.id === id)!;
+    now: () => at.now ?? after(MINUTE), lastKeyedCall: at.lastKeyedCall })).needs.find((need) => need.id === id)!;
 }
 
 /** A folder holding a program named `name` with `mode`; for PATH. */
