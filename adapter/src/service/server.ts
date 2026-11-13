@@ -2,6 +2,7 @@
  * ghostpen's service on loopback (ADR 0101). `GET /health` is what chatter's Adapters page and the adapter's `status`
  * read; it checks the data folder on every request, so a folder that went away reads as down (503, saying why).
  * `/app/` opens only to a person chatter's console signed (`app-identity.ts`); anyone else finds nothing (404).
+ * `GET /readiness` is chatter's readiness list (`readiness.ts`), with no key, like `/health`.
  */
 import { readFeedback, type FeedbackEntry } from "../feedback/store.js";
 import { timingSafeEqual } from "node:crypto";
@@ -15,6 +16,7 @@ import type { DraftJobs } from "../publish/jobs.js";
 import { adapterRoute } from "./adapter-routes.js";
 import { APP_CSP, renderApp } from "./app.js";
 import { verifyAppIdentity } from "./app-identity.js";
+import { READINESS_PATH, readinessList } from "./readiness.js";
 
 export interface ServerOptions {
   instance: string; dataDir: string; appKey?: Buffer; now?: () => number;
@@ -22,6 +24,8 @@ export interface ServerOptions {
   settings?: GhostpenSettings; adapterKey?: Buffer;
   /** Drafting after a Write or an Edit (ghostpen#90); unset: a Write is kept and nothing is drafted. */
   jobs?: DraftJobs;
+  /** The readiness list's facts beyond the settings and keys: the settings file and when the service started; unset (or no settings): no such route. */
+  readiness?: { settingsFile?: string | undefined; started: Date };
 }
 
 const MAX_BODY = 64 * 1024;
@@ -86,6 +90,12 @@ export function createGhostpenServer(options: ServerOptions): Server {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": APP_CSP,
         "x-content-type-options": "nosniff", "referrer-policy": "same-origin" });
       res.end(req.method === "HEAD" ? undefined : renderApp(options.instance, viewer, lastRanking(options.dataDir), notesOf(options.dataDir)));
+      return;
+    }
+    if (path === READINESS_PATH && req.method === "GET" && options.readiness && options.settings) {
+      void readinessList({ settings: options.settings, settingsFile: options.readiness.settingsFile, appKey: options.appKey, adapterKey: options.adapterKey,
+        started: options.readiness.started, now: () => new Date((options.now ?? Date.now)()) })
+        .then((list) => send(res, 200, list), () => send(res, 500, { error: "the readiness list could not be made" }));
       return;
     }
     if (path.startsWith("/v1/adapter/")) {

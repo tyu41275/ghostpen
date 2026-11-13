@@ -1,4 +1,4 @@
-/** `node dist/cli/rank.js <settings.json>`: one ranking run now (the weekly shortlist runs the same, ghostpen#89). */
+/** `node dist/cli/rank.js <settings.json>`: one ranking run now. Nothing schedules it yet; the weekly shortlist only reads the ranking.json it writes. */
 import { rankNow } from "../ranking/run.js";
 import { readSettings } from "../settings.js";
 
