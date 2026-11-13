@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -158,5 +158,19 @@ describe("one bad need", () => {
     expect(read).toMatchObject({ why: "no [path] at [address]", fix: "Repair [path]" });
     expect(line(`a\nb\u0007${"c".repeat(400)}`)).toBe(`a b ${"c".repeat(296)}`);
     expect(line(" \n\t")).toBe("no reason was given");
+  });
+});
+
+describe("the list never blocks the service", () => {
+  it("reads files only through fs/promises: no synchronous call in the readiness modules", () => {
+    const dir = join(import.meta.dirname, "../src/service");
+    const names = readdirSync(dir).filter((name) => /^readiness.*\.ts$/u.test(name));
+    expect(names).toContain("readiness-settings.ts");
+    for (const name of names) {
+      const text = readFileSync(join(dir, name), "utf8");
+      expect(text, name).not.toMatch(/\b\w+Sync\s*\(/u);
+      expect(text, name).not.toMatch(/\breadAppKey\b/u);
+      for (const [, names] of text.matchAll(/import \{([^}]*)\} from "node:fs";/gu)) expect(names!.trim(), name).toBe("constants");
+    }
   });
 });

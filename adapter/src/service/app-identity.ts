@@ -15,11 +15,17 @@ export interface AppViewer { login: string; sub: string }
 export function readAppKey(file: string, field = "appIdentityKeyFile"): Buffer {
   let text: string;
   try {
-    text = readFileSync(file, "utf8").trim();
+    text = readFileSync(file, "utf8");
   } catch {
     throw new Error(`${field}: cannot be read`); // the field, never the path (settings errors name fields)
   }
-  const key = /^[A-Za-z0-9_-]{43,}={0,2}$/u.test(text) ? Buffer.from(text.replace(/=+$/u, ""), "base64url") : Buffer.alloc(0);
+  return parseAppKey(text, field);
+}
+
+/** The key a key file's text holds (readAppKey's check, for a caller that read the file itself without blocking). */
+export function parseAppKey(text: string, field = "appIdentityKeyFile"): Buffer {
+  const trimmed = text.trim();
+  const key = /^[A-Za-z0-9_-]{43,}={0,2}$/u.test(trimmed) ? Buffer.from(trimmed.replace(/=+$/u, ""), "base64url") : Buffer.alloc(0);
   if (key.length < 32) throw new Error(`${field}: must hold base64url text of at least 32 bytes`);
   return key;
 }

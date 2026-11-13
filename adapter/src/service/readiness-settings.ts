@@ -7,7 +7,7 @@ import { constants } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { parseSettings, type GhostpenSettings } from "../settings.js";
-import { readAppKey } from "./app-identity.js";
+import { parseAppKey } from "./app-identity.js";
 import { chosenOff, failing, type Facts, fileProblem, folderProblem, type Need, notSetUp, programProblem, type Reading, timeOf, working } from "./readiness-reading.js";
 
 export const INSTALL = "Run ghostpen's install for this instance through Relay; it writes this.";
@@ -32,15 +32,15 @@ async function fileReading(f: Facts, file: string): Promise<Reading> {
     : failing("the settings file changed after the service started, and it runs on the copy it started with until it restarts", f.now.getTime(), RESTART);
 }
 
-/** A key file (`appIdentityKeyFile` or `adapterKeyFile`): set, a key `readAppKey` takes, and the one the service holds. */
+/** A key file (`appIdentityKeyFile` or `adapterKeyFile`): set, a key `parseAppKey` takes, and the one the service holds. Read without blocking. */
 async function keyReading(f: Facts, field: "appIdentityKeyFile" | "adapterKeyFile", held: Buffer | undefined, unset: string, good: string): Promise<Reading> {
   const file = f.settings[field];
   if (file === undefined) return notSetUp(`${field} is not set, so ${unset}`, f);
   const problem = await fileProblem(file, constants.R_OK);
   if (problem !== undefined) return failing(`${field}: ${problem}`, f.now.getTime());
   let key: Buffer;
-  // readAppKey's messages name the field, never the path or the key.
-  try { key = readAppKey(file, field); } catch (error) {
+  // parseAppKey's messages name the field, never the path or the key.
+  try { key = parseAppKey(await readFile(file, "utf8"), field); } catch (error) {
     return failing(error instanceof Error && error.message.startsWith(`${field}: `) ? error.message : `${field}: it cannot be used`, f.now.getTime());
   }
   return held !== undefined && key.equals(held) ? working(good, f.started.getTime())
