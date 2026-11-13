@@ -1,10 +1,12 @@
 /**
  * One ranking try, by the service or by hand (ghostpen#118). Every try takes `dataDir/ranking.lock` first (opened with
- * `wx`, holding the taker's pid and start time), so one ranking runs at a time; a lock whose pid is not alive is taken
- * over, and the lock is always removed when the try ends. What the last try did is kept in `dataDir/ranking-attempt.json`
+ * `wx`, holding the taker's pid, a random token and start time), so one ranking runs at a time; a lock whose pid is not
+ * alive is taken over by one contender only (see takeLock), and a try removes the lock when it ends while the lock is
+ * still its own. What the last try did is kept in `dataDir/ranking-attempt.json`
  * (written to a temporary file and renamed, like ranking.json) for the readiness list and the app page.
  */
 import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { GhostpenSettings } from "../settings.js";
 import { rankNow, type RankingView } from "./run.js";
@@ -53,23 +55,56 @@ function writeAttempt(dataDir: string, attempt: RankingAttempt): void {
   renameSync(`${path}.tmp`, path);
 }
 
-/** Takes the lock: false when a live process holds it. A lock whose pid is not alive is removed and taken. */
-function takeLock(dataDir: string, deps: AttemptDeps): boolean {
+/** The lock as written (raw text, "" when unreadable) and its pid and token, undefined while it cannot be parsed. */
+function readLock(path: string): { raw: string; pid?: unknown; token?: unknown } {
+  let raw = "";
+  try { raw = readFileSync(path, "utf8"); } catch { return { raw }; }
+  try { return { raw, ...(JSON.parse(raw) as { pid?: unknown; token?: unknown }) }; } catch { return { raw }; }
+}
+
+/** Takes the lock: null when a live process holds it, else this try's token. A dead or stale lock is removed only by
+ * the one contender that creates its takeover claim (`ranking.lock.takeover-<the lock's token>`, opened with `wx`) and
+ * then finds the same lock text again, so a second contender never removes a lock the first has just taken. A claim
+ * lives only between two file calls; one left by a process that died there is removed after UNREAD_LOCK_MS, and that
+ * try skips, so the next try contends again. */
+function takeLock(dataDir: string, deps: AttemptDeps): string | null {
   const path = join(dataDir, LOCK_FILE);
+  const token = randomUUID();
   for (let tries = 0; tries < 2; tries += 1) {
     try {
-      writeFileSync(path, JSON.stringify({ pid: deps.pid, startedAt: deps.now().toISOString() }), { flag: "wx" });
-      return true;
+      writeFileSync(path, JSON.stringify({ pid: deps.pid, token, startedAt: deps.now().toISOString() }), { flag: "wx" });
+      return token;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
-    let pid: unknown;
-    try { pid = (JSON.parse(readFileSync(path, "utf8")) as { pid?: unknown }).pid; } catch { /* not readable yet */ }
+    const seen = readLock(path);
     const age = deps.now().getTime() - mtime(path);
-    if (typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? deps.alive(pid) && age < STALE_LOCK_MS : age < UNREAD_LOCK_MS) return false;
-    rmSync(path, { force: true });
+    const { pid } = seen;
+    if (typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? deps.alive(pid) && age < STALE_LOCK_MS : age < UNREAD_LOCK_MS) return null;
+    // Every contender that read this lock names the same claim: its token, or its mtime when it has none (an older lock).
+    const name = typeof seen.token === "string" && /^[\w-]{1,64}$/.test(seen.token) ? seen.token : `m${Math.floor(mtime(path))}`;
+    const claim = `${path}.takeover-${name}`;
+    try {
+      writeFileSync(claim, String(deps.pid), { flag: "wx" });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (deps.now().getTime() - mtime(claim) >= UNREAD_LOCK_MS) rmSync(claim, { force: true });
+      return null; // another contender is taking it over
+    }
+    try {
+      if (readLock(path).raw !== seen.raw) return null; // the lock changed hands since it was read
+      rmSync(path, { force: true });
+    } finally {
+      rmSync(claim, { force: true });
+    }
   }
-  return false;
+  return null;
+}
+
+/** Removes the lock only while it is still this try's own. */
+function releaseLock(dataDir: string, token: string): void {
+  const path = join(dataDir, LOCK_FILE);
+  if (readLock(path).token === token) rmSync(path, { force: true });
 }
 const mtime = (path: string) => { try { return statSync(path).mtimeMs; } catch { return 0; } };
 
@@ -80,7 +115,8 @@ export async function attemptRanking(settings: GhostpenSettings, by: RankingAtte
   Promise<{ attempt: RankingAttempt; view?: RankingView }> {
   const deps = { ...ATTEMPT_DEFAULTS, ...given };
   const base = { by, ...(week ? { week } : {}), startedAt: deps.now().toISOString() };
-  if (!takeLock(settings.dataDir, deps)) {
+  const token = takeLock(settings.dataDir, deps);
+  if (token === null) {
     const attempt: RankingAttempt = { ...base, endedAt: base.startedAt, outcome: "skipped", problem: HELD };
     // The holder's own "running" record says more than this skip: it stays.
     if (readAttempt(settings.dataDir)?.outcome !== "running") writeAttempt(settings.dataDir, attempt);
@@ -100,6 +136,6 @@ export async function attemptRanking(settings: GhostpenSettings, by: RankingAtte
     writeAttempt(settings.dataDir, attempt);
     return { attempt, view };
   } finally {
-    rmSync(join(settings.dataDir, LOCK_FILE), { force: true });
+    releaseLock(settings.dataDir, token);
   }
 }

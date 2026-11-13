@@ -104,6 +104,52 @@ describe("one ranking at a time", () => {
     expect(existsSync(lock)).toBe(false);
   });
 
+  it("backs off while another contender holds the takeover claim, leaving the dead lock to it", async () => {
+    const s = settings(), fake = held(), lock = join(s.dataDir, LOCK_FILE), claim = `${lock}.takeover-t1`;
+    const text = JSON.stringify({ pid: 999_999_999, token: "t1", startedAt: "2026-11-01T00:00:00Z" });
+    writeFileSync(lock, text);
+    writeFileSync(claim, "77");
+    utimesSync(claim, new Date(NOW), new Date(NOW));
+    expect((await attemptRanking(s, "service", "2026-11-09", deps(fake.rank, () => false))).attempt.outcome).toBe("skipped");
+    expect([readFileSync(lock, "utf8"), existsSync(claim), fake.calls()]).toEqual([text, true, 0]);
+  });
+
+  it("removes a claim left over a minute by a process that died, skips that try, and takes the lock on the next", async () => {
+    const s = settings(), lock = join(s.dataDir, LOCK_FILE), claim = `${lock}.takeover-t1`;
+    writeFileSync(lock, JSON.stringify({ pid: 999_999_999, token: "t1", startedAt: "2026-11-01T00:00:00Z" }));
+    writeFileSync(claim, "77");
+    const old = new Date(NOW - 2 * MINUTE);
+    utimesSync(claim, old, old);
+    expect((await attemptRanking(s, "service", "2026-11-09", deps(held().rank, () => false))).attempt.outcome).toBe("skipped");
+    expect(existsSync(claim)).toBe(false);
+    const fake = held(), done = attemptRanking(s, "service", "2026-11-09", deps(fake.rank, () => false));
+    fake.release();
+    expect((await done).attempt.outcome).toBe("ok");
+    expect([existsSync(lock), existsSync(claim)]).toEqual([false, false]);
+  });
+
+  it("does not remove a lock another contender took after this one read the dead lock", async () => {
+    const s = settings(), fake = held(), lock = join(s.dataDir, LOCK_FILE);
+    writeFileSync(lock, JSON.stringify({ pid: 999_999_999, token: "t1", startedAt: "2026-11-01T00:00:00Z" }));
+    const theirs = JSON.stringify({ pid: 5151, token: "t2", startedAt: "2026-11-13T12:00:00Z" });
+    // Between this contender's read and its claim, another removes the dead lock and takes its own.
+    const alive = () => { writeFileSync(lock, theirs); return false; };
+    expect((await attemptRanking(s, "service", "2026-11-09", deps(fake.rank, alive))).attempt.outcome).toBe("skipped");
+    expect([readFileSync(lock, "utf8"), existsSync(`${lock}.takeover-t1`), fake.calls()]).toEqual([theirs, false, 0]);
+  });
+
+  it("leaves the lock at the end of a try when it is no longer this try's own", async () => {
+    const s = settings(), fake = held(), lock = join(s.dataDir, LOCK_FILE);
+    const done = attemptRanking(s, "hand", undefined, deps(fake.rank));
+    await Promise.resolve();
+    expect(typeof JSON.parse(readFileSync(lock, "utf8")).token).toBe("string");
+    const theirs = JSON.stringify({ pid: 5151, token: "t2", startedAt: "2026-11-13T12:00:00Z" });
+    writeFileSync(lock, theirs);
+    fake.release();
+    expect((await done).attempt.outcome).toBe("ok");
+    expect(readFileSync(lock, "utf8")).toBe(theirs);
+  });
+
   it("keeps a throw as failed with its first line, and removes the lock", async () => {
     const s = settings(), fake = held();
     const done = attemptRanking(s, "service", "2026-11-09", deps(fake.rank));
