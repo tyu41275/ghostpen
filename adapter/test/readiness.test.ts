@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RANKING_FILE } from "../src/ranking/run.js";
-import { line, rankingOnce, type Facts, type Need } from "../src/service/readiness-reading.js";
+import { line, rankingOnce, shortlistsOnce, type Facts, type Need } from "../src/service/readiness-reading.js";
 import { NEED_LIMIT_MS, NEED_OF_SETTING, NEEDS, READINESS_PATH, readinessList, reading } from "../src/service/readiness.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { startService } from "../src/service/start.js";
@@ -50,18 +50,19 @@ describe("the need of each setting", () => {
     for (const id of Object.values(NEED_OF_SETTING)) expect(NEEDS.map((need) => need.id)).toContain(id);
   });
 
-  it("has the 9 ids chatter files incidents under, the four the install writes required", () => {
+  it("has the 13 ids chatter files incidents under, the four the install writes required", () => {
     expect(NEEDS.map(({ id, kind }) => `${kind} ${id}`)).toEqual(["setting settings-file", "setting data-dir", "setting app-identity", "setting adapter-key",
-      "setting channel", "source topic-sources", "source glossaries", "source published-posts", "setting scorer"]);
+      "setting channel", "source topic-sources", "source glossaries", "source published-posts", "setting scorer", "job ranking", "job weekly-shortlist",
+      "job drafting", "job publishing"]);
     expect(NEEDS.filter((need) => need.required).map((need) => need.id)).toEqual(["settings-file", "data-dir", "app-identity", "adapter-key"]);
-    expect(NEEDS.filter((need) => need.spends !== "none").map(({ id, spends }) => `${id} ${spends}`)).toEqual(["scorer usage"]);
+    expect(NEEDS.filter((need) => need.spends !== "none").map(({ id, spends }) => `${id} ${spends}`)).toEqual(["scorer usage", "drafting usage", "publishing usage"]);
     for (const need of NEEDS) if (need.required) expect(need.fix).toBe("Run ghostpen's install for this instance through Relay; it writes this.");
   });
 
   it("leaves nothing a switch-on would refuse on what the install writes, and what spends off", async () => {
     const { needs } = await installed().list();
     expect(needs.filter((need) => need.required && need.state !== "working")).toEqual([]);
-    expect(needs.filter((need) => need.spends === "usage").map((need) => need.state)).toEqual(["chosen_off"]);
+    expect(needs.filter((need) => need.spends === "usage").map((need) => need.state)).toEqual(["chosen_off", "chosen_off", "chosen_off"]);
   });
 });
 
@@ -81,11 +82,12 @@ describe("GET /readiness", () => {
     const { status, type, body } = await asked(await started(world.file));
     expect([status, type]).toEqual([200, "application/json; charset=utf-8"]);
     expect(faults(body)).toEqual([]);
-    expect((JSON.parse(body) as { needs: unknown[] }).needs.length).toBe(9);
+    expect((JSON.parse(body) as { needs: unknown[] }).needs.length).toBe(13);
     for (const value of [secret, "ZQX", "private", world.dataDir, world.config, world.file, "55566677788", KEY_TEXT, ADAPTER_KEY.toString("base64url")]) {
       expect(body).not.toContain(value);
     }
-    expect(statesOf(body)).toMatchObject({ "topic-sources": "failing", glossaries: "failing", "published-posts": "failing", scorer: "failing", channel: "failing" });
+    expect(statesOf(body)).toMatchObject({ "topic-sources": "failing", glossaries: "failing", "published-posts": "failing", scorer: "failing", channel: "failing",
+      drafting: "failing", publishing: "failing" });
   });
 
   it("writes nothing in the data folder: the same entries, sizes and times after a read", async () => {
@@ -97,6 +99,15 @@ describe("GET /readiness", () => {
     const port = await started(world.file), before = snapshot(world.dataDir);
     expect((await asked(port)).status).toBe(200);
     expect(snapshot(world.dataDir)).toEqual(before);
+  });
+
+  it("knows the adapter's heartbeat from its last keyed call, and only a keyed one", async () => {
+    const world = installed({ shortlist: { operator: "12345" } }), port = await started(world.file);
+    expect(statesOf((await asked(port)).body)["weekly-shortlist"]).toBe("short_of_data");
+    expect((await asked(port, "/v1/adapter/shortlist", "GET", { authorization: "Bearer wrong" })).status).toBe(404);
+    expect(statesOf((await asked(port)).body)["weekly-shortlist"]).toBe("short_of_data");
+    expect((await asked(port, "/v1/adapter/shortlist", "GET", { authorization: `Bearer ${ADAPTER_KEY.toString("base64url")}` })).status).toBe(200);
+    expect(statesOf((await asked(port)).body)["weekly-shortlist"]).toBe("working");
   });
 
   it("sees the kept settings file change while the service runs", async () => {
@@ -131,7 +142,7 @@ describe("GET /readiness", () => {
 describe("one bad need", () => {
   const settings = parseSettings({ instance: "host", port: 8794, dataDir: "/nowhere" });
   const facts: Facts = { settings, settingsFile: undefined, appKey: undefined, adapterKey: undefined, now: after(MINUTE), started: STARTED,
-    ranking: rankingOnce("/nowhere") };
+    lastKeyedCall: undefined, ranking: rankingOnce("/nowhere"), shortlists: shortlistsOnce("/nowhere") };
   const need = (check: Need["check"]): Need => ({ id: "bad", label: "Bad", kind: "source", required: false, spends: "none", fix: "x", check });
 
   it("reads failing when its check throws, saying nothing of the error", async () => {
@@ -149,7 +160,7 @@ describe("one bad need", () => {
       expect(await read).toMatchObject({ state: "failing", why: "this did not answer within 4 s" });
     } finally { vi.useRealTimers(); }
     const { needs } = await readinessList({ settings, started: STARTED, now: () => after(MINUTE) });
-    expect(needs.length).toBe(9);
+    expect(needs.length).toBe(13);
     expect(faults(JSON.stringify({ version: 1, needs }))).toEqual([]);
   });
 

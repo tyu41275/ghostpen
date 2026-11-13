@@ -33,7 +33,12 @@ export const SHORTLIST_FILE = "shortlist.json";
 export function readShortlists(dataDir: string): ShortlistState {
   const path = join(dataDir, SHORTLIST_FILE);
   if (!existsSync(path)) return { version: 1, weeks: {} };
-  const state = JSON.parse(readFileSync(path, "utf8")) as ShortlistState;
+  return parseShortlists(readFileSync(path, "utf8"));
+}
+
+/** The shortlist file's text as its state; throws when it is not ghostpen's (the readiness list reads the file without blocking). */
+export function parseShortlists(text: string): ShortlistState {
+  const state = JSON.parse(text) as ShortlistState;
   if (state?.version !== 1 || !state.weeks || typeof state.weeks !== "object") throw new Error(`${SHORTLIST_FILE} is not ghostpen's shortlist file`);
   return state;
 }

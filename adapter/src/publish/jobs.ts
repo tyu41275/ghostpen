@@ -14,6 +14,9 @@ import { openPostPr, startReview } from "./github.js";
 
 export interface JobDeps { draft: typeof draftNow; open: typeof openPostPr; review: typeof startReview; now: () => Date }
 const DEFAULTS: JobDeps = { draft: draftNow, open: openPostPr, review: startReview, now: () => new Date() };
+/** How a draft's `problem` starts when its writer failed, and when its pull request could not be opened (the readiness list counts them). */
+export const WRITE_FAILED = "the draft could not be written: ";
+export const PR_OPEN_FAILED = "the pull request could not be opened: ";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).split("\n")[0]!.slice(0, 300);
 
 export class DraftJobs {
@@ -64,7 +67,7 @@ export class DraftJobs {
     try {
       draft = await this.deps.draft(this.settings, item.id, {}, previous && notes ? { previous, notes } : undefined);
     } catch (error) {
-      this.update(week, index, (d) => { d.status = "error"; d.problem = `the draft could not be written: ${message(error)}`; });
+      this.update(week, index, (d) => { d.status = "error"; d.problem = `${WRITE_FAILED}${message(error)}`; });
       return;
     }
     const report = reportText(draft.report);
@@ -80,7 +83,7 @@ export class DraftJobs {
       this.deps.review(publish, pr.number, item.draft!.round, join(logs, `pr-${pr.number}-${item.draft!.round}.log`));
       this.update(week, index, (d) => { d.status = "ready"; d.title = draft.title; d.report = report; d.pr = pr; delete d.notes; delete d.problem; });
     } catch (error) {
-      this.update(week, index, (d) => { d.status = "error"; d.title = draft.title; d.report = report; d.problem = `the pull request could not be opened: ${message(error)}`; });
+      this.update(week, index, (d) => { d.status = "error"; d.title = draft.title; d.report = report; d.problem = `${PR_OPEN_FAILED}${message(error)}`; });
     }
   }
 }

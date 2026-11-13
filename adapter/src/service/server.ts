@@ -69,6 +69,8 @@ function notesOf(dataDir: string): FeedbackEntry[] | Error {
 }
 
 export function createGhostpenServer(options: ServerOptions): Server {
+  // The last request that carried the adapter key: chatter's adapter asks on its heartbeat, so this is how the list knows it beats.
+  let lastKeyedCall: Date | undefined;
   return createServer((req, res) => {
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
     if (path === "/health") {
@@ -94,12 +96,13 @@ export function createGhostpenServer(options: ServerOptions): Server {
     }
     if (path === READINESS_PATH && req.method === "GET" && options.readiness && options.settings) {
       void readinessList({ settings: options.settings, settingsFile: options.readiness.settingsFile, appKey: options.appKey, adapterKey: options.adapterKey,
-        started: options.readiness.started, now: () => new Date((options.now ?? Date.now)()) })
+        started: options.readiness.started, lastKeyedCall, now: () => new Date((options.now ?? Date.now)()) })
         .then((list) => send(res, 200, list), () => send(res, 500, { error: "the readiness list could not be made" }));
       return;
     }
     if (path.startsWith("/v1/adapter/")) {
       if (!options.settings || !options.adapterKey || !keyMatches(req.headers.authorization, options.adapterKey)) return send(res, 404, { error: "not found" });
+      lastKeyedCall = new Date((options.now ?? Date.now)());
       const chunks: Buffer[] = [];
       let size = 0;
       req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= MAX_BODY) chunks.push(chunk); });
