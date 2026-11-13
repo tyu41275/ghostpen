@@ -68,6 +68,15 @@ ADAPTER_CONFIG="$CONFIG/chatter-adapter.json"
 [ -s "$ADAPTER_CONFIG" ] || node -e 'process.stdout.write(JSON.stringify({settingsFile:process.argv[1]},null,2)+"\n")' "$SETTINGS" > "$ADAPTER_CONFIG"
 umask 022
 
+# The service runs node's programs, gh and git by name (src/publish/github.ts), and the user manager's PATH holds none
+# of a user's own bin folders (ghostpen#122): the unit's PATH starts with the folders this install finds them in. One it
+# does not find is left out, and the readiness list's `publishing` need names it.
+UNIT_PATH=
+for tool in node gh git; do
+  found=$(command -v "$tool" || true)
+  case "$found" in /*) folder=$(dirname "$found"); case ":$UNIT_PATH:" in *":$folder:"*) ;; *) UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}$folder" ;; esac ;; esac
+done
+UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}/usr/local/bin:/usr/bin:/bin"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 install -d "$UNIT_DIR"
 cat > "$UNIT_DIR/$UNIT.tmp" <<UNITEOF
@@ -75,6 +84,7 @@ cat > "$UNIT_DIR/$UNIT.tmp" <<UNITEOF
 Description=ghostpen for $INSTANCE (health and app on loopback :$PORT)
 
 [Service]
+Environment="PATH=$UNIT_PATH"
 ExecStart=$(command -v node) $ADAPTER/dist/service/main.js $SETTINGS
 Restart=on-failure
 RestartSec=5

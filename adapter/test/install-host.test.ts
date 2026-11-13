@@ -30,7 +30,7 @@ function home(): string {
 }
 
 /** Runs the install with a systemctl stand-in; answers systemctl's calls, or rejects with the script's error. */
-async function install(dir: string, options: { active?: boolean; port?: string; stack?: string; facts?: string; readiness?: string } = {}): Promise<string[]> {
+async function install(dir: string, options: { active?: boolean; port?: string; stack?: string; facts?: string; readiness?: string; path?: string } = {}): Promise<string[]> {
   const calls = join(dir, "systemctl.calls");
   writeFileSync(calls, "");
   const stub = join(dir, "systemctl");
@@ -40,7 +40,7 @@ async function install(dir: string, options: { active?: boolean; port?: string; 
   await promisify(execFile)("bash", [script, "--instance", "personal-comms-host", "--root", join(dir, "ghostpen"),
     "--port", options.port ?? "8794", "--dropin-dir", join(dir, "adapters.d"), "--stack", stack,
     ...(options.facts ? ["--chatter-facts", options.facts] : []), ...(options.readiness === undefined ? [] : ["--readiness", options.readiness])], {
-    env: { PATH: process.env.PATH, HOME: dir, XDG_CONFIG_HOME: join(dir, "config"), GHOSTPEN_INSTALL_SYSTEMCTL: stub,
+    env: { PATH: options.path ?? process.env.PATH, HOME: dir, XDG_CONFIG_HOME: join(dir, "config"), GHOSTPEN_INSTALL_SYSTEMCTL: stub,
       GHOSTPEN_INSTALL_SKIP_BUILD: "1", GHOSTPEN_INSTALL_HEALTH_WAIT: "1" } });
   return readFileSync(calls, "utf8").trim().split("\n").filter(Boolean);
 }
@@ -54,7 +54,11 @@ describe("install-host.sh", () => {
   it("creates the settings, app key and adapter config once, installs the unit and a drop-in with the app, and restarts only a running service", async () => {
     const dir = home(), root = join(dir, "ghostpen"), config = join(root, "config"), settingsFile = join(config, "settings.json");
     const at = await port("personal-comms-host");
-    expect(await install(dir, { port: at })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
+    // A gh only in a user's own bin folder, as on always-on-dev-1 (ghostpen#122): the unit's PATH must hold it.
+    const tools = join(dir, "own-bin");
+    mkdirSync(tools);
+    writeFileSync(join(tools, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    expect(await install(dir, { port: at, path: `${tools}:${process.env.PATH}` })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
     const appKey = join(config, "app-identity.key");
     const adapterKey = join(config, "adapter.key");
     expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey,
@@ -66,6 +70,9 @@ describe("install-host.sh", () => {
     expect(JSON.parse(readFileSync(join(config, "chatter-adapter.json"), "utf8"))).toEqual({ settingsFile });
     expect(readFileSync(join(dir, "config", "systemd", "user", UNIT), "utf8"))
       .toMatch(new RegExp(`ExecStart=\\S+ ${join(root, "checkout")}/adapter/dist/service/main\\.js ${settingsFile}\\n`, "u"));
+    const unitPath = /^Environment="PATH=([^"\n]*)"$/mu.exec(readFileSync(join(dir, "config", "systemd", "user", UNIT), "utf8"))?.[1]?.split(":");
+    expect(unitPath).toContain(tools);
+    expect(unitPath?.slice(-3)).toEqual(["/usr/local/bin", "/usr/bin", "/bin"]);
     const dropin = join(dir, "adapters.d", "ghostpen.json");
     expect(JSON.parse(readFileSync(dropin, "utf8"))).toEqual({ version: 1, key: "ghostpen", entry: { key: "ghostpen",
       module: join(root, "checkout", "adapter"), config: join(config, "chatter-adapter.json"), namespaces: ["ghostpen"],
