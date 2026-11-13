@@ -74,6 +74,7 @@ umask 022
 # that runs on its own with an empty environment: a wrapper needing the installing shell's variables, as chatter's gh
 # shim in a task's shell, would not run under the unit (ghostpen#124).
 UNIT_PATH=
+UNIT_NODE=
 for tool in node gh git; do
   found=
   IFS=: read -r -a path_dirs <<< "$PATH"
@@ -85,8 +86,11 @@ for tool in node gh git; do
       break
     fi
   done
+  if [ "$tool" = node ]; then UNIT_NODE=$found; fi
   case "$found" in /*) folder=$(dirname "$found"); case ":$UNIT_PATH:" in *":$folder:"*) ;; *) UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}$folder" ;; esac ;; esac
 done
+# The unit starts the node this check took, never a wrapper it skipped.
+[ -n "$UNIT_NODE" ] || { echo "install-host.sh: no node on PATH runs with an empty environment; the unit could not start ghostpen" >&2; exit 1; }
 UNIT_PATH="${UNIT_PATH:+$UNIT_PATH:}/usr/local/bin:/usr/bin:/bin"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 install -d "$UNIT_DIR"
@@ -96,7 +100,7 @@ Description=ghostpen for $INSTANCE (health and app on loopback :$PORT)
 
 [Service]
 Environment="PATH=$UNIT_PATH"
-ExecStart=$(command -v node) $ADAPTER/dist/service/main.js $SETTINGS
+ExecStart=$UNIT_NODE $ADAPTER/dist/service/main.js $SETTINGS
 Restart=on-failure
 RestartSec=5
 

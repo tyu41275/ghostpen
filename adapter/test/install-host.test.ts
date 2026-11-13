@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { readAppKey } from "../src/service/app-identity.js";
@@ -62,6 +62,7 @@ describe("install-host.sh", () => {
     const shim = join(dir, "task-shim");
     mkdirSync(shim);
     writeFileSync(join(shim, "gh"), "#!/bin/sh\n[ -n \"$HOME\" ] || exit 127\nexit 0\n", { mode: 0o755 });
+    writeFileSync(join(shim, "node"), `#!/bin/sh\n[ -n "$HOME" ] || exit 127\nexec ${process.execPath} "$@"\n`, { mode: 0o755 });
     expect(await install(dir, { port: at, path: `${shim}:${tools}:${process.env.PATH}` })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
     const appKey = join(config, "app-identity.key");
     const adapterKey = join(config, "adapter.key");
@@ -77,6 +78,10 @@ describe("install-host.sh", () => {
     const unitPath = /^Environment="PATH=([^"\n]*)"$/mu.exec(readFileSync(join(dir, "config", "systemd", "user", UNIT), "utf8"))?.[1]?.split(":");
     expect(unitPath).toContain(tools);
     expect(unitPath).not.toContain(shim);
+    // The unit starts the node the check took, from a folder on its PATH, never the skipped wrapper.
+    const unitNode = /^ExecStart=(\S+) /mu.exec(readFileSync(join(dir, "config", "systemd", "user", UNIT), "utf8"))?.[1] ?? "";
+    expect(unitNode).not.toBe(join(shim, "node"));
+    expect(unitPath).toContain(dirname(unitNode));
     expect(unitPath?.slice(-3)).toEqual(["/usr/local/bin", "/usr/bin", "/bin"]);
     const dropin = join(dir, "adapters.d", "ghostpen.json");
     expect(JSON.parse(readFileSync(dropin, "utf8"))).toEqual({ version: 1, key: "ghostpen", entry: { key: "ghostpen",
