@@ -34,7 +34,7 @@ describe("relay-install.mjs", () => {
       expect(installArgs({ ...env, RELAY_INPUT_READINESS: readiness }, checkout, checkout).slice(-2)).toEqual(["--readiness", readiness]);
     expect(installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "/run/facts.json", RELAY_INPUT_READINESS: "off" }, checkout, checkout).slice(-4))
       .toEqual(["--chatter-facts", "/run/facts.json", "--readiness", "off"]);
-    for (const readiness of ["yes", "ON", "true"])
+    for (const readiness of ["yes", "ON", "true", ""])
       expect(() => installArgs({ ...env, RELAY_INPUT_READINESS: readiness }, checkout, checkout)).toThrow("the readiness input must be on or off");
   });
 

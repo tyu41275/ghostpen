@@ -46,10 +46,10 @@ export function installArgs(env, cwd, checkout = CHECKOUT) {
   const facts = env.RELAY_INPUT_CHATTER_FACTS;
   if (facts !== undefined && facts !== "" && !isAbsolute(facts)) throw new Error("the chatter_facts input must be an absolute path");
   const readiness = env.RELAY_INPUT_READINESS;
-  if (readiness && readiness !== "on" && readiness !== "off") throw new Error("the readiness input must be on or off");
+  if (readiness !== undefined && readiness !== "on" && readiness !== "off") throw new Error("the readiness input must be on or off"); // an empty value too: Relay sets only the inputs given
   return ["--instance", instance, "--root", ghostpenRoot, "--port", port, "--dropin-dir", dropin,
     "--stack", join(root, instance, "config", "stack.yaml"), ...(facts ? ["--chatter-facts", facts] : []),
-    ...(readiness ? ["--readiness", readiness] : [])];
+    ...(readiness !== undefined ? ["--readiness", readiness] : [])];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
