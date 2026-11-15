@@ -1,6 +1,6 @@
 # Draft checks (ghostpen#90, ADR 0101 brief D1–D3, D10, D14)
 
-Every draft must pass these checks before Tim sees it. Each check can fail a draft by itself. They are rules anyone can rerun, not a model's opinion. The report (`reportText`) says in plain words which check failed and why.
+Every draft must pass these checks before the operator sees it. Each check can fail a draft by itself. They are rules anyone can rerun, not a model's opinion. The report (`reportText`) says in plain words which check failed and why.
 
 - **Plain words** (`src/draft/plain.ts`): everything ghostpen writes must be explainable to a 10-year-old.
   - The reading grade (Flesch-Kincaid) of the prose must be 8 or lower.
@@ -52,7 +52,7 @@ The `id` is a shortlist item's: a candidate id, or `background:<part>` for a bac
   - A draft **held** for a background post stops at once, because rewording can't write that post.
   - A draft whose post links can't be checked (the sitemap unread) stops at once too, and fails: rewording can't read the sitemap.
   - A failed revision keeps the last draft and says why.
-- **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map). Nothing is published from here: Tim approves every post (brief D14).
+- **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map). Nothing is published from here: the operator approves every post.
 
 Settings (`draft`):
 

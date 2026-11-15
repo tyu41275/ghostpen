@@ -43,6 +43,6 @@ export function checkScores(candidate: Candidate, proposed: Record<string, Propo
   });
 }
 
-/** The weighted total: each factor's score times its weight (1 unless Tim's choices changed it). */
+/** The weighted total: each factor's score times its weight (1 unless the operator's choices changed it). */
 export const total = (scores: Score[], weights: Weights = DEFAULT_WEIGHTS): number =>
   Math.round(scores.reduce((sum, s) => sum + s.score * (weights[s.factor] ?? 1), 0) * 100) / 100;

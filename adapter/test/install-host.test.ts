@@ -10,7 +10,7 @@ import { readSettings } from "../src/settings.js";
 import { tempDir } from "./helpers.js";
 
 const script = join(__dirname, "..", "scripts", "install-host.sh");
-const UNIT = "ghostpen-personal-comms-host.service";
+const UNIT = "ghostpen-instance-a.service";
 const servers: Server[] = [];
 afterEach(async () => { for (const server of servers.splice(0)) await new Promise((resolve) => server.close(resolve)); });
 
@@ -36,8 +36,8 @@ async function install(dir: string, options: { active?: boolean; port?: string; 
   const stub = join(dir, "systemctl");
   writeFileSync(stub, `#!/bin/sh\necho "$@" >> ${calls}\n[ "$2" = is-active ] && exit ${options.active ? 0 : 3}\nexit 0\n`, { mode: 0o755 });
   const stack = join(dir, "stack.yaml");
-  writeFileSync(stack, options.stack ?? "version: 1\ninstance: personal-comms-host\nadapters: [tempo, ghostpen]\n");
-  await promisify(execFile)("bash", [script, "--instance", "personal-comms-host", "--root", join(dir, "ghostpen"),
+  writeFileSync(stack, options.stack ?? "version: 1\ninstance: instance-a\nadapters: [tempo, ghostpen]\n");
+  await promisify(execFile)("bash", [script, "--instance", "instance-a", "--root", join(dir, "ghostpen"),
     "--port", options.port ?? "8794", "--dropin-dir", join(dir, "adapters.d"), "--stack", stack,
     ...(options.facts ? ["--chatter-facts", options.facts] : []), ...(options.readiness === undefined ? [] : ["--readiness", options.readiness])], {
     env: { PATH: options.path ?? process.env.PATH, HOME: dir, XDG_CONFIG_HOME: join(dir, "config"), GHOSTPEN_INSTALL_SYSTEMCTL: stub,
@@ -53,8 +53,8 @@ const refusal = async (fn: () => Promise<unknown>): Promise<string> => {
 describe("install-host.sh", () => {
   it("creates the settings, app key and adapter config once, installs the unit and a drop-in with the app, and restarts only a running service", async () => {
     const dir = home(), root = join(dir, "ghostpen"), config = join(root, "config"), settingsFile = join(config, "settings.json");
-    const at = await port("personal-comms-host");
-    // A gh only in a user's own bin folder, as on always-on-dev-1 (ghostpen#122): the unit's PATH must hold it.
+    const at = await port("instance-a");
+    // As on a host where gh is only in a user's own bin folder (ghostpen#122): the unit's PATH must hold it.
     const tools = join(dir, "own-bin");
     mkdirSync(tools);
     writeFileSync(join(tools, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
@@ -66,7 +66,7 @@ describe("install-host.sh", () => {
     expect(await install(dir, { port: at, path: `${shim}:${tools}:${process.env.PATH}` })).toEqual(["--user daemon-reload", `--user is-active --quiet ${UNIT}`]);
     const appKey = join(config, "app-identity.key");
     const adapterKey = join(config, "adapter.key");
-    expect(readSettings(settingsFile)).toEqual({ instance: "personal-comms-host", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey,
+    expect(readSettings(settingsFile)).toEqual({ instance: "instance-a", port: Number(at), dataDir: join(root, "data"), appIdentityKeyFile: appKey,
       adapterKeyFile: adapterKey, sources: { topics: [], references: [] } });
     expect(readAppKey(appKey).length).toBe(32);
     expect(readAppKey(adapterKey, "adapterKeyFile").length).toBe(32);
@@ -137,7 +137,7 @@ describe("install-host.sh", () => {
   });
 
   it("installs nothing where the instance's stack.yaml does not allow ghostpen", async () => {
-    for (const stack of ["version: 1\ninstance: personal-comms-host\nadapters: [tempo]\n", "version: 1\ninstance: another\nadapters: [ghostpen]\n"]) {
+    for (const stack of ["version: 1\ninstance: instance-a\nadapters: [tempo]\n", "version: 1\ninstance: another\nadapters: [ghostpen]\n"]) {
       const dir = home();
       expect(await refusal(() => install(dir, { stack }))).toMatch(/ghostpen is not installed/u);
       expect(existsSync(join(dir, "ghostpen", "config"))).toBe(false);
@@ -154,7 +154,7 @@ describe("install-host.sh", () => {
     const other = home(), wrong = await port("someone-else");
     expect(await refusal(() => install(other, { active: true, port: wrong }))).toMatch(/does not answer as it/u);
     const relative = home();
-    const run = promisify(execFile)("bash", [script, "--instance", "personal-comms-host", "--root", "ghostpen", "--port", "8794",
+    const run = promisify(execFile)("bash", [script, "--instance", "instance-a", "--root", "ghostpen", "--port", "8794",
       "--dropin-dir", join(relative, "d"), "--stack", join(relative, "s.yaml")]);
     expect(await refusal(() => run)).toMatch(/--root must be absolute/u);
   });

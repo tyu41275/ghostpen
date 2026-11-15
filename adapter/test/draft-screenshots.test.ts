@@ -37,10 +37,10 @@ describe("screenshot settings", () => {
 
 describe("privacy", () => {
   it("names each kind of private detail once, never the detail", () => {
-    const found = privacyFindings(["mail tim@example.com", "from 10.0.0.12", "user 234652039735541760", "key sk-abcdefghijklmnopqrstuv",
+    const found = privacyFindings(["mail teo@example.com", "from 10.0.0.12", "user 234652039735541760", "key sk-abcdefghijklmnopqrstuv",
       "at /home/someone/x", "Bearer abcdefghijkl", "ghp_abcdefghijklmnopqrstuvwxyz", "hello ACME team"], [/\bacme\b/iu]);
     expect(found).toEqual(["an email address", "an IP address", "a long id number", "a key or token", "a home folder path", "a word on the private list"]);
-    expect(found.join(" ")).not.toContain("tim@");
+    expect(found.join(" ")).not.toContain("teo@");
     expect(privacyFindings(["3 tasks running", "Version 1.2.3", "2026-10-25 09:00"], [])).toEqual([]);
   });
 });
@@ -64,7 +64,7 @@ describe("taking screenshots", () => {
   it("fails closed: private text, unreadable content, an error, an unknown page or missing words keep no picture", async () => {
     const dir = join(tempDir(), "shots");
     const result = await takeScreenshots(md + " ![a](screenshot:nope) ![b](screenshot:gone)", { ...SETTINGS, pages: [...SETTINGS.pages, { ...SETTINGS.pages[1]!, name: "gone" }] }, dir,
-      fake({ console: { ...clean, text: ["Signed in as tim@example.com"] }, tempo: { ...clean, unreadable: ["canvas", "canvas", "iframe"] }, gone: new Error("net::ERR_CONNECTION_REFUSED\nmore") }));
+      fake({ console: { ...clean, text: ["Signed in as teo@example.com"] }, tempo: { ...clean, unreadable: ["canvas", "canvas", "iframe"] }, gone: new Error("net::ERR_CONNECTION_REFUSED\nmore") }));
     expect(result.passed).toBe(false);
     expect(result.findings).toEqual([
       "screenshot console shows something private (an email address): mask it (settings.draft.screenshots.pages[].mask)",
@@ -87,7 +87,7 @@ describe("taking screenshots", () => {
   it("keeps no picture at all when any one screenshot fails", async () => {
     const dir = join(tempDir(), "shots");
     const result = await takeScreenshots("![the console](screenshot:console) ![Tempo's grades](screenshot:tempo)", SETTINGS, dir,
-      fake({ tempo: { ...clean, text: ["tim@example.com"] } }));
+      fake({ tempo: { ...clean, text: ["teo@example.com"] } }));
     expect(result.passed).toBe(false);
     expect(result.files).toEqual({});
     expect(existsSync(dir)).toBe(false);
@@ -117,15 +117,15 @@ describe("taking screenshots", () => {
 });
 
 describe("reading what a page draws", () => {
-  // strings: 0 "", 1 "#text", 2 "Tasks", 3 "tim@example.com", 4 "visible", 5 "hidden", 6 "CANVAS", 7 "INPUT", 8 "x@example.com", 9 "IFRAME"
-  const strings = ["", "#text", "Tasks", "tim@example.com", "visible", "hidden", "CANVAS", "INPUT", "x@example.com", "IFRAME"];
+  // strings: 0 "", 1 "#text", 2 "Tasks", 3 "teo@example.com", 4 "visible", 5 "hidden", 6 "CANVAS", 7 "INPUT", 8 "x@example.com", 9 "IFRAME"
+  const strings = ["", "#text", "Tasks", "teo@example.com", "visible", "hidden", "CANVAS", "INPUT", "x@example.com", "IFRAME"];
   const snapshot = { strings, documents: [{
     nodes: { nodeName: [1, 1, 1, 6, 7, 9], inputValue: { index: [4], value: [8] } },
     layout: { nodeIndex: [0, 1, 2, 3, 4, 5], bounds: [[0, 0, 100, 20], [0, 30, 100, 20], [0, 60, 100, 20], [0, 90, 50, 50], [0, 150, 100, 20], [0, 200, 0, 0]],
       text: [2, 3, 3, -1, -1, -1], styles: [[4], [4], [5], [4], [4], [4]] } }] };
 
   it("keeps drawn text and field values, flags unreadable content, and leaves out hidden or masked parts", () => {
-    expect(readSnapshot(snapshot, [])).toEqual({ text: ["Tasks", "tim@example.com", "x@example.com"], unreadable: ["canvas"] });
+    expect(readSnapshot(snapshot, [])).toEqual({ text: ["Tasks", "teo@example.com", "x@example.com"], unreadable: ["canvas"] });
     expect(readSnapshot(snapshot, [{ x: 0, y: 25, width: 100, height: 150 }])).toEqual({ text: ["Tasks"], unreadable: [] });
   });
 });

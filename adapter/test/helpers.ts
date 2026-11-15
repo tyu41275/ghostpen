@@ -41,6 +41,6 @@ export function identity(claims: Record<string, unknown>, key: Buffer = KEY): st
 
 export function settingsFile(dir: string, over: Record<string, unknown> = {}): string {
   const path = join(dir, "settings.json");
-  writeFileSync(path, JSON.stringify({ instance: "personal-comms-host", port: 8794, dataDir: dir, ...over }));
+  writeFileSync(path, JSON.stringify({ instance: "instance-a", port: 8794, dataDir: dir, ...over }));
   return path;
 }

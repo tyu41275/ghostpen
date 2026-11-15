@@ -1,5 +1,5 @@
 /**
- * Every check a draft must pass before Tim sees it (ADR 0101, brief D1–D3, D10, D14), in plain words. Each one fails the
+ * Every check a draft must pass before the operator sees it, in plain words. Each one fails the
  * draft on its own; the report says which failed and why, and which parts go on the "posts to write later" list. The
  * screenshot privacy check joins these with the screenshots (ghostpen#90, part 3); the link check came with ghostpen#108.
  */

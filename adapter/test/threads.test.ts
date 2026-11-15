@@ -166,10 +166,10 @@ describe("context reaches the writer and the app page", () => {
     const view = { ranAt: "x", problems: [], background: [], owed: [], entries: [{ id: ID, kind: "decision", title: "t", topic: "one timer app", takeaway: "k", total: 6, explain: [], location: "l", scores: [] }] };
     const notes = [{ at: "1", by: OPERATOR, topic: ID, kind: "context" as const, text: "<b>We tried three</b>", intake: "pending" as const },
       { at: "2", by: OPERATOR, topic: ID, kind: "reason" as const, action: "write", chip: true, text: "Others would find it useful", intake: "pending" as const }];
-    const html = renderApp("host", { login: "tim" }, view, notes);
+    const html = renderApp("host", { login: "teo" }, view, notes);
     expect(html).toContain('<ul data-field="context"><li>Your context: &lt;b&gt;We tried three&lt;/b&gt;</li></ul>');
     expect(html.indexOf("Reason (write)")).toBeLessThan(html.indexOf("<strong>Context</strong>"));
-    expect(renderApp("host", { login: "tim" }, view, [])).not.toContain('data-section="notes"');
-    expect(renderApp("host", { login: "tim" }, view, new Error("feedback.json is not ghostpen's feedback file"))).toContain("It cannot be read: feedback.json is not ghostpen&#39;s feedback file");
+    expect(renderApp("host", { login: "teo" }, view, [])).not.toContain('data-section="notes"');
+    expect(renderApp("host", { login: "teo" }, view, new Error("feedback.json is not ghostpen's feedback file"))).toContain("It cannot be read: feedback.json is not ghostpen&#39;s feedback file");
   });
 });

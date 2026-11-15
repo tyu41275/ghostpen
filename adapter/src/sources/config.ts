@@ -1,7 +1,7 @@
 /**
  * The `sources` block of ghostpen's settings (ADR 0101, brief D8): which folders and repositories ghostpen reads. Nothing
- * here assumes Obsidian; Tim's layout is one such block in his settings (adapter/docs/sources.md). Every error names the
- * field, never its value.
+ * here assumes Obsidian; an operator's layout is one such block in their settings (adapter/docs/sources.md). Every
+ * error names the field, never its value.
  */
 import { isAbsolute } from "node:path";
 

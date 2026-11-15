@@ -56,7 +56,7 @@ describe("the picks", () => {
     const text = proposalText(entry("a", 10, ["ci"]), 1);
     expect(text).toBe('**#1 Topic a** (Decision post, score 10)\nWhy: stakes 3/3: "CI is the main delivery bottleneck"\nA reader leaves with: Takeaway a\nNeeds first: a post explaining ci.');
   });
-  it("leaves out what Tim wrote or skipped, brings back Not yet, and adds no background post that unlocks only one", () => {
+  it("leaves out what the operator wrote or skipped, brings back Not yet, and adds no background post that unlocks only one", () => {
     const answered = { ...fresh, choices: [{ candidate: "a", choice: "write" as const, reason: "", at: "", scores: [] },
       { candidate: "c", choice: "skip" as const, reason: "narrow", at: "", scores: [] }, { candidate: "d", choice: "not-yet" as const, reason: "", at: "", scores: [] }] };
     expect(picks(view(), answered, 3).map((i) => i.id)).toEqual(["b", "d", "e"]);
@@ -158,7 +158,7 @@ describe("the adapter routes", () => {
 
   it("refuse a shortlist setting it cannot use, naming the field", () => {
     const base = { instance: "x", port: 8794, dataDir: "/d" };
-    expect(() => parseSettings({ ...base, shortlist: { operator: "tim" } })).toThrow("shortlist.operator must be a Discord user id");
+    expect(() => parseSettings({ ...base, shortlist: { operator: "teo" } })).toThrow("shortlist.operator must be a Discord user id");
     expect(() => parseSettings({ ...base, shortlist: { operator: "123456", count: 6 } })).toThrow("shortlist.count must be 3 to 5");
     expect(parseSettings({ ...base, shortlist: { operator: "123456" } }).shortlist).toEqual({ day: "monday", time: "09:00", timeZone: "UTC", operator: "123456", count: 5 });
   });

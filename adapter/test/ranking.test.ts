@@ -20,7 +20,7 @@ const ADR = doc("dh/0022-live-trading-parity", ["# ADR 0022: Diamond Hands live 
 const EMPTY_INDEX: PublishedIndex = { version: 1, terms: "", posts: [] };
 const def = (term: string, text: string, path = `/g/${term.toLowerCase()}/docs/CONTEXT.md`, line = 5): Definition =>
   ({ term, text, location: { path, line }, source: "glossaries" });
-const GLOSSARY = [def("chatter", "The Discord bot."), def("Relay", "The fleet's deploy and promotion tool.\nIt runs on always-on-dev."), def("Tempo", "Delivery metrics.")];
+const GLOSSARY = [def("chatter", "The Discord bot."), def("Relay", "The fleet's deploy and promotion tool.\nIt runs on the deploy host."), def("Tempo", "Delivery metrics.")];
 
 describe("candidates", () => {
   it("one per document: its decisions, the options it turned down and what it says happened, each with its line", () => {
@@ -152,7 +152,7 @@ describe("the ranking", () => {
   });
 });
 
-describe("Tim's choices", () => {
+describe("the operator's choices", () => {
   const s = (stakes: number, carryOver: number) => [{ factor: "stakes", score: stakes, quote: "q", line: 1 }, { factor: "carryOver", score: carryOver, quote: "q", line: 1 }];
   it("keeps each choice, needs a reason for a Skip, and books a post-mortem when a decision post is written", () => {
     const dir = tempDir();
@@ -166,7 +166,7 @@ describe("Tim's choices", () => {
     expect(state.choices.map((c) => [c.candidate, c.choice, c.reason])).toEqual([["a", "write", ""], ["a", "write", ""], ["p", "write", ""], ["b", "skip", "too narrow"]]);
   });
 
-  it("suggests weights from what Tim writes and skips, and changes nothing until he agrees", () => {
+  it("suggests weights from what the operator writes and skips, and changes nothing until they agree", () => {
     const dir = tempDir();
     recordChoice(dir, { candidate: "a", choice: "write", reason: "", scores: s(3, 1) }, "decision", "A");
     expect(suggestWeights(readChoices(dir))).toEqual([]); // nothing skipped yet: nothing to learn

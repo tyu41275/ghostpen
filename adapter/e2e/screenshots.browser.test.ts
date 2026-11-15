@@ -8,8 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { playwrightCapture, privacyFindings, type ShotPage } from "../src/draft/screenshots.js";
 
 const PAGES: Record<string, string> = {
-  "/masked": "<main><h1>Tasks</h1><p class=who>Signed in as tim@example.com</p><p style='display:none'>secret@example.com</p></main>",
-  "/open": "<main><h1>Tasks</h1><input value='tim@example.com'></main>",
+  "/masked": "<main><h1>Tasks</h1><p class=who>Signed in as teo@example.com</p><p style='display:none'>secret@example.com</p></main>",
+  "/open": "<main><h1>Tasks</h1><input value='teo@example.com'></main>",
   "/canvas": "<main><h1>Chart</h1><canvas width=100 height=100></canvas></main>",
   "/shadow": "<main><h1>Tasks</h1><x-open></x-open><x-closed></x-closed></main><script>"
     + "customElements.define('x-open', class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<p class=who>open@example.com</p>'; } });"

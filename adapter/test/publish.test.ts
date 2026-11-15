@@ -29,9 +29,9 @@ describe("the post file", () => {
   });
 
   it("writes the blog's frontmatter with the AI banner and the post's image addresses", () => {
-    expect(postText(draft({ title: "Tim's timer", summary: "One 'quote'." }), "2026-10-26", "tims-timer", "/static/images/ghostpen/")).toBe([
-      "---", "title: 'Tim''s timer'", "date: '2026-10-26'", "tags: ['ops']", "draft: false", "aiGenerated: true", "summary: 'One ''quote''.'", "---", "",
-      "We picked one timer.\n\n![the console](/static/images/ghostpen/tims-timer/console.png)", ""].join("\n"));
+    expect(postText(draft({ title: "Teo's timer", summary: "One 'quote'." }), "2026-10-26", "teos-timer", "/static/images/ghostpen/")).toBe([
+      "---", "title: 'Teo''s timer'", "date: '2026-10-26'", "tags: ['ops']", "draft: false", "aiGenerated: true", "summary: 'One ''quote''.'", "---", "",
+      "We picked one timer.\n\n![the console](/static/images/ghostpen/teos-timer/console.png)", ""].join("\n"));
   });
 });
 

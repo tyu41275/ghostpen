@@ -20,7 +20,7 @@ async function listen(server: Server): Promise<string> {
 }
 
 const NOW = Date.parse("2026-10-24T22:00:00Z");
-const claims = (over: Record<string, unknown> = {}) => ({ aud: "ghostpen", login: "tim", sub: "1", iat: NOW / 1000 - 10, exp: NOW / 1000 + 300, ...over });
+const claims = (over: Record<string, unknown> = {}) => ({ aud: "ghostpen", login: "teo", sub: "1", iat: NOW / 1000 - 10, exp: NOW / 1000 + 300, ...over });
 
 describe("service", () => {
   it("answers health while its data folder is there, and 503 saying why once it is gone", async () => {
@@ -40,13 +40,13 @@ describe("service", () => {
 
   it("opens the app only to a person chatter's console signed for ghostpen, with a strict CSP and every value escaped", async () => {
     const base = await listen(createGhostpenServer({ instance: "host<1>", dataDir: tempDir(), appKey: KEY, now: () => NOW }));
-    const page = await fetch(`${base}/app/`, { headers: { "x-chatter-identity": identity(claims({ login: "<tim>" })) } });
+    const page = await fetch(`${base}/app/`, { headers: { "x-chatter-identity": identity(claims({ login: "<teo>" })) } });
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
     expect(page.headers.get("cache-control")).toBe("no-store");
     expect(page.headers.get("x-content-type-options")).toBe("nosniff");
     const html = await page.text();
-    expect(html).toContain("Signed in as &lt;tim&gt;");
+    expect(html).toContain("Signed in as &lt;teo&gt;");
     expect(html).toContain("ghostpen — host&lt;1&gt;");
     expect(html).toContain("Nothing is ranked yet.");
     for (const header of [undefined, identity(claims({ aud: "tempo" })), identity(claims({ exp: NOW / 1000 - 1 })),
@@ -115,7 +115,7 @@ describe("ranking on its own (ghostpen#118)", () => {
     const html = await (await fetch(`${base}/app/`, { headers: { "x-chatter-identity": identity(claims()) } })).text();
     expect(html).toContain('<p class="look-danger" data-field="ranking-run">The last try, at 2026-10-24T21:00:00.000Z, failed: scorer: &lt;b&gt;died&lt;/b&gt;. '
       + '<span class="look-danger">This ranking is 18 days old.</span></p>');
-    const viewer = { login: "tim", sub: "1" } as never, at = new Date(NOW);
+    const viewer = { login: "teo", sub: "1" } as never, at = new Date(NOW);
     const line = (attempt: unknown, view: unknown = null) => /data-field="ranking-run">([^\n]*)<\/p>/u.exec(renderApp("h", viewer, view as never, [], { attempt: attempt as never, now: at }))?.[1];
     expect(line({ by: "service", startedAt: "2026-10-24T21:00:00.000Z", outcome: "running" })).toBe("Ranking now, since 2026-10-24T21:00:00.000Z.");
     expect(line({ by: "hand", startedAt: "2026-10-24T21:00:00.000Z", outcome: "skipped", problem: "a ranking is running already" }))

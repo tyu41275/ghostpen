@@ -1,6 +1,6 @@
 # From a Write to the blog (ghostpen#90, ADR 0101 amended 2026-10-25)
 
-Tim approves every post. Nothing merges without his Publish press, and Publish lands a post only after the independent review approves it.
+The operator approves every post. Nothing merges without their Publish press, and Publish lands a post only after the independent review approves it.
 
 - **Write** (shortlist card): when `settings.draft` is set, the service drafts the topic (`docs/drafting.md`), one draft at a time (`src/publish/jobs.ts`). The item's `draft` state in `dataDir/shortlist.json` says where it is: `queued`, `drafting`, `ready`, `held`, `failed`, `error` or `published`. A restarted service picks up drafts it was in the middle of. With no `settings.draft`, a Write is only kept.
 - **The pull request** (`src/publish/github.ts`), for a ready draft when `settings.publish` is set:
