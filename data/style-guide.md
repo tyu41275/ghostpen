@@ -262,7 +262,7 @@ A concept needs a foundation post when 2 or more of these signals fire:
 
 When a new project joins the ecosystem, add it to the projects table above and write a foundation post before any feature post references it.
 
-When a new concept accumulates 2+ of the signals above, add it to the concepts table and write a foundation post. `generate_post.py` will warn when a recurring concept lacks one.
+When a new concept accumulates 2+ of the signals above, add it to the concepts table and write a foundation post.
 
 ### Strict linking rule
 
