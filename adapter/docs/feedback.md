@@ -9,6 +9,7 @@ ghostpen keeps everything the operator tells it, so a learning loop can grow fro
   - The service refuses a press without a reason.
 - **A thread on every card** (`src/feedback/thread.ts`, `src/adapter/threads.ts`):
   - Each new shortlist card opens a thread named after its topic (chatter's post `thread` option, ensemble-chatter#5252; an older chatter opens none).
+  - A draft's first card opens a thread named after its first line (ghostpen#104). chatter opens threads only under a new post, so the draft's later cards keep that thread: its threadRef is carried onto each new card, and the conversation about one draft stays in one place. A card posted before this opens one on its next card.
   - A thread the operator opens on a card, or on a draft card, counts the same: on Discord its id is the card's.
   - chatter hands every message to the adapter first. A message in a card's thread is ghostpen's: chatter is told so at once, and the reply follows in the thread.
   - Only the operator's messages are taken.

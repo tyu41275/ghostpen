@@ -4,17 +4,19 @@
  * card loses its buttons. A card posted before this adapter run that still has buttons is redrawn once, re-arming
  * them after a chatter restart. Buttons: Publish (lands the post once its review approves) and Edit (asks for the
  * changes through chatter's private form). Each button names its draft's round, so an old card can't act on a new
- * draft. The service decides everything; nothing here throws into chatter.
+ * draft. A draft's first card opens a thread (ghostpen#104) where the operator asks about it or adds context; later
+ * cards keep that thread, so the conversation about one draft stays in one place. The service decides everything;
+ * nothing here throws into chatter.
  */
 import { chipOf, chipOptions } from "../feedback/chips.js";
 import { callAdapterRoute } from "./service.js";
-import type { Button, PressEvent, Select, ShortlistContext } from "./shortlist.js";
+import { threadName, type Button, type PressEvent, type Select, type ShortlistContext } from "./shortlist.js";
 
 export const DRAFT_PREFIX = "draft:";
 const OWNER = "ghostpen.";
 
 export interface DraftView { round: number; status: string; text: string; publish: boolean; edit: boolean;
-  card?: { channelRef: string; messageRef: string; round: number; status: string } }
+  card?: { channelRef: string; messageRef: string; round: number; status: string; threadRef?: string } }
 export interface DraftItem { index: number; draft?: DraftView }
 
 export const draftButtons = (week: string, index: number, view: DraftView): Button[] => [
@@ -45,11 +47,15 @@ export async function syncDrafts(ctx: ShortlistContext, week: string, channel: s
       }
       continue;
     }
-    const refs = await ctx.postToChannel(channel, { text: draft.text, selects: draftSelects(week, index, draft) }, buttons);
+    // Only a draft with no thread yet opens one: chatter opens threads under a new post only, so later cards keep it.
+    const thread = card?.threadRef ? {} : { thread: { name: threadName(draft.text) } };
+    const refs = await ctx.postToChannel(channel, { text: draft.text, selects: draftSelects(week, index, draft), ...thread }, buttons);
     if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${channel}`);
     posted += 1;
     redrawn.add(key);
-    await callAdapterRoute(ctx.config, "POST", "draft/posted", { week, index, round: draft.round, status: draft.status, channelRef: refs.channelRef, messageRef: refs.messageRef });
+    const threadRef = card?.threadRef ?? refs.threadRef;
+    await callAdapterRoute(ctx.config, "POST", "draft/posted", { week, index, round: draft.round, status: draft.status, channelRef: refs.channelRef, messageRef: refs.messageRef,
+      ...(threadRef ? { threadRef } : {}) });
     // The card before it keeps its words for the record but loses its buttons: only the newest card acts.
     if (card && ctx.updatePostedMessage) {
       await ctx.updatePostedMessage(card.channelRef, card.messageRef, { text: "This draft moved on; the newest card about it is below.", selects: [] }, []).catch(() => false);

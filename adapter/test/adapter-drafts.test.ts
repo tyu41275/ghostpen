@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { answerDraftPress } from "../src/adapter/drafts.js";
 import adapter from "../src/adapter/index.js";
 import { syncShortlist, type Button } from "../src/adapter/shortlist.js";
+import { threadTopic } from "../src/feedback/thread.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { parseSettings } from "../src/settings.js";
 import { readShortlists, saveShortlists, type DraftState } from "../src/shortlist/state.js";
@@ -16,8 +17,11 @@ const PR = { number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostp
 const servers: Server[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map((s) => new Promise((done) => s.close(done)))); });
 
-/** A service whose week has one answered (Write) item with `draft`, the adapter's settings file, and a fake chatter. */
-async function world(draft: DraftState) {
+/**
+ * A service whose week has one answered (Write) item with `draft`, the adapter's settings file, and a fake chatter
+ * whose posts open the thread they ask for (`t<n>`), unless `threads` is false (an older chatter).
+ */
+async function world(draft: DraftState, threads = true) {
   const dir = tempDir();
   const raw = { instance: "host", port: 8794, dataDir: dir, adapterKeyFile: keyFile(dir), shortlist: { operator: OPERATOR, channel: "1563701613099745320", count: 3 } };
   saveShortlists(dir, { version: 1, weeks: { [WEEK]: { madeAt: "x", items: [{ id: "d:1", kind: "decision", text: "**#1 Topic**",
@@ -29,15 +33,20 @@ async function world(draft: DraftState) {
   writeFileSync(settingsFile, JSON.stringify({ ...raw, port: (server.address() as { port: number }).port }));
   const posts: Array<{ text: string; buttons: Button[]; selects?: unknown }> = [];
   const edits: Array<{ messageRef: string; text: string; buttons: Button[] }> = [];
+  const opened: Array<string | null> = [];
   const ctx = { config: { settingsFile }, log: () => {},
-    postToChannel: async (_channel: string, content: { text: string; selects?: unknown }, buttons: Button[] = []) => { posts.push({ text: content.text, buttons, selects: content.selects }); return { channelRef: "c", messageRef: `d${posts.length}` }; },
+    postToChannel: async (_channel: string, content: { text: string; selects?: unknown; thread?: { name: string } }, buttons: Button[] = []) => {
+      posts.push({ text: content.text, buttons, selects: content.selects });
+      opened.push(content.thread?.name ?? null);
+      return { channelRef: "c", messageRef: `d${posts.length}`, ...(threads && content.thread ? { threadRef: `t${posts.length}` } : {}) };
+    },
     updatePostedMessage: async (_c: string, messageRef: string, content: { text: string }, buttons: Button[] = []) => { edits.push({ messageRef, text: content.text, buttons }); return true; } };
   const setDraft = (change: Partial<DraftState>) => {
     const state = readShortlists(dir);
     Object.assign(state.weeks[WEEK]!.items[0]!.draft!, change);
     saveShortlists(dir, state);
   };
-  return { dir, ctx, posts, edits, setDraft, draft: () => readShortlists(dir).weeks[WEEK]!.items[0]!.draft! };
+  return { dir, ctx, posts, edits, opened, setDraft, draft: () => readShortlists(dir).weeks[WEEK]!.items[0]!.draft! };
 }
 
 describe("draft cards in chatter", () => {
@@ -51,12 +60,30 @@ describe("draft cards in chatter", () => {
     expect(w.posts[0]!.buttons).toEqual([{ label: "Publish", style: "success", id: `ghostpen.draft:publish:${WEEK}:0:1` }, { label: "Edit", style: "secondary", id: `ghostpen.draft:edit:${WEEK}:0:1` }]);
     expect(w.posts[0]!.selects).toEqual([{ id: `ghostpen.draft:reason:${WEEK}:0:1`, placeholder: "Pick a reason to publish, or press Publish to type one",
       options: [{ label: "Publish: Accurate and reads well", value: "publish:0" }, { label: "Publish: Good enough; small fixes can follow", value: "publish:1" }] }]);
-    expect(w.draft().card).toEqual({ channelRef: "c", messageRef: "d1", round: 1, status: "ready" });
+    expect(w.draft().card).toEqual({ channelRef: "c", messageRef: "d1", round: 1, status: "ready", threadRef: "t1" });
     expect(await syncShortlist(w.ctx, redrawn)).toBe(0); // nothing new
     w.setDraft({ status: "published" });
     expect(await syncShortlist(w.ctx, redrawn)).toBe(1);
     expect(w.posts[1]).toEqual({ text: "**Published: T**\nhttps://github.com/o/blog/pull/7", buttons: [], selects: [] });
     expect(w.edits).toEqual([{ messageRef: "d1", text: "This draft moved on; the newest card about it is below.", buttons: [] }]);
+  });
+
+  it("opens a thread on a draft's first card and keeps it on the later ones, where a question reaches the topic", async () => {
+    const w = await world({ status: "ready", round: 1, title: "T", pr: PR, at: "x" });
+    await syncShortlist(w.ctx, new Set());
+    w.setDraft({ status: "publishing" });
+    await syncShortlist(w.ctx, new Set());
+    expect(w.opened).toEqual(["Draft ready: T", null]);
+    expect(w.draft().card).toEqual({ channelRef: "c", messageRef: "d2", round: 1, status: "publishing", threadRef: "t1" });
+    expect(threadTopic(w.dir, "t1")).toEqual({ topic: "d:1", title: "T" });
+    // A card posted before threads opens one on its next card; an older chatter that opens none keeps none.
+    const older = await world({ status: "ready", round: 1, title: "T", pr: PR, at: "x", card: { channelRef: "c", messageRef: "d9", round: 1, status: "ready" } });
+    older.setDraft({ status: "published" });
+    await syncShortlist(older.ctx, new Set());
+    expect([older.opened, older.draft().card?.threadRef]).toEqual([["Published: T"], "t1"]);
+    const none = await world({ status: "failed", round: 1, title: "T", at: "x" }, false);
+    await syncShortlist(none.ctx, new Set());
+    expect([none.opened, none.draft().card]).toEqual([["Draft failed its checks: T"], { channelRef: "c", messageRef: "d1", round: 1, status: "failed" }]);
   });
 
   it("redraws a card with buttons once after a restart, never one without", async () => {
