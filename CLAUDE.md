@@ -1,8 +1,6 @@
 # ghostpen
 
-Personal developer blog by Tim Yu. Built on Next.js 14 + Contentlayer2 + Tailwind CSS, deployed on Vercel. Originally forked from Tailwind Nextjs Starter Blog v2.
-
-GitHub: tyu41275/ghostpen
+A personal developer blog, written by the blog's author (`data/authors/default.mdx`). Built on Next.js 14 + Contentlayer2 + Tailwind CSS, deployed on Vercel. Originally forked from Tailwind Nextjs Starter Blog v2.
 
 ## Architecture
 
@@ -14,7 +12,7 @@ app/                    # Next.js 14 app directory (pages, layouts, API routes)
   projects/             # Projects page
 data/
   blog/                 # .mdx blog posts (YAML frontmatter + MDX body)
-  authors/              # Author profiles (default.mdx = Tim Yu)
+  authors/              # Author profiles (default.mdx = the blog's author)
   style-guide.md        # Writing style extracted from existing posts — AI generators MUST follow this. Read the "Anti-Formula Rules" section as binding over the example lists above it: the "Characteristic phrases" list and the rejection criteria describe RANGE, and a generator optimising against them as a checklist produces six near-identical posts (#67-#75; #74 used 7 of the 8 example catchphrases in the guide's own order, against 0-2 for the human posts). The rules cap catchphrase reuse at two, ban the templated Problem/Investigation/Solution/Conclusion header set, and set the length target from the published corpus.
   siteMetadata.js       # Site-wide config (title, URL, analytics, search, comments)
   projectsData.ts       # Projects page content
@@ -44,7 +42,7 @@ Defined in `contentlayer.config.ts`. Every `.mdx` file in `data/blog/` must incl
 | `draft`        | boolean         | no       | `false` | When `true`, post is excluded from production builds                                   |
 | `summary`      | string          | no       | —       | Short description for listings and SEO meta tags                                       |
 | `images`       | json            | no       | —       | Array of image paths for Open Graph / structured data                                  |
-| `authors`      | list of strings | no       | —       | Author slugs referencing files in `data/authors/` (default: `default` = Tim Yu)        |
+| `authors`      | list of strings | no       | —       | Author slugs referencing files in `data/authors/` (default: `default` = the blog's author)        |
 | `layout`       | string          | no       | —       | Override the default post layout component (e.g., `PostBanner`)                        |
 | `bibliography` | string          | no       | —       | Path to a `.bib` file for academic citations via rehype-citation                       |
 | `canonicalUrl` | string          | no       | —       | Canonical URL for cross-posted content — tells search engines where the original lives |
@@ -78,7 +76,7 @@ yarn analyze    # Bundle analysis — sets ANALYZE=true to generate @next/bundle
 - **Filename**: `<slug>.mdx` in `data/blog/` — the slug becomes the URL path (`/blog/<slug>`)
 - **Images**: Place in `public/static/images/<slug>/` — reference as `/static/images/<slug>/filename.png`
 - **Tags**: Lowercase, hyphen-separated (e.g., `sitecore`, `xm-cloud`, `azure-paas`)
-- **Author**: Use `default` unless adding a guest author (references `data/authors/default.mdx` = Tim Yu)
+- **Author**: Use `default` unless adding a guest author (references `data/authors/default.mdx`, the blog's author)
 
 ### AI-generated posts
 
