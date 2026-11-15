@@ -115,8 +115,10 @@ if "$SYSTEMCTL" --user is-active --quiet "$UNIT"; then "$SYSTEMCTL" --user resta
 
 install -d -m 700 "$DROPIN"
 # The switch enables or disables the unit with starting or stopping it: an on ghostpen comes back after a reboot by
-# itself, an off one stays off. It runs no jobs yet, so none to cancel. Its app opens from chatter's console at
-# apps/ghostpen/ (chatter docs/optional-adapters.md, "The apps"); with no key in the settings the drop-in names none.
+# itself, an off one stays off. Its jobs (ranking, drafting, the review command it starts) are the unit's own processes,
+# so stopping the unit stops them (systemd's default control-group kill) and `cancelJobs` has nothing more to do; a
+# review command that hands the review to another service leaves that service's run alone. Its app opens from chatter's
+# console at apps/ghostpen/ (chatter docs/optional-adapters.md, "The apps"); with no key in the settings the drop-in names none.
 # `readiness` is the service's GET /readiness (docs/readiness.md); --readiness off leaves it out, for a chatter older than
 # the field, which skips the whole drop-in.
 node -e 'const [key,mod,cfg,unit,port,appKey,ready]=process.argv.slice(1); const run=(a)=>["systemctl","--user",a,"--now",unit];
