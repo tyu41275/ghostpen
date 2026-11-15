@@ -69,6 +69,8 @@ module.exports = () => {
   const plugins = [withContentlayer, withBundleAnalyzer]
   return plugins.reduce((acc, next) => next(acc), {
     reactStrictMode: true,
+    // The browser suite builds two sites side by side (scripts/build-e2e-sites.sh); everything else uses .next.
+    distDir: process.env.GHOSTPEN_DIST_DIR || '.next',
     pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
     eslint: {
       dirs: ['app', 'components', 'layouts', 'scripts'],

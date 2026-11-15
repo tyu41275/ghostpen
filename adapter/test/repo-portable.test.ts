@@ -16,7 +16,7 @@ const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SELF = "adapter/test/repo-portable.test.ts";
 
 /** Folders skipped by name wherever they are: version control, dependencies and build output. */
-const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".contentlayer", ".content", "dist", ".yarn"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".next-e2e-legacy", ".next-e2e-sample", ".contentlayer", ".content", "dist", ".yarn"]);
 /** Content folders, skipped by their path from the repository root: the posts and their images. */
 const SKIP_PATHS = new Set(["data/blog", "public/static"]);
 const CODE = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".sh", ".json", ".yml", ".yaml", ".toml"]);
