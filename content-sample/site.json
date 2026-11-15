@@ -1,0 +1,18 @@
+{
+  "title": "Sample blog",
+  "author": "Sample Author",
+  "headerTitle": "Sample blog",
+  "description": "A sample content folder for ghostpen's blog",
+  "siteUrl": "https://blog.example.com",
+  "email": "author@example.com",
+  "github": "https://github.com",
+  "home": {
+    "name": "Sample Author",
+    "avatar": "/static/images/sample/avatar.jpg",
+    "role": "Writes the sample posts",
+    "links": [{ "label": "GitHub", "href": "https://github.com" }],
+    "aiTag": "ai",
+    "sourceRepo": "https://github.com",
+    "howItWorks": "/blog/hello-sample"
+  }
+}
