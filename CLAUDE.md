@@ -23,7 +23,6 @@ data/
 scripts/
   postbuild.mjs         # RSS generation — runs automatically after `next build` via the build script
   rss.mjs               # RSS feed generator — called by postbuild.mjs to create feed.xml
-  generate_post.py      # (coming) AI blog post generator — reads EcoOrchestra artifacts, calls llm-router, writes .mdx
 contentlayer.config.ts  # Content schema definition — Contentlayer2 reads this to type-check and process all .mdx files
 layouts/                # Page layout components (PostLayout, ListLayout, AuthorLayout)
 components/             # Reusable React components (Tag, SearchButton, etc.)
@@ -84,8 +83,8 @@ yarn analyze    # Bundle analysis — sets ANALYZE=true to generate @next/bundle
 ### AI-generated posts
 
 - MUST set `aiGenerated: true` in frontmatter — marks the post as AI-generated for transparency
-- MUST set `draft: true` in frontmatter — AI posts always start as drafts for human review before publishing
-- MUST follow the writing style guide at `data/style-guide.md` — ensures AI output matches Tim's voice and structure
+- Arrive as a pull request, never a direct commit: the adapter writes `draft: false` in the file because the pull request is the draft, and Publish merges it only after its review approves (`adapter/docs/publishing.md`)
+- MUST follow the writing style guide at `data/style-guide.md` (the writer reads it through `draft.styleGuide`) — ensures AI output matches the author's voice and structure
 
 ### Mermaid diagrams
 
@@ -100,26 +99,20 @@ yarn analyze    # Bundle analysis — sets ANALYZE=true to generate @next/bundle
 - TypeScript throughout (`.ts`, `.tsx`)
 - Tailwind CSS for styling — no custom CSS unless extending Tailwind utilities
 
-## Ecosystem integration
+## Drafting: the chatter adapter
 
-ghostpen is part of the EcoOrchestra ecosystem. It consumes AI-generated content based on development activity across other projects.
+ghostpen drafts posts as an optional chatter adapter in `adapter/` (Obsidian ADR 0101; see `adapter/docs/adapter.md`). The post-ship hook and the Python generator it ran (`scripts/generate_post.py`, which read Ensemble's artifacts) are retired and removed.
 
-### Content generation pipeline (coming)
-
-1. **Source material**: EcoOrchestra artifacts (vision briefs in `decisions/vision-briefs/`, code reviews in `reviews/`, daily standups in `standups/`) provide raw material for blog topics
-2. **LLM routing**: `scripts/generate_post.py` calls the llm-router HTTP API at `http://localhost:8321/route` to generate blog post content — llm-router handles provider selection and rate limiting
-3. **Post-ship hook (retired, Obsidian ADR 0101)**: ghostpen is becoming an optional chatter adapter in `adapter/` (see `adapter/docs/adapter.md`). It ranks topics by value on its own before each weekly shortlist (`adapter/docs/ranking.md`; by hand, `node adapter/dist/cli/rank.js <settings>`), shown on its app page. It proposes a weekly shortlist in its channel with Write, Skip and Not yet (`adapter/docs/shortlist.md`). Drafting is in `adapter/docs/drafting.md`: the checks every draft must pass and the writer (`node adapter/dist/cli/draft.js <settings> <id>`). Screenshots are taken with Playwright, masked, and privacy-checked, failing closed. Its install (`adapter/scripts/install-host.sh`, Relay's `adapter/scripts/relay-install.mjs`) declares the readiness list in chatter's drop-in unless `--readiness off` (input `readiness`) (`adapter/docs/install.md`). A Write drafts the topic, opens the blog pull request and starts its review; Publish lands it once the review approves and Edit sends changes (`adapter/docs/publishing.md`). The chatter adapter posts each draft's card with Publish and Edit buttons (`adapter/docs/adapter.md`). Every press carries a reason, picked or typed, kept for chatter's operator intake; each card's thread takes questions (answered from the sources) and context (given to the writer) (`adapter/docs/feedback.md`). This replaces the after-each-ship trigger.
-4. **Output**: Generator writes `.mdx` files to `data/blog/` with `aiGenerated: true` and `draft: true` set automatically
-
-### Dependencies
-
-- **llm-router** (`C:/Repos/llm-router`): HTTP API for LLM calls — ghostpen's generator script is a consumer, not a direct dependency
-- **EcoOrchestra** (`C:/Repos/EcoOrchestra`): Orchestration layer — provides the persona pipeline, planning, and artifact storage that feeds content generation
+- **Sources:** only what its settings' `sources` block names (`adapter/docs/sources.md`); nothing in code names a machine or a person's folders.
+- **Ranking and shortlist:** it ranks topics by value on its own before each weekly shortlist (`adapter/docs/ranking.md`; by hand, `node adapter/dist/cli/rank.js <settings>`), shown on its app page, and proposes the shortlist in its channel with Write, Skip and Not yet (`adapter/docs/shortlist.md`).
+- **Drafting:** the checks every draft must pass and the writer (`adapter/docs/drafting.md`; `node adapter/dist/cli/draft.js <settings> <id>`). Screenshots are taken with Playwright, masked, and privacy-checked, failing closed.
+- **Publishing:** a Write drafts the topic, opens the blog pull request and starts its review; Publish lands it once the review approves and Edit sends changes (`adapter/docs/publishing.md`). Every press carries a reason; each card's thread takes questions and context (`adapter/docs/feedback.md`).
+- **Install:** `adapter/scripts/install-host.sh`, or Relay's `adapter/scripts/relay-install.mjs`; it declares the readiness list in chatter's drop-in unless `--readiness off` (`adapter/docs/install.md`).
 
 ## Context Scoping
 
 **For blog post content** -> `data/blog/` — MDX posts with YAML frontmatter
-**For AI post generation** -> `scripts/generate_post.py` — reads EcoOrchestra artifacts, calls llm-router, writes MDX
+**For AI post drafting** -> `adapter/` — the chatter adapter and its service (`adapter/docs/adapter.md`)
 **For writing style** -> `data/style-guide.md` — AI generators MUST follow this guide
 **For content schema** -> `contentlayer.config.ts` — defines frontmatter fields, computed fields, content processing
 **For page routing / layouts** -> `app/` (Next.js app directory) + `layouts/` (page layout components)
@@ -130,4 +123,4 @@ ghostpen is part of the EcoOrchestra ecosystem. It consumes AI-generated content
 
 **Ignore**: `node_modules/`, `.next/`, `.contentlayer/`, `yarn.lock`, `.claude/worktrees/`
 
-**When to escalate**: Use MCP cross-project tools when debugging the content generation pipeline (involves `llm-router` HTTP API and `EcoOrchestra` artifacts). For blog styling, layout, content, or Next.js issues, stay local.
+**When to escalate**: For drafting, ranking or publishing, read `adapter/docs/` first; for chatter's side (the drop-in, readiness, the app page's sign-in), read chatter's docs. For blog styling, layout, content, or Next.js issues, stay local.

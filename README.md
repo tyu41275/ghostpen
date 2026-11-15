@@ -1,6 +1,6 @@
 # Ghostpen
 
-A blog that automatically drafts posts from your development work -- using AI to turn structured artifacts (decision records, daily logs, code reviews) into blog posts written in your voice.
+A blog that drafts posts from your development work -- using AI to turn your decision records, notes, issues and pull requests into blog posts written in your voice, each one approved by you before it publishes.
 
 **Live site:** [timyu-blog.vercel.app](https://timyu-blog.vercel.app)
 
@@ -10,25 +10,18 @@ Built on [tailwind-nextjs-starter-blog](https://github.com/timlrx/tailwind-nextj
 
 Developers solve interesting problems every day but rarely write about them. The context is fresh during development but stale by the time you sit down to blog. Ghostpen captures that context automatically and drafts posts while the details are still there.
 
-It works by reading structured artifacts that your development process produces -- things like:
-
-- **Decision records** -- why you chose approach A over B, what trade-offs you considered
-- **Daily logs** -- what you built, what broke, what you learned
-- **Code reviews** -- what bugs were caught, what patterns were flagged
-- **Screenshots** -- captured automatically at key moments (build start, review findings, QA pass)
-
-A generator script feeds these artifacts plus a writing style guide to an LLM, which drafts a blog post in your voice. The draft lands as a pull request for you to review and edit before publishing.
+It works by reading the sources its settings name (decision records, experiment notes, a glossary of the setup's parts, GitHub issues and pull requests) and ranking each candidate topic by the value it gives a reader. Each week it proposes a short list in its chatter channel; a **Write** drafts the topic in your voice and opens the post as a pull request with a preview, and **Publish** lands it once its review approves. Nothing is published without your press.
 
 ## How it works
 
 ```
-Your dev artifacts     ->   Generator script    ->   Draft PR        ->   Published post
-(decision records,         (reads artifacts,        (draft: true,        (you review,
- daily logs, reviews,       loads style guide,       opens PR)            flip draft flag,
- screenshots)               calls Anthropic API)                          Vercel deploys)
+Configured sources    ->   Ranking + weekly    ->   Draft PR             ->   Published post
+(decisions, notes,         shortlist               (checked: plain words,      (Publish merges it
+ glossary, issues/PRs)     (Write, Skip, Not yet)   links, diagrams,           after review,
+                                                    screenshots)               Vercel deploys)
 ```
 
-The post-ship hook and the "has a decision record, so it's worth writing about" rule are retired (Obsidian ADR 0101). ghostpen is becoming an optional chatter adapter (`adapter/`, see `adapter/docs/adapter.md`). When finished (ghostpen#86 to #90), it ranks topics by the value they give a reader, proposes a weekly shortlist, and drafts posts that explain every part of the setup they mention. Nothing is published without the author's press.
+ghostpen runs as an optional chatter adapter (`adapter/`, see `adapter/docs/adapter.md`): what it reads is `adapter/docs/sources.md`, the ranking `adapter/docs/ranking.md`, the shortlist `adapter/docs/shortlist.md`, drafting and its checks `adapter/docs/drafting.md`, and publishing `adapter/docs/publishing.md`. The post-ship hook, the Python generator it ran and the "has a decision record, so it's worth writing about" rule are retired (Obsidian ADR 0101).
 
 AI-generated posts are transparently labeled with an `aiGenerated` frontmatter field and a banner on the post.
 
@@ -37,7 +30,7 @@ AI-generated posts are transparently labeled with an `aiGenerated` frontmatter f
 This blog has two categories:
 
 - **Sitecore** -- Hands-on troubleshooting posts from real client engagements (written by hand)
-- **AI** -- Posts about building AI-augmented development tools (drafted by AI from development artifacts, reviewed before publishing)
+- **AI** -- Posts about building AI-augmented development tools (drafted by ghostpen's adapter from its sources, reviewed before publishing)
 
 ## Local development
 
@@ -52,28 +45,9 @@ yarn dev
 yarn build
 ```
 
-## Generating a blog post
-
-Requires an `ANTHROPIC_API_KEY` environment variable. Get one at [console.anthropic.com](https://console.anthropic.com/).
-
-```bash
-# Generate a draft post for a shipped feature
-python scripts/generate_post.py --feature <feature-slug>
-```
-
-The feature slug must match a decision record in your artifacts directory. The script reads the artifacts, generates a draft `.mdx` with `draft: true` and `aiGenerated: true`, copies any associated screenshots, and opens a draft PR.
-
-### What are artifacts?
-
-Artifacts are structured files your development process produces. Ghostpen was built alongside an AI development pipeline that generates these naturally, but you can adapt the generator to read whatever your workflow produces -- commit messages, PR descriptions, Notion docs, or plain markdown notes. The key is that the source material is structured and machine-readable.
-
-### Configuring the artifacts directory
-
-By default, the generator looks for artifacts in the directory specified by the `ECOORCHESTRA_DIR` environment variable. Set this to point to your Ensemble (formerly EcoOrchestra) artifacts directory, or modify `scripts/generate_post.py` to read from your preferred source.
-
 ## Customizing your voice
 
-Replace `data/style-guide.md` with a style guide based on your own existing writing. The generator uses this file as the system prompt -- your voice, your patterns, your anti-patterns. The included style guide is specific to this blog's author and should be rewritten when forking.
+Replace `data/style-guide.md` with a style guide based on your own existing writing. The draft writer reads the file its settings name (`draft.styleGuide`, `adapter/docs/drafting.md`) beside your recent published posts -- your voice, your patterns, your anti-patterns. The included style guide is specific to this blog's author and should be rewritten when forking.
 
 ## Editing posts
 
@@ -110,14 +84,7 @@ Images go in `public/static/images/<slug>/` where `<slug>` matches the `.mdx` fi
 
 ## Dependencies
 
-Ghostpen has a strong dependency on [Ensemble](https://github.com/tyu41275/Ensemble) (formerly EcoOrchestra), which produces the structured artifacts the generator reads (decision records, daily standups, code reviews).
-
-EcoOrchestra is currently a private repository but may be made public in the future. If you are forking Ghostpen, you will need to either:
-
-- Set up your own EcoOrchestra instance (once it is public), or
-- Modify `scripts/generate_post.py` to read artifacts from your own source -- any directory of structured markdown files will work
-
-The blog itself (Next.js, contentlayer, Sveltia CMS) has no dependency on EcoOrchestra. Only the generator script requires it.
+The blog itself (Next.js, contentlayer, Sveltia CMS) needs nothing else. The drafting side is ghostpen's chatter adapter in `adapter/`: it needs a chatter instance to run it, and reads only the sources its settings name (`adapter/docs/install.md`).
 
 ## Credits
 
