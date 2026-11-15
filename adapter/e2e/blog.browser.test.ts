@@ -107,6 +107,12 @@ describe("the blog built from content-sample/", () => {
     expect(await loaded(page.locator('img[alt="The sample picture"]'))).toContain("/static/images/sample/logo.png");
   });
 
+  it("counts the sample's tags in the blog list (Contentlayer's onSuccess wrote them)", async () => {
+    const page = await open("sample", "/blog");
+    expect(await page.getByRole("link", { name: "View posts tagged sample" }).innerText()).toMatch(/^sample \(2\)$/iu);
+    expect(await page.getByRole("link", { name: "View posts tagged ai" }).innerText()).toMatch(/^ai \(1\)$/iu);
+  });
+
   it("leaves How it works off the How it works post itself", async () => {
     const page = await open("sample", SAMPLE.howItWorks);
     expect(await footer(page).getByRole("link", { name: "Ghostpen" }).getAttribute("href")).toBe(SAMPLE.sourceRepo);
