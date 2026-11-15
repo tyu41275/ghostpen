@@ -26,8 +26,9 @@ const FIXTURE_USERS = new Set(["someone"]);
 const FIXTURE_DIR = "adapter/test/";
 
 /**
- * Web addresses are dropped from a line before its machine paths are looked for: a path in one (`example.test/Users/…`,
- * `?next=/home/…`, `example.test/C:/…`) is the site's, not a machine's. A `file:` address is a machine's path, so it stays.
+ * Web addresses are dropped from a line before anything is looked for: a path in one (`example.test/Users/…`,
+ * `?next=/home/…`, `example.test/C:/…`) is the site's, not a machine's, and a hook event's name in a docs link is no hook.
+ * A `file:` address is a machine's path, so it stays.
  */
 const WEB = /\b(?!file:)[A-Za-z][\w+.-]*:\/\/[^\s"'`<>()[\]]+/gu;
 /** A path on its own, not inside a word or a name: no word character, dot or dash right before it; a drive letter not after a slash either. */
@@ -58,7 +59,7 @@ export function findings(file: string, text: string): string[] {
   text.split("\n").forEach((line, index) => {
     const paths = line.replace(WEB, " ");
     for (const rule of [...MACHINE, ...HOOK]) {
-      for (const match of (MACHINE.includes(rule as (typeof MACHINE)[number]) ? paths : line).matchAll(rule.re)) {
+      for (const match of paths.matchAll(rule.re)) {
         if ("user" in rule && file.startsWith(FIXTURE_DIR) && FIXTURE_USERS.has(match[rule.user]!)) continue;
         found.push(`${file}:${index + 1}: ${rule.what} (${match[0]})`);
       }
@@ -80,6 +81,7 @@ describe("the repository is portable and installs no Claude hook (ghostpen#86)",
     // The path part of a web address is not a machine's folder.
     expect(findings("c.ts", 'fetch("https://example.test/Users/alex/profile"); open("http://h.example/home/alex/x/")')).toEqual([]);
     expect(findings("e.ts", 'go("https://example.test/?next=/Users/alex/profile#/home/alex/x"); go(`https://h.example/a?b=/home/alex/c`)')).toEqual([]);
+    expect(findings("h.ts", 'see("https://docs.example/hooks#PostToolUse"); on("PreToolUse")')).toEqual(["h.ts:1: a Claude hook event (PreToolUse)"]);
     // A file address is a path on the machine; so is a path right after a web address.
     expect(findings("f.ts", 'open("file:///home/alex/x"); fetch("https://example.test/") + "/home/alex/y"')).toEqual([
       "f.ts:1: a home folder (/home/alex/)", "f.ts:1: a home folder (/home/alex/)"]);
