@@ -15,7 +15,7 @@ import { faults } from "./readiness-wire.js";
 import { KEY, tempDir } from "./helpers.js";
 
 const running: Server[] = [];
-afterEach(async () => { for (const server of running.splice(0)) await new Promise((done) => { server.closeAllConnections(); server.close(done); }); });
+afterEach(async () => { vi.unstubAllGlobals(); for (const server of running.splice(0)) await new Promise((done) => { server.closeAllConnections(); server.close(done); }); });
 
 /** A plain request, as chatter's: no key unless given, and no redirect followed. */
 const asked = (port: number, path = READINESS_PATH, method = "GET", headers: Record<string, string> = {}) =>
@@ -68,6 +68,9 @@ describe("the need of each setting", () => {
 
 describe("GET /readiness", () => {
   it("answers over real HTTP, with no key, a list chatter takes whole, holding no setting's value", async () => {
+    // It calls nothing outside: not even the blog's sitemap, though sources.published is set (ghostpen#108).
+    const fetched = vi.fn(async () => { throw new Error("readiness called out"); });
+    vi.stubGlobal("fetch", fetched);
     const secret = tempDir(), unique = (name: string) => join(secret, `private-${name}-ZQX`);
     const world = installed({ instanceFactsFile: unique("facts"), scorer: { command: [unique("scorer")] },
       sources: { topics: [{ name: "notes", kind: "markdown", root: unique("root"), include: ["*.md"] },
@@ -88,6 +91,7 @@ describe("GET /readiness", () => {
     }
     expect(statesOf(body)).toMatchObject({ "topic-sources": "failing", glossaries: "failing", "published-posts": "failing", scorer: "failing", channel: "failing",
       drafting: "failing", publishing: "failing" });
+    expect(fetched).not.toHaveBeenCalled();
   });
 
   it("writes nothing in the data folder: the same entries, sizes and times after a read", async () => {

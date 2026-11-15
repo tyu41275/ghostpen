@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseWritten, revisePrompt, SNIPPET_LINE, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
 import { parseStackMap, readStackMap, STACK_MAP_FORMAT } from "../src/draft/stack-map.js";
-import { draftFile, draftNow, readDraft } from "../src/draft/write.js";
+import { LINKS_CHECK } from "../src/draft/links.js";
+import { draftFile, draftNow as draftLive, readDraft } from "../src/draft/write.js";
 import { addFeedback } from "../src/feedback/store.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
+import type { SitemapGet } from "../src/sources/served.js";
 import { tempDir, tree } from "./helpers.js";
 
 const MAP = JSON.stringify({ format: STACK_MAP_FORMAT, scope: "x", source: "y",
@@ -30,6 +32,9 @@ function setup(over: Record<string, unknown> = {}): GhostpenSettings {
   draft: { writer: { command: ["true"] }, styleGuide: join(root, "style.md"), stackMap: { command: ["true"] } }, ...over });
 }
 const ID = "decisions:decisions/adr/0001-timers.md";
+/** The blog's sitemap, recorded: it serves both published posts. No test reads the network. */
+const SERVED: SitemapGet = async () => ({ status: 200, text: "<urlset><url><loc>https://x.example/blog/tempo</loc></url><url><loc>https://x.example/blog/robot</loc></url></urlset>" });
+const draftNow: typeof draftLive = (settings, id, seams = {}, edit) => draftLive(settings, id, { sitemap: SERVED, ...seams }, edit);
 const LINKED = `${PLAIN} [Tempo](https://blog.example/blog/tempo) grades work. We use Clock, a timer app.`;
 
 describe("settings.draft", () => {
@@ -235,7 +240,7 @@ describe("drafting a post", () => {
     expect(prompts[0]).toContain("- Clock --> Tempo");
     expect(prompts[0]).toContain(SNIPPET_LINE); // the text only: the snippet rule is guidance (docs/drafting.md)
     expect(draft).toMatchObject({ status: "ready", problems: [] });
-    expect(draft.report.checks.map((c) => c.name)).toEqual(["Plain words", "Every stack part linked or explained", "Diagrams match the stack map", "Screenshots show nothing private"]);
+    expect(draft.report.checks.map((c) => c.name)).toEqual(["Plain words", "Every stack part linked or explained", "Diagrams match the stack map", LINKS_CHECK, "Screenshots show nothing private"]);
   });
 
   it("draws nothing and fails a diagram when a configured file cannot be read", async () => {
@@ -246,6 +251,23 @@ describe("drafting a post", () => {
     expect(prompts[0]).toContain("Draw no diagram of the setup");
     expect(draft).toMatchObject({ status: "failed", problems: ["draft.diagramFiles[0]: the file cannot be read"] });
     expect(draft.report.checks[2]!.findings).toEqual(["diagram 1 cannot be checked: draft.diagramFiles[0]: the file cannot be read"]);
+  });
+
+  it("sends back, then fails, a draft that links a post the blog does not have, saying which link", async () => {
+    let calls = 0;
+    const draft = await draftNow(setup(), ID, { write: async () => { calls += 1; return answer(`${LINKED} See [the old notes](/blog/gone).`); } });
+    expect(draft.status).toBe("failed");
+    expect(calls).toBe(3);
+    expect(draft.report.checks[3]).toEqual({ name: LINKS_CHECK, passed: false, findings: ["the link /blog/gone leads to no post: take it out or link a post that is on the blog"] });
+  });
+
+  it("fails at once, with one writer run, when the blog's sitemap cannot be read", async () => {
+    let calls = 0;
+    const draft = await draftNow(setup(), ID, { write: async () => { calls += 1; return answer(LINKED); }, sitemap: async () => { throw new Error("offline"); } });
+    expect(draft).toMatchObject({ status: "failed", attempts: 1 });
+    expect(calls).toBe(1);
+    expect(draft.problems).toContain("published: the blog's sitemap did not answer");
+    expect(draft.report.checks[3]!.findings).toEqual(["the link /blog/tempo cannot be checked: the blog's sitemap did not answer"]);
   });
 
   it("keeps drafts under distinct files per id", () => {
