@@ -9,7 +9,7 @@ import { createGhostpenServer } from "../src/service/server.js";
 import { parseSettings } from "../src/settings.js";
 import { KEY, keyFile, tempDir } from "./helpers.js";
 
-const OPERATOR = "234652039735541760";
+const OPERATOR = "200000000000000001";
 const entry = (id: string, total: number) => ({ id, kind: "decision", title: id, topic: `Topic ${id}`, takeaway: "", total, explain: [], location: "l",
   scores: [{ factor: "stakes", score: 3, quote: "CI is the main delivery bottleneck", line: 2, location: "l:2" }] });
 

@@ -15,7 +15,7 @@ import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { saveShortlists } from "../src/shortlist/state.js";
 import { KEY, keyFile, tempDir, tree } from "./helpers.js";
 
-const OPERATOR = "234652039735541760";
+const OPERATOR = "200000000000000001";
 const WEEK = "2026-10-26";
 const NOW = new Date("2026-10-26T14:00:00Z");
 const servers: Server[] = [];

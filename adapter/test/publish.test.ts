@@ -18,7 +18,7 @@ const REPORT = { passed: true, grade: 4, hold: [], later: [], checks: [{ name: "
 const draft = (over: Partial<Draft> = {}): Draft => ({ id: "d:1", kind: "decision", status: "ready", title: "Why we use one timer", summary: "It's simpler.",
   tags: ["ops"], markdown: "We picked one timer.\n\n![the console](screenshot:console)", report: REPORT, attempts: 1, madeAt: "x", problems: [], screenshots: {}, ...over });
 const NOW = new Date("2026-10-26T14:00:00Z");
-const OPERATOR = "234652039735541760";
+const OPERATOR = "200000000000000001";
 
 describe("the post file", () => {
   it("names posts by title", () => {

@@ -87,7 +87,7 @@ describe("ghostpen app page", () => {
   it("shows what the operator told ghostpen: context under its topic, every note newest first, as text", async () => {
     const ranking = { ranAt: "2026-10-25T00:00:00.000Z", problems: [], background: [], owed: [], entries: [
       { id: "d:1", kind: "decision", title: "ADR 1", topic: "One timer app", takeaway: "Fewer timers", total: 6, explain: [], location: "/o/1.md:1", scores: [] }] };
-    const note = (kind: string, text: string, action?: string) => ({ at: "2026-10-26T14:00:00Z", by: "234652039735541760", topic: "d:1", kind, text, intake: "pending", ...(action ? { action } : {}) });
+    const note = (kind: string, text: string, action?: string) => ({ at: "2026-10-26T14:00:00Z", by: "200000000000000001", topic: "d:1", kind, text, intake: "pending", ...(action ? { action } : {}) });
     const page = await (await browser.newContext({ extraHTTPHeaders: signed("teo") })).newPage();
     await page.goto(await app(ranking, [note("reason", "Others would find it useful", "write"), note("context", "We tried <b>three</b> timers first"),
       note("question", "Why first?"), note("answer", "It saved two hours a week.")]));

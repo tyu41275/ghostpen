@@ -37,7 +37,7 @@ describe("screenshot settings", () => {
 
 describe("privacy", () => {
   it("names each kind of private detail once, never the detail", () => {
-    const found = privacyFindings(["mail teo@example.com", "from 10.0.0.12", "user 234652039735541760", "key sk-abcdefghijklmnopqrstuv",
+    const found = privacyFindings(["mail teo@example.com", "from 10.0.0.12", "user 200000000000000001", "key sk-abcdefghijklmnopqrstuv",
       "at /home/someone/x", "Bearer abcdefghijkl", "ghp_abcdefghijklmnopqrstuvwxyz", "hello ACME team"], [/\bacme\b/iu]);
     expect(found).toEqual(["an email address", "an IP address", "a long id number", "a key or token", "a home folder path", "a word on the private list"]);
     expect(found.join(" ")).not.toContain("teo@");
