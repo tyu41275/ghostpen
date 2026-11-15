@@ -3,6 +3,7 @@
  * names, or from the repository's data/ while the variable is unset, and copies a folder's images into
  * public/static/images/, removing only what it copied before. Each test runs it against its own temporary root.
  */
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -38,7 +39,8 @@ function folder(base: string, name: string, images: Record<string, string> = {},
   return dir;
 }
 const read = (file: string) => readFileSync(file, "utf8");
-const record = (root: string) => JSON.parse(read(join(root, ".content", "copied-images.json")));
+const recorded = (root: string) => JSON.parse(read(join(root, ".content", "copied-images.json")));
+const record = (root: string) => recorded(root).map((e: { path: string }) => e.path);
 const image = (root: string, rel: string) => join(root, "public", "static", "images", rel);
 
 describe("the blog's content step (ghostpen#135)", () => {
@@ -71,6 +73,28 @@ describe("the blog's content step (ghostpen#135)", () => {
     expect(read(image(root, "y/other.png"))).toBe("3");
     expect(record(root)).toEqual(["y/other.png"]);
     expect(existsSync(join(root, ".content", "blog", "stale.mdx"))).toBe(false);
+  });
+
+  it("keeps a copied image whose contents changed since, and records each copy's SHA-256", () => {
+    const root = tempDir(), base = tempDir();
+    prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "one", { "x/pic.png": "1", "x/b.png": "2" }) }, log: () => {} });
+    expect(recorded(root).find((e: { path: string }) => e.path === "x/pic.png").sha256).toBe(createHash("sha256").update("1").digest("hex"));
+    put(image(root, "x/pic.png"), "someone else's");
+    const lines: string[] = [];
+    prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "two") }, log: (line: string) => lines.push(line) });
+    expect(read(image(root, "x/pic.png"))).toBe("someone else's");
+    expect(existsSync(image(root, "x/b.png"))).toBe(false);
+    expect(lines).toContain("ghostpen content: kept public/static/images/x/pic.png, changed since it was copied");
+    expect(record(root)).toEqual([]);
+  });
+
+  it("refuses a record without a SHA-256 for each path, removing nothing", () => {
+    const root = tempDir(), base = tempDir();
+    put(image(root, "x/pic.png"), "1");
+    put(join(root, ".content", "copied-images.json"), JSON.stringify(["x/pic.png"]));
+    expect(() => prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "one") }, log: () => {} }))
+      .toThrow(/copied-images.json must hold a list of \{ path, sha256 \}/);
+    expect(read(image(root, "x/pic.png"))).toBe("1");
   });
 
   it("never overwrites an image it did not copy: an identical one is skipped, a different one refused", () => {

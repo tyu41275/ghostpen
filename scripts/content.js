@@ -5,8 +5,10 @@
  * from the repository's own data/ (legacy mode, to be removed; `GHOSTPEN_REQUIRE_CONTENT=1` refuses it). Either way it
  * builds the git-ignored `.content/` folder Contentlayer and data/siteMetadata.js read, so the build has one code path.
  * A content folder's images are copied into public/static/images/ and recorded, and the next run removes exactly the
- * recorded files first, so switching folders leaves no strays and never touches a file it did not copy.
+ * recorded files first, so switching folders leaves no strays and never touches a file it did not copy. Each recorded
+ * file carries its SHA-256: one whose contents changed since the copy is someone else's now and is kept.
  */
+const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 
@@ -17,6 +19,7 @@ const RECORD = 'copied-images.json'
 const REQUIRED_SITE_KEYS = ['title', 'author', 'siteUrl']
 
 const isDir = (p) => fs.statSync(p, { throwIfNoEntry: false })?.isDirectory() === true
+const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 const isFile = (p) => fs.statSync(p, { throwIfNoEntry: false })?.isFile() === true
 
 /** The site values, checked: an object with every required key; `label` names their source in every error. */
@@ -105,7 +108,7 @@ function safeRelative(rel) {
   return rel
 }
 
-/** The images the previous run copied, from its record; none when there is no record. */
+/** The images the previous run copied, `{ path, sha256 }` each, from its record; none when there is no record. */
 function previousImages(root) {
   const file = path.join(root, OUT, RECORD)
   if (!fs.existsSync(file)) return []
@@ -117,16 +120,29 @@ function previousImages(root) {
       `.content/${RECORD} is unreadable (${e.message}): check public/static/images/ by hand, then delete it`
     )
   }
-  if (!Array.isArray(list)) throw new Error(`.content/${RECORD} must hold a list of paths`)
-  return list.map(safeRelative)
+  const entry = (e) => e && typeof e === 'object' && typeof e.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
+  if (!Array.isArray(list) || !list.every(entry)) {
+    throw new Error(
+      `.content/${RECORD} must hold a list of { path, sha256 }: check public/static/images/ by hand, then delete it`
+    )
+  }
+  return list.map((e) => ({ path: safeRelative(e.path), sha256: e.sha256 }))
 }
 
-/** Removes the recorded files, and the folders they leave empty, under public/static/images/. */
-function removeImages(root, list) {
+/**
+ * Removes the recorded files whose contents are still what was copied, and the folders they leave empty, under
+ * public/static/images/. A recorded file changed since (or no longer a file) is kept and logged.
+ */
+function removeImages(root, list, log) {
   const base = path.join(root, IMAGES)
-  for (const rel of list) {
+  for (const { path: rel, sha256: was } of list) {
     const file = path.join(base, rel)
-    fs.rmSync(file, { force: true })
+    if (!fs.existsSync(file)) continue
+    if (!isFile(file) || sha256(file) !== was) {
+      log(`ghostpen content: kept public/static/images/${rel}, changed since it was copied`)
+      continue
+    }
+    fs.rmSync(file)
     for (let dir = path.dirname(file); dir.startsWith(base + path.sep); dir = path.dirname(dir)) {
       if (fs.readdirSync(dir).length) break
       fs.rmdirSync(dir)
@@ -153,7 +169,7 @@ function copyImages(root, dir, copied) {
     }
     fs.mkdirSync(path.dirname(dest), { recursive: true })
     fs.copyFileSync(src, dest)
-    copied.push(rel)
+    copied.push({ path: rel, sha256: sha256(dest) })
   }
 }
 
@@ -165,7 +181,7 @@ function prepareContent({ root, env = process.env, log = console.log }) {
   if (!path.isAbsolute(root)) throw new Error(`prepareContent: root must be absolute (${root})`)
   const source = resolveSource(root, env)
   // The previous run's images go first: should a later step fail, its record still lists them (removing twice is harmless).
-  removeImages(root, previousImages(root))
+  removeImages(root, previousImages(root), log)
 
   const out = path.join(root, OUT)
   fs.rmSync(out, { recursive: true, force: true })
@@ -195,7 +211,7 @@ function prepareContent({ root, env = process.env, log = console.log }) {
       ? `ghostpen content: ${source.dir} (${VAR})`
       : `ghostpen content: the repository's own (legacy)`
   )
-  return { mode: source.mode, dir: source.dir, images }
+  return { mode: source.mode, dir: source.dir, images: images.map((e) => e.path) }
 }
 
 module.exports = { prepareContent }
