@@ -23,9 +23,12 @@ const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const termRe = (term: string, flags = "giu") => new RegExp(`(^|[^A-Za-z0-9])${escapeRe(term)}(?=$|[^A-Za-z0-9])`, flags);
 const EXPLAINS = [" is ", " are ", " (", " — ", " - ", ", a ", ", an ", ", the ", ", which ", ": a ", ": an "];
 
+/** The draft without its code (fenced blocks and inline code). */
+export const outsideCode = (markdown: string) => markdown.replace(/```[\s\S]*?```/gu, " ").replace(/`[^`\n]*`/gu, " ");
+
 /** The draft's link targets outside code: `[text](target)` and `<https://...>`, without a trailing slash or `#part`. */
-function linkTargets(markdown: string): Set<string> {
-  const text = markdown.replace(/```[\s\S]*?```/gu, " ").replace(/`[^`\n]*`/gu, " ");
+export function linkTargets(markdown: string): Set<string> {
+  const text = outsideCode(markdown);
   const targets = [...text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gu), ...text.matchAll(/<(https?:\/\/[^>\s]+)>/gu)].map((m) => m[1]!);
   return new Set(targets.map(bare));
 }

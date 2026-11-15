@@ -9,10 +9,10 @@ import { readFeedback } from "../src/feedback/store.js";
 import { DraftJobs } from "../src/publish/jobs.js";
 import { postText, slugOf } from "../src/publish/post.js";
 import { answer } from "../src/service/adapter-routes.js";
-import { draftCard, draftEdit, draftPosted, draftPublish } from "../src/service/draft-routes.js";
+import { draftCard, draftEdit, draftPosted, draftPublish, LINKS_FAILED, publishLinks } from "../src/service/draft-routes.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { readShortlists, saveShortlists, type DraftState } from "../src/shortlist/state.js";
-import { tempDir } from "./helpers.js";
+import { tempDir, tree } from "./helpers.js";
 
 const REPORT = { passed: true, grade: 4, hold: [], later: [], checks: [{ name: "Plain words", passed: true, findings: [] }] };
 const draft = (over: Partial<Draft> = {}): Draft => ({ id: "d:1", kind: "decision", status: "ready", title: "Why we use one timer", summary: "It's simpler.",
@@ -136,6 +136,15 @@ describe("the pull request", () => {
       if (back(argv)) throw new Error("checkout failed");
       return argv[0] === "gh" ? (argv[2] === "list" ? "[]" : "https://github.com/o/blog/pull/8\n") : runIn(argv, options);
     })).rejects.toThrow("checkout failed");
+  });
+
+  it("refuses a post whose date field is wrong before writing anything, back on main (ghostpen#108)", async () => {
+    const { clone } = blogRepo();
+    const gh: string[][] = [];
+    await expect(openPostPr(parsePublish({ repoDir: clone, repo: "o/blog" }), draft(), "", async (argv, options) => (argv[0] === "gh" ? (gh.push(argv), "[]") : runIn(argv, options))))
+      .rejects.toThrow("the post's frontmatter is wrong: date is empty: give a date");
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
+    expect(gh).toEqual([]);
   });
 
   it("starts the review with its placeholders filled, detached, logging to a file", async () => {
@@ -292,7 +301,7 @@ describe("the draft's card, Publish and Edit", () => {
     let finish: (error?: Error) => void = () => {};
     const ops = (check: { reason: string | null; merged: boolean } | Error) => ({
       check: async () => { if (check instanceof Error) throw check; return check; },
-      merge: () => { merges += 1; return new Promise<void>((resolve, reject) => { finish = (e) => (e ? reject(e) : resolve()); }); } });
+      merge: () => { merges += 1; return new Promise<void>((resolve, reject) => { finish = (e) => (e ? reject(e) : resolve()); }); }, links: async () => [] });
     const ready = ops({ reason: null, merged: false });
     expect((await draftPublish(settings, { ...at, round: 1, user: "1", reason: "ready" }, clock, ready)).body.refused).toContain("Only the operator");
     expect((await draftPublish(settings, { ...at, round: 0, user: OPERATOR, reason: "ready" }, clock, ready)).body.refused).toBe("This card is for an older draft; use the newest card. Nothing was done.");
@@ -326,19 +335,55 @@ describe("the draft's card, Publish and Edit", () => {
         draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: "Shorter." }, NOW, new DraftJobs(settings, { draft: () => new Promise(() => {}) }));
         return { reason: null, merged: false };
       },
-      merge: async () => { merges += 1; } });
+      merge: async () => { merges += 1; }, links: async () => [] });
     expect(reply.body.refused).toBe("The draft changed while ghostpen checked it; use the newest card. Nothing was done.");
     expect(merges).toBe(0);
     expect(draftOf(settings)).toMatchObject({ status: "drafting", round: 2 });
+    // An Edit while the links are checked: the same.
+    const again = withDraft(base);
+    const late = await draftPublish(again, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: null, merged: false }),
+      merge: async () => { merges += 1; }, links: async () => {
+        draftEdit(again, { ...at, round: 1, user: OPERATOR, notes: "Shorter." }, NOW, new DraftJobs(again, { draft: () => new Promise(() => {}) }));
+        return ["the link /blog/x leads to no post: take it out or link a post that is on the blog"];
+      } });
+    expect(late.body.refused).toBe("The draft changed while ghostpen checked it; use the newest card. Nothing was done.");
+    expect(merges).toBe(0);
+    expect(draftOf(again)).toMatchObject({ status: "drafting", round: 2 });
+    expect(draftOf(again)?.problem).toBeUndefined();
+  });
+
+  it("refuses Publish while a link leads to no post the blog serves, keeping the draft ready and saying why", async () => {
+    const settings = withDraft(base);
+    let merges = 0, asked = 0;
+    const dead = ["the link /blog/x leads to a post the site does not serve: its build left it out, or it is not deployed yet", "2 more links do not work"];
+    const ops = (reason: string | null) => ({ check: async () => ({ reason, merged: false }), merge: async () => { merges += 1; }, links: async () => { asked += 1; return dead; } });
+    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, ops("the independent review is still running"))).body.refused)
+      .toBe("Not published yet: the independent review is still running.");
+    expect(asked).toBe(0); // not ready anyway: no sitemap read
+    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, ops(null))).body.refused).toBe(`Not published yet: ${dead[0]} (and 1 more).`);
+    expect(merges).toBe(0);
+    expect(draftOf(settings)).toMatchObject({ status: "ready", problem: `${LINKS_FAILED}${dead[0]}` });
+  });
+
+  it("checks the kept draft's links against the blog folder and the sitemap read now", async () => {
+    const blogDir = tree({ "live.mdx": "---\ntitle: 'Live'\ndate: '2026-01-01'\n---\nx\n" });
+    const settings = service({ sources: { published: { blogDir, baseUrl: "https://blog.example" } } });
+    const up = async () => ({ status: 200, text: "<urlset><url><loc>https://x.example/blog/live</loc></url></urlset>" });
+    expect(await publishLinks(settings, "d:1", up)).toEqual(["the draft's text is not kept, so its links cannot be checked"]);
+    mkdirSync(join(settings.dataDir, "drafts"), { recursive: true });
+    writeFileSync(draftFile(settings.dataDir, "d:1"), JSON.stringify(draft({ markdown: "See [live](/blog/live) and [gone](https://blog.example/blog/gone)." })));
+    expect(await publishLinks(settings, "d:1", up)).toEqual(["the link /blog/gone leads to no post: take it out or link a post that is on the blog"]);
+    expect(await publishLinks(settings, "d:1", async () => ({ status: 503, text: "" })))
+      .toEqual(["the link /blog/live cannot be checked: the blog's sitemap answered 503", "the link /blog/gone leads to no post: take it out or link a post that is on the blog"]);
   });
 
   it("puts a draft back to ready, saying why, when the merge fails; marks one merged elsewhere as published", async () => {
     const settings = withDraft(base);
-    await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: null, merged: false }), merge: async () => { throw new Error("gh pr merge failed: conflict"); } });
+    await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: null, merged: false }), merge: async () => { throw new Error("gh pr merge failed: conflict"); }, links: async () => [] });
     await new Promise((r) => setTimeout(r, 10));
     expect(draftOf(settings)).toMatchObject({ status: "ready", problem: "the merge failed: gh pr merge failed: conflict" });
     expect(draftCard(draftOf(settings)!, "d:1")!.text).toContain("Last try: the merge failed: gh pr merge failed: conflict");
-    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: "it is published already", merged: true }), merge: async () => {} })).body.reply).toBe("It is on the blog already.");
+    expect((await draftPublish(settings, { ...at, round: 1, user: OPERATOR, reason: "ready" }, () => NOW, { check: async () => ({ reason: "it is published already", merged: true }), merge: async () => {}, links: async () => [] })).body.reply).toBe("It is on the blog already.");
     expect(draftOf(settings)).toMatchObject({ status: "published" });
     expect(draftOf(settings)?.problem).toBeUndefined();
     // The reason is kept whether ghostpen merges it or finds it merged already.

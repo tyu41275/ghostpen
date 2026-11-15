@@ -201,14 +201,14 @@ describe("the whole report", () => {
     expect(report.later).toEqual(["Clock"]);
     expect(reportText(report)).toBe([
       "All checks passed.", `Reading grade: ${report.grade}.`, "✅ Plain words", "✅ Every stack part linked or explained",
-      "✅ Diagrams match the stack map", "Posts to write later: Clock.",
+      "✅ Diagrams match the stack map", "✅ Every link leads to a post the blog serves", "Posts to write later: Clock.",
     ].join("\n"));
   });
 
   it("fails when any one check fails and says why", () => {
     const report = checkDraft({ title: "How Clock works", markdown: SIMPLE }, { terms: ["Clock"], index: EMPTY, graph: null });
     expect(report.passed).toBe(false);
-    expect(report.checks.map((c) => c.passed)).toEqual([true, false, true]);
+    expect(report.checks.map((c) => c.passed)).toEqual([true, false, true, true]);
     const text = reportText(report);
     expect(text.split("\n")[0]).toBe("Some checks failed; the draft is not ready.");
     expect(text).toContain("❌ Every stack part linked or explained\n   - Clock is central");

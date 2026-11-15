@@ -16,6 +16,10 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
   - Arrows to boxes the map doesn't know are left alone, so concept diagrams pass.
   - With no map configured, a diagram with boxes can't be checked. The check fails and says so instead of passing it.
   - **It fails closed on a file.** A configured file that is missing or unreadable, isn't a flowchart (`flowchart` or `graph` first) or draws no arrows gives no map at all, even when the stack map reads. So does a stack map that fails beside files. The writer is told to draw no diagram, the draft's problems name the setting (`draft.diagramFiles[1]: it draws no arrows`, never its path), and every diagram with boxes fails as one that can't be checked.
+- **Every link leads to a post the blog serves** (`src/draft/links.ts`, ghostpen#108): every link to `/blog/<slug>`, by path or by the blog's own address (`sources.published.baseUrl`), outside code, as `[text](...)`, a reference definition a link uses (`[name]: ...` for `[text][name]`, `[name][]` or `[name]`), `<...>` or `href="..."`.
+  - The post must be in the sitemap the site serves (`docs/sources.md`). A slug with no post file, a post marked `draft: true`, and a post the site's build left out each fail, named.
+  - Other paths (`/tags/...`, `/about`, `/blog/page/2`) and other sites aren't checked. A draft with no post links passes.
+  - **It fails closed.** With the sitemap unread, or no `sources.published`, every post link fails as one that can't be checked.
 
 - **Screenshots show nothing private** (`src/draft/screenshots.ts`): runs once the words pass, only when the draft asks for a screenshot.
   - The writer may place `![what it shows](screenshot:<name>)` only for a page in `draft.screenshots.pages`.
@@ -46,6 +50,7 @@ The `id` is a shortlist item's: a candidate id, or `background:<part>` for a bac
 - **Checks and revisions**: every draft runs all the checks above.
   - A failed draft goes back with the failed checks, up to `draft.revisions` times (default 2).
   - A draft **held** for a background post stops at once, because rewording can't write that post.
+  - A draft whose post links can't be checked (the sitemap unread) stops at once too, and fails: rewording can't read the sitemap.
   - A failed revision keeps the last draft and says why.
 - **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map). Nothing is published from here: Tim approves every post (brief D14).
 

@@ -16,6 +16,8 @@ export interface PublishedPost {
   about: string[];
   /** Stack parts named only in its body. Lower case. */
   mentions: string[];
+  /** Whether the blog's sitemap lists it (`sources/served.ts`); unset when the sitemap was not read. Never stored. */
+  served?: boolean;
 }
 export interface PublishedIndex { version: 1; terms: string; posts: PublishedPost[] }
 export const INDEX_FILE = "published-index.json";
@@ -89,8 +91,11 @@ export function buildPublishedIndex(source: PublishedSource, terms: string[], da
   return { index, problems };
 }
 
-/** The published (not draft) posts about `term`, newest first: what a draft links instead of explaining it again. */
+/** On the blog: not a draft, and not left out of the site (a post is kept when the sitemap was not read). */
+export const isPublished = (post: PublishedPost) => !post.draft && post.served !== false;
+
+/** The published posts about `term`, newest first: what a draft links instead of explaining it again. */
 export function postsAbout(index: PublishedIndex, term: string): PublishedPost[] {
   const key = term.trim().toLowerCase();
-  return index.posts.filter((post) => !post.draft && post.about.includes(key)).sort((a, b) => b.date.localeCompare(a.date));
+  return index.posts.filter((post) => isPublished(post) && post.about.includes(key)).sort((a, b) => b.date.localeCompare(a.date));
 }

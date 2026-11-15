@@ -39,7 +39,7 @@ Defined in `contentlayer.config.ts`. Every `.mdx` file in `data/blog/` must incl
 | -------------- | --------------- | -------- | ------- | -------------------------------------------------------------------------------------- |
 | `title`        | string          | yes      | —       | Post title displayed on the page and in listings                                       |
 | `date`         | date            | yes      | —       | Publication date (ISO format, e.g., `2026-03-20`)                                      |
-| `lastmod`      | date            | no       | —       | Last modified date — shown when different from `date`                                  |
+| `lastmod`      | date            | no       | —       | Last modified date — shown when different from `date`. Leave the line out rather than empty: an empty `lastmod` drops the post from the build (ghostpen#108) |
 | `tags`         | list of strings | no       | `[]`    | Categorization tags — lowercase, hyphen-separated (e.g., `sitecore`, `xm-cloud`)       |
 | `draft`        | boolean         | no       | `false` | When `true`, post is excluded from production builds                                   |
 | `summary`      | string          | no       | —       | Short description for listings and SEO meta tags                                       |

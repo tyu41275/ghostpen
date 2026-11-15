@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { runIn, type Run } from "../command.js";
 import { reportText } from "../draft/checks.js";
 import type { Draft } from "../draft/write.js";
+import { dateProblems } from "./frontmatter.js";
 import { postText, slugOf } from "./post.js";
 
 export interface PublishSettings {
@@ -79,11 +80,15 @@ export async function openPostPr(settings: PublishSettings, draft: Draft, date: 
 async function postOnBranch(settings: PublishSettings, draft: Draft, date: string, run: Run, branch: string, written: string[]): Promise<PostPr> {
   const cwd = settings.repoDir;
   const slug = slugOf(draft.title);
+  // A bad date field leaves the post out of the site's build (ghostpen#108): refused before anything is written.
+  const text = postText(draft, date, slug, settings.imagesUrl);
+  const bad = dateProblems(text);
+  if (bad.length) throw new Error(`the post's frontmatter is wrong: ${bad[0]}`);
   await run(["git", "checkout", "-f", "-B", branch, `origin/${settings.base}`], { cwd });
   const file = join(settings.postsDir, `${slug}.mdx`);
   mkdirSync(join(cwd, settings.postsDir), { recursive: true });
   written.push(file);
-  writeFileSync(join(cwd, file), postText(draft, date, slug, settings.imagesUrl));
+  writeFileSync(join(cwd, file), text);
   for (const [name, png] of Object.entries(draft.screenshots ?? {})) {
     const target = join(settings.imagesDir, slug, `${name}.png`);
     mkdirSync(join(cwd, settings.imagesDir, slug), { recursive: true });

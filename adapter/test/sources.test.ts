@@ -5,6 +5,8 @@ import { parseSources } from "../src/sources/config.js";
 import { readGithubTopics } from "../src/sources/github.js";
 import { readGlossaries, readMarkdownTopics } from "../src/sources/markdown.js";
 import { buildPublishedIndex, frontmatter, INDEX_FILE, postsAbout } from "../src/sources/published.js";
+import { readSources } from "../src/sources/read.js";
+import { parseSettings } from "../src/settings.js";
 import { tempDir, tree } from "./helpers.js";
 
 describe("the sources settings", () => {
@@ -152,5 +154,22 @@ describe("the published-post index", () => {
     expect(buildPublishedIndex({ blogDir: "/nonexistent/blog", baseUrl: "https://x" }, [], tempDir()).problems)
       .toEqual([{ source: "published", problem: "the blog folder /nonexistent/blog cannot be read" }]);
     expect(frontmatter("---\ntitle: \"A 'quoted' title\"\ntags: ['a', \"b\"]\n---\nbody").fields).toEqual({ title: "A 'quoted' title", tags: ["a", "b"] });
+  });
+});
+
+describe("reading the sources with the blog's sitemap (ghostpen#108)", () => {
+  it("reads the sitemap once, and names a post the site does not serve and a sitemap it cannot read", async () => {
+    const post = (draft: string) => `---\ntitle: 'P'\ndate: '2026-03-16'\ndraft: ${draft}\n---\nx\n`;
+    const blogDir = tree({ "a.mdx": post("false"), "b.mdx": post("false"), "c.mdx": post("true") });
+    const settings = parseSettings({ instance: "i", port: 8794, dataDir: tempDir(), sources: { published: { blogDir, baseUrl: "https://blog.example" } } });
+    const asked: string[] = [];
+    const read = await readSources(settings, undefined, async (url) => { asked.push(url); return { status: 200, text: "<urlset><url><loc>https://x.example/blog/a/</loc></url></urlset>" }; });
+    expect(asked).toEqual(["https://blog.example/sitemap.xml"]);
+    expect(read.problems).toEqual([{ source: "published", problem: "1 post is in the blog folder but the site does not serve it: b.mdx" }]);
+    expect(read.index.posts.map((p) => [p.file, p.served])).toEqual([["a.mdx", true], ["b.mdx", false], ["c.mdx", false]]);
+    const down = await readSources(settings, undefined, async () => ({ status: 503, text: "" }));
+    expect(down.problems).toEqual([{ source: "published", problem: "the blog's sitemap answered 503" }]);
+    expect(down.served).toEqual({ problem: "the blog's sitemap answered 503" });
+    expect((await readSources(parseSettings({ instance: "i", port: 8794, dataDir: tempDir() }), undefined, async () => { throw new Error("never"); })).served).toBeUndefined();
   });
 });

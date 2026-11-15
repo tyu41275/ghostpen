@@ -1,7 +1,8 @@
 /**
  * Drafting one post (ADR 0101, brief D1–D3, D10–D12): gather what the writer needs from the sources, run the writer, run
  * every check, and send a failed draft back with the check report up to `draft.revisions` times. A draft held for a
- * background post stops at once: rewording cannot write that post. Every draft is kept in `dataDir/drafts/` with its
+ * background post stops at once: rewording cannot write that post. So does one whose post links cannot be checked (the
+ * blog's sitemap unread): it fails, as rewording cannot read the sitemap. Every draft is kept in `dataDir/drafts/` with its
  * report, ready, held or failed; nothing is published from here (Tim approves every post, brief D14).
  */
 import { createHash } from "node:crypto";
@@ -11,8 +12,9 @@ import { candidatesOf } from "../ranking/candidates.js";
 import { isRankingView, RANKING_FILE } from "../ranking/run.js";
 import { runScorer } from "../ranking/scorer.js";
 import type { GhostpenSettings } from "../settings.js";
-import { frontmatter, postsAbout } from "../sources/published.js";
+import { frontmatter, isPublished, postsAbout } from "../sources/published.js";
 import { readSources, type SourcesRead } from "../sources/read.js";
+import type { SitemapGet } from "../sources/served.js";
 import type { TopicDocument } from "../sources/types.js";
 import { contextFor } from "../feedback/store.js";
 import { checkDraft, type CheckReport } from "./checks.js";
@@ -39,7 +41,11 @@ export interface Draft extends Written {
   screenshots: Record<string, string>;
 }
 
-export interface DraftSeams { write?: (prompt: string) => Promise<string>; stackMap?: (prompt: string) => Promise<string>; capture?: Capturer; now?: Date }
+export interface DraftSeams {
+  write?: (prompt: string) => Promise<string>; stackMap?: (prompt: string) => Promise<string>; capture?: Capturer; now?: Date;
+  /** The blog's sitemap reader (`sources/served.ts`); the live one by default. */
+  sitemap?: SitemapGet;
+}
 
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const mentions = (text: string, term: string) =>
@@ -86,7 +92,7 @@ function voice(settings: GhostpenSettings, read: SourcesRead, count: number): Wr
   const blogDir = settings.sources.published?.blogDir;
   if (!blogDir || count === 0) return [];
   const out: WriterBrief["voice"] = [];
-  for (const post of [...read.index.posts].filter((p) => !p.draft).sort((a, b) => b.date.localeCompare(a.date))) {
+  for (const post of [...read.index.posts].filter(isPublished).sort((a, b) => b.date.localeCompare(a.date))) {
     if (out.length >= count) break;
     try {
       const { fields, body } = frontmatter(readFileSync(join(blogDir, post.file), "utf8"));
@@ -100,7 +106,7 @@ function voice(settings: GhostpenSettings, read: SourcesRead, count: number): Wr
 export async function draftNow(settings: GhostpenSettings, id: string, seams: DraftSeams = {}, edit?: { previous: Written; notes: string }): Promise<Draft> {
   const draft = settings.draft;
   if (!draft) throw new Error("no draft writer is set (settings.draft)");
-  const read = await readSources(settings, seams.now);
+  const read = await readSources(settings, seams.now, seams.sitemap);
   const goal = target(read, id);
   const text = [goal.definition ?? "", ...goal.documents.map((d) => d.lines.join("\n"))].join("\n");
   const definitionOf = new Map(read.definitions.map((d) => [d.term.toLowerCase(), d.text]));
@@ -120,12 +126,13 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}),
     ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
   const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));
-  const context = { terms: read.terms, index: read.index, graph: diagrams.graph, diagramProblems: diagrams.unread, ...(goal.kind === "background" ? { subject: goal.subject } : {}) };
+  const context = { terms: read.terms, index: read.index, graph: diagrams.graph, diagramProblems: diagrams.unread, ...(goal.kind === "background" ? { subject: goal.subject } : {}),
+    ...(settings.sources.published ? { baseUrl: settings.sources.published.baseUrl } : {}), ...(read.served ? { served: read.served } : {}) };
   let written = parseWritten(await write(edit ? editPrompt(brief, edit.previous, edit.notes) : writerPrompt(brief)));
   let report = checkDraft(written, context);
   let attempts = 1;
   const problems = [...read.problems.map((p) => `${p.source}: ${p.problem}`), ...diagrams.problems];
-  while (!report.passed && report.hold.length === 0 && attempts <= draft.revisions) {
+  while (!report.passed && report.hold.length === 0 && !report.unknown && attempts <= draft.revisions) {
     try {
       written = parseWritten(await write(revisePrompt(brief, written, report)));
     } catch (error) {

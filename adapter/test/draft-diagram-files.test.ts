@@ -88,10 +88,11 @@ describe("diagrams checked against configured files", () => {
     expect(await sources({ writer, voicePosts: 2, revisions: 2 })).toEqual({ graph: null, problems: ["stack map: no stack map is configured (settings.draft.stackMap)"], unread: [] });
   });
 
-  it("keeps three checks, the diagram one failing on an unread file", () => {
+  it("keeps four checks, the diagram one failing on an unread file", () => {
     const report = checkDraft({ title: "Notes", markdown: md("flowchart LR\n  a --> b") }, { terms: [], index: { version: 1, terms: "t", posts: [] }, graph: null,
       diagramProblems: ["draft.diagramFiles[0]: it draws no arrows"] });
-    expect(report.checks.map((c) => [c.name, c.passed])).toEqual([["Plain words", true], ["Every stack part linked or explained", true], ["Diagrams match the stack map", false]]);
+    expect(report.checks.map((c) => [c.name, c.passed])).toEqual([["Plain words", true], ["Every stack part linked or explained", true], ["Diagrams match the stack map", false],
+      ["Every link leads to a post the blog serves", true]]);
   });
 });
 

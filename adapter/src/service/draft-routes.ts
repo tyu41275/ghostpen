@@ -10,16 +10,23 @@
  *
  * `draftCard` is the card text the shortlist route hands the adapter with each item's draft.
  */
+import { checkLinks } from "../draft/links.js";
+import { readDraft } from "../draft/write.js";
 import { checkPost, mergePost, type PublishSettings } from "../publish/github.js";
 import { addFeedback } from "../feedback/store.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import type { GhostpenSettings } from "../settings.js";
+import { readGlossaries } from "../sources/markdown.js";
+import { buildPublishedIndex, type PublishedIndex } from "../sources/published.js";
+import { readServed, withServed, type SitemapGet } from "../sources/served.js";
 import { findItem, readShortlists, saveShortlists, type DraftState } from "../shortlist/state.js";
 import type { Reply } from "./adapter-routes.js";
 
 const MAX_CARD = 1900;
 /** How a draft's `problem` starts when Publish's merge failed (the readiness list counts them). */
 export const MERGE_FAILED = "the merge failed: ";
+/** How it starts when Publish found a link that does not work; not ghostpen's failure, so the readiness list leaves it out. */
+export const LINKS_FAILED = "a link does not work: ";
 const OPERATOR_ONLY = "Only the operator can publish or edit ghostpen's drafts, so nothing was done.";
 const OLD_CARD = "This card is for an older draft; use the newest card. Nothing was done.";
 /** A press must name its card's round, and it must be the draft's: a missing round counts as an old card. */
@@ -59,11 +66,26 @@ export function draftPosted(settings: GhostpenSettings, body: Record<string, unk
 export interface PublishOps {
   check: (s: PublishSettings, pr: number, head: string) => Promise<{ reason: string | null; merged: boolean }>;
   merge: (s: PublishSettings, pr: number, head: string) => Promise<void>;
+  /** The draft's links that do not lead to a post the blog serves now, in plain words; none when all do. */
+  links: (settings: GhostpenSettings, id: string) => Promise<string[]>;
+}
+
+/** Publish's link check (ghostpen#108): the kept draft's links against the blog folder and the sitemap read now. */
+export async function publishLinks(settings: GhostpenSettings, id: string, get?: SitemapGet): Promise<string[]> {
+  const draft = readDraft(settings.dataDir, id);
+  if (!draft) return ["the draft's text is not kept, so its links cannot be checked"];
+  const source = settings.sources.published;
+  if (!source) return checkLinks(draft.markdown, { index: { version: 1, terms: "", posts: [] } }).findings;
+  // The glossary terms, as every read uses, so the stored index is not rebuilt for another term list.
+  const terms = settings.sources.references.flatMap((r) => readGlossaries(r).items.map((d) => d.term));
+  const served = await readServed(source, get);
+  const index: PublishedIndex = withServed(buildPublishedIndex(source, terms, settings.dataDir).index, served);
+  return checkLinks(draft.markdown, { baseUrl: source.baseUrl, served, index }).findings;
 }
 
 /** Publish: checks the pull request now and answers; a ready one merges in the background and its card follows. */
 export async function draftPublish(settings: GhostpenSettings, body: Record<string, unknown>, now: () => Date,
-  ops: PublishOps = { check: checkPost, merge: mergePost }): Promise<Reply> {
+  ops: PublishOps = { check: checkPost, merge: mergePost, links: publishLinks }): Promise<Reply> {
   const item = findItem(readShortlists(settings.dataDir), body.week, body.index);
   if (!item?.draft) return { status: 404, body: { error: "no such draft" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { refused: OPERATOR_ONLY } };
@@ -80,6 +102,13 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
   try { checked = await ops.check(publish, pr, head); } catch (error) {
     return { status: 200, body: { refused: `ghostpen could not check the pull request, so nothing changed: ${firstLine(error)}` } };
   }
+  // A post merged since the draft was checked may have been dropped from the site: its links are checked again.
+  let broken: string[] = [];
+  if (!checked.merged && !checked.reason) {
+    try { broken = await ops.links(settings, item.id); } catch (error) {
+      return { status: 200, body: { refused: `ghostpen could not check the draft's links, so nothing changed: ${firstLine(error)}` } };
+    }
+  }
   // The check took a moment: the draft must still be the one checked (no Edit, no other press since), or nothing is done.
   const fresh = findItem(readShortlists(settings.dataDir), body.week, body.index)?.draft;
   if (!fresh || fresh.round !== item.draft.round || fresh.status !== "ready" || fresh.pr?.number !== pr) {
@@ -90,6 +119,12 @@ export async function draftPublish(settings: GhostpenSettings, body: Record<stri
     return { status: 200, body: { reply: "It is on the blog already." } };
   }
   if (checked.reason) return { status: 200, body: { refused: `Not published yet: ${checked.reason}.` } };
+  if (broken.length) {
+    // Still ready: the fix is usually the linked post, then Publish again; Edit works too.
+    setStatus(settings, body, now(), "ready", `${LINKS_FAILED}${broken[0]}`);
+    const more = broken.length > 1 ? ` (and ${broken.length - 1} more)` : "";
+    return { status: 200, body: { refused: `Not published yet: ${broken[0]}${more}.` } };
+  }
   setStatus(settings, body, now(), "publishing");
   void ops.merge(publish, pr, head).then(() => setStatus(settings, body, now(), "published"),
     (error: unknown) => setStatus(settings, body, now(), "ready", `${MERGE_FAILED}${firstLine(error)}`));
