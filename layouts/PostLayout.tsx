@@ -10,7 +10,9 @@ import Tag from '@/components/Tag'
 import siteMetadata from '@/data/siteMetadata'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
 import AIGeneratedBanner from '@/components/AIGeneratedBanner'
+import LegacyPostLinks from '@/components/LegacyPostLinks'
 
+const { home } = siteMetadata
 const editUrl = (path) => `${siteMetadata.siteRepo}/blob/main/data/${path}`
 const discussUrl = (path) =>
   `https://mobile.twitter.com/search?q=${encodeURIComponent(`${siteMetadata.siteUrl}/${path}`)}`
@@ -102,23 +104,33 @@ export default function PostLayout({ content, authorDetails, next, prev, childre
               </dl>
               {aiGenerated && (
                 <div className="pt-4 text-sm text-gray-400 dark:text-gray-500">
-                  Written by{' '}
-                  <Link
-                    href="https://github.com/tyu41275/ghostpen"
-                    className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                  >
-                    Ghostpen
-                  </Link>
-                  {slug !== '2026-03-18-how-i-built-a-blog-that-writes-itself' && (
+                  {home ? (
                     <>
-                      {' � '}
-                      <Link
-                        href="/blog/2026-03-18-how-i-built-a-blog-that-writes-itself"
-                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                      >
-                        How it works
-                      </Link>
+                      Written by{' '}
+                      {home.sourceRepo ? (
+                        <Link
+                          href={home.sourceRepo}
+                          className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                        >
+                          Ghostpen
+                        </Link>
+                      ) : (
+                        'Ghostpen'
+                      )}
+                      {home.howItWorks && home.howItWorks !== `/blog/${slug}` && (
+                        <>
+                          {' � '}
+                          <Link
+                            href={home.howItWorks}
+                            className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                          >
+                            How it works
+                          </Link>
+                        </>
+                      )}
                     </>
+                  ) : (
+                    <LegacyPostLinks slug={slug} />
                   )}
                 </div>
               )}

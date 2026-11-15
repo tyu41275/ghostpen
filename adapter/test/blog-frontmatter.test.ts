@@ -18,8 +18,8 @@ describe("the blog's date fields (ghostpen#108)", () => {
     expect(dateProblems(head("date: 2026-03-24", "lastmod: '2026-03-25'"))).toEqual([]);
   });
 
-  it("holds every post in the repo to it", () => {
-    const dir = join(REPO, "data", "blog");
+  it.each(["data/blog", "content-sample/blog"])("holds every post in %s to it", (from) => {
+    const dir = join(REPO, from);
     const posts = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((name) => name.endsWith(".mdx"));
     expect(posts.length).toBeGreaterThan(0);
     expect(posts.flatMap((name) => dateProblems(readFileSync(join(dir, name), "utf8")).map((problem) => `${name}: ${problem}`))).toEqual([]);

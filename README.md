@@ -32,6 +32,28 @@ This blog has two categories:
 - **Sitecore** -- Hands-on troubleshooting posts from real client engagements (written by hand)
 - **AI** -- Posts about building AI-augmented development tools (drafted by ghostpen's adapter from its sources, reviewed before publishing)
 
+## Content folder
+
+The build reads its content from the folder the environment variable `GHOSTPEN_CONTENT_DIR` names (an absolute path).
+Before Next.js and Contentlayer run, `scripts/content.js` copies it into the git-ignored `.content/` folder the build reads:
+
+```
+site.json          # the site's own values: title, author, siteUrl (required), description, links, and the home
+                   # page's `home` block (name, avatar, role, links, aiTag, sourceRepo, howItWorks)
+authors/           # author profiles; default.mdx is the blog's author (required)
+blog/              # the .mdx posts (required)
+images/            # served at /static/images/ (copied into public/static/images/ and removed again on the next run)
+*.bib              # optional bibliographies for posts with a `bibliography` field
+```
+
+A folder that is missing, relative or incomplete stops the build with an error naming `GHOSTPEN_CONTENT_DIR`. Without the
+variable the build still uses the repository's own content (`data/`, `data/site.legacy.js`), which is to be removed;
+`GHOSTPEN_REQUIRE_CONTENT=1` refuses that and requires the variable. `content-sample/` is a small generic folder:
+
+```bash
+GHOSTPEN_CONTENT_DIR=$PWD/content-sample yarn build
+```
+
 ## Local development
 
 ```bash

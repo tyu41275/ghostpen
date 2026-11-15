@@ -4,8 +4,10 @@ import Tag from '@/components/Tag'
 import siteMetadata from '@/data/siteMetadata'
 import { formatDate } from 'pliny/utils/formatDate'
 import NewsletterForm from 'pliny/ui/NewsletterForm'
+import LegacyIntro from '@/components/LegacyIntro'
 
 const MAX_DISPLAY = 5
+const { home } = siteMetadata
 
 export default function Home({ posts }) {
   return (
@@ -19,55 +21,71 @@ export default function Home({ posts }) {
             {siteMetadata.description}
           </p> */}
         </div>
-        <div className="flex items-center gap-4 pb-8">
-          <Image
-            src="/static/images/avatar.png"
-            alt="Tim"
-            width={64}
-            height={64}
-            className="h-16 w-16 rounded-full"
-          />
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Tim</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Senior Software Engineer</p>
-            <div className="flex gap-3 pt-1">
-              <Link
-                href="https://github.com/tyu41275"
-                className="text-sm text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                GitHub
-              </Link>
-              <Link
-                href="https://www.linkedin.com/in/yutim1275"
-                className="text-sm text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                LinkedIn
-              </Link>
+        {home ? (
+          <div className="flex items-center gap-4 pb-8">
+            {home.avatar && (
+              <Image
+                src={home.avatar}
+                alt={home.name}
+                width={64}
+                height={64}
+                className="h-16 w-16 rounded-full"
+              />
+            )}
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{home.name}</h2>
+              {home.role && <p className="text-sm text-gray-500 dark:text-gray-400">{home.role}</p>}
+              <div className="flex gap-3 pt-1">
+                {home.links.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="text-sm text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+              {home.sourceRepo && (
+                <p className="text-sm text-gray-400 dark:text-gray-500">
+                  {home.aiTag ? (
+                    <>
+                      <Link
+                        href={`/tags/${home.aiTag}`}
+                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                      >
+                        AI
+                      </Link>{' '}
+                      posts
+                    </>
+                  ) : (
+                    'Posts'
+                  )}{' '}
+                  written by{' '}
+                  <Link
+                    href={home.sourceRepo}
+                    className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                  >
+                    Ghostpen
+                  </Link>
+                  {home.howItWorks && (
+                    <>
+                      {' � '}
+                      <Link
+                        href={home.howItWorks}
+                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                      >
+                        How it works
+                      </Link>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
-            <p className="text-sm text-gray-400 dark:text-gray-500">
-              <Link
-                href="/tags/ai"
-                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                AI
-              </Link>{' '}
-              posts written by{' '}
-              <Link
-                href="https://github.com/tyu41275/ghostpen"
-                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                Ghostpen
-              </Link>
-              {' � '}
-              <Link
-                href="/blog/2026-03-18-how-i-built-a-blog-that-writes-itself"
-                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                How it works
-              </Link>
-            </p>
           </div>
-        </div>
+        ) : (
+          <LegacyIntro />
+        )}
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
           {!posts.length && 'No posts found.'}
           {/* {posts.slice(0, MAX_DISPLAY).map((post) => { */}
