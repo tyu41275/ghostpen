@@ -33,7 +33,7 @@ const WEB = /\b(?!file:)[A-Za-z][\w+.-]*:\/\/[^\s"'`<>()[\]]+/gu;
 /** A path on its own, not inside a word or a name: no word character, dot or dash right before it; a drive letter not after a slash either. */
 const LEAD = String.raw`(?<![\w.-])`;
 const MACHINE = [
-  { what: "a Windows drive path", re: new RegExp(String.raw`(?<![\w./\\-])[A-Za-z]:[\\/]+(?:Repos|Users|Projects|src|code)\b`, "gu") },
+  { what: "a Windows drive path", re: new RegExp(String.raw`(?<![\w./\\-])[A-Za-z]:[\\/]+[\w$.-]+`, "gu") },
   { what: "a Mac user folder", re: new RegExp(String.raw`${LEAD}/Users/[A-Za-z][\w.-]*/`, "gu") },
   { what: "a home folder", re: new RegExp(String.raw`${LEAD}/home/([a-z_][\w-]*)/`, "gu"), user: 1 },
 ] as const;
@@ -83,6 +83,8 @@ describe("the repository is portable and installs no Claude hook (ghostpen#86)",
     // A file address is a path on the machine; so is a path right after a web address.
     expect(findings("f.ts", 'open("file:///home/alex/x"); fetch("https://example.test/") + "/home/alex/y"')).toEqual([
       "f.ts:1: a home folder (/home/alex/)", "f.ts:1: a home folder (/home/alex/)"]);
+    // Any folder on a drive, not only the usual ones.
+    expect(findings("g.ts", 'root = "C:/workspace/ghostpen"; other = "e:\\\\work"')).toEqual(["g.ts:1: a Windows drive path (C:/workspace)", "g.ts:1: a Windows drive path (e:\\\\work)"]);
     expect(findings("d.ts", 'fetch("https://example.test/C:/Repos/docs"); const p = "D:\\\\Projects\\\\x";')).toEqual(["d.ts:1: a Windows drive path (D:\\\\Projects)"]);
   });
 
