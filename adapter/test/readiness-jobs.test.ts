@@ -140,6 +140,18 @@ describe("drafting", () => {
       .toMatchObject({ state: "failing", why: "draft.stackMap.command[0]: the file is missing (and 1 more)" });
   });
 
+  it("names a configured diagram file that is missing, is not a flowchart or draws no arrows, never its path", async () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, "ok.mmd"), "flowchart LR\n  a[Clock] --> b[Tempo]\n");
+    writeFileSync(join(dir, "pie.mmd"), "pie\n  \"x\": 1\n");
+    writeFileSync(join(dir, "none.mmd"), "flowchart LR\n  a[Clock]\n");
+    const files = (...names: string[]) => installed({ draft: { writer: { command: [sh()] }, diagramFiles: names.map((n) => join(dir, n)) } }).read("drafting");
+    expect((await files("ok.mmd")).state).toBe("working");
+    expect(await files("ok.mmd", "gone.mmd")).toMatchObject({ state: "failing", why: "draft.diagramFiles[1]: the file is missing" });
+    expect(await files("pie.mmd", "none.mmd")).toMatchObject({ state: "failing", why: "draft.diagramFiles[0]: it is not a Mermaid flowchart (and 1 more)" });
+    expect(await files("none.mmd")).toMatchObject({ state: "failing", why: "draft.diagramFiles[0]: it draws no arrows" });
+  });
+
   it("counts drafts the writer stopped on, quoting none of their problems", async () => {
     const world = installed(writer());
     week(world.dataDir, after(0), [drafted({ status: "error", problem: `${WRITE_FAILED}/private/writer died` }), drafted({ status: "error", problem: `${PR_OPEN_FAILED}x` })]);

@@ -6,9 +6,10 @@
  * Drafting and publishing run in this service; what they last did is kept on each draft in shortlist.json.
  */
 import { constants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { HEARTBEAT_MS } from "../adapter/index.js";
+import { NO_ARROWS, NOT_FLOWCHART, parseDiagramFile } from "../draft/diagram-files.js";
 import { PR_OPEN_FAILED, WRITE_FAILED } from "../publish/jobs.js";
 import { FRESH_MS } from "../ranking/jobs.js";
 import type { DraftState, ShortlistState } from "../shortlist/state.js";
@@ -80,6 +81,15 @@ async function shortlistReading(f: Facts): Promise<Reading> {
   return working(`chatter's adapter last asked at ${iso(last)}`, last);
 }
 
+/** Why a configured diagram file cannot be used, never quoting it or its path; one read that does not block. */
+async function diagramFileProblem(file: string): Promise<string | undefined> {
+  const problem = await fileProblem(file, constants.R_OK);
+  if (problem !== undefined) return problem;
+  let text: string;
+  try { text = await readFile(file, "utf8"); } catch { return "the file cannot be read"; }
+  try { parseDiagramFile(text); return undefined; } catch (error) { return error instanceof Error && error.message === NO_ARROWS ? NO_ARROWS : NOT_FLOWCHART; }
+}
+
 async function draftingReading(f: Facts): Promise<Reading> {
   const { draft } = f.settings;
   if (draft === undefined) return chosenOff("draft is not set, so a Write is kept and nothing is drafted", f);
@@ -87,6 +97,7 @@ async function draftingReading(f: Facts): Promise<Reading> {
     programProblem(draft.writer.command[0]!).then((p) => p && `draft.writer.command[0]: ${p}`),
     draft.stackMap ? programProblem(draft.stackMap.command[0]!).then((p) => p && `draft.stackMap.command[0]: ${p}`) : undefined,
     draft.styleGuide ? fileProblem(draft.styleGuide, constants.R_OK).then((p) => p && `draft.styleGuide: ${p}`) : undefined,
+    ...(draft.diagramFiles ?? []).map((file, i) => diagramFileProblem(file).then((p) => p && `draft.diagramFiles[${i}]: ${p}`)),
   ])).filter((p): p is string => p !== undefined);
   if (problems[0] !== undefined) return failing(`${problems[0]}${more(problems.length - 1)}`, f.now.getTime());
   const kept = await f.shortlists();

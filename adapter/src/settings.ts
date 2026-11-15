@@ -47,6 +47,8 @@ export interface DraftSettings {
   voicePosts: number;
   /** The command that prints the stack map (`relay graph --format json`); unset: diagrams cannot be checked. */
   stackMap?: ScorerSettings;
+  /** Mermaid flowchart files (`.mmd`, absolute, 1 to 10) a diagram may also match, beside or instead of the stack map. */
+  diagramFiles?: string[];
   /** How many times a failed draft is sent back with the check report (0 to 3, default 2). */
   revisions: number;
   /** Pages the writer may screenshot, with what to mask and what counts as private; unset: no screenshots. */
@@ -133,7 +135,7 @@ const whole = (value: unknown, field: string, min: number, max: number): number 
   return value;
 };
 
-/** `draft`: `writer` (required), optional `styleGuide` and `stackMap`, `voicePosts` (default 2), `revisions` (default 2). */
+/** `draft`: `writer` (required), optional `styleGuide`, `stackMap`, `diagramFiles` and `screenshots`, `voicePosts` (default 2), `revisions` (default 2). */
 function parseDraft(raw: unknown): DraftSettings {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: draft must be an object");
   const value = raw as Record<string, unknown>;
@@ -142,5 +144,14 @@ function parseDraft(raw: unknown): DraftSettings {
   if (value.styleGuide !== undefined) draft.styleGuide = absolute(value.styleGuide, "draft.styleGuide");
   if (value.stackMap !== undefined) draft.stackMap = parseScorer(value.stackMap, "draft.stackMap", 60);
   if (value.screenshots !== undefined) draft.screenshots = parseScreenshots(value.screenshots);
+  if (value.diagramFiles !== undefined) draft.diagramFiles = parseDiagramFiles(value.diagramFiles);
   return draft;
+}
+
+/** `draft.diagramFiles`: 1 to 10 different absolute paths. */
+function parseDiagramFiles(raw: unknown): string[] {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 10) throw new Error("settings: draft.diagramFiles must be a list of 1 to 10 absolute paths");
+  const files = raw.map((file, i) => absolute(file, `draft.diagramFiles[${i}]`));
+  files.forEach((file, i) => { if (files.indexOf(file) !== i) throw new Error(`settings: draft.diagramFiles[${i}] is listed twice`); });
+  return files;
 }
