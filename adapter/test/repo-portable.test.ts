@@ -25,7 +25,12 @@ const CODE = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".sh", ".json
 const FIXTURE_USERS = new Set(["someone"]);
 const FIXTURE_DIR = "adapter/test/";
 
-/** A path, not the path part of a web address: no word character, dot or dash right before it (`example.test/Users/…`); a drive letter not after a slash either (`example.test/C:/…`). */
+/**
+ * Web addresses are dropped from a line before its machine paths are looked for: a path in one (`example.test/Users/…`,
+ * `?next=/home/…`, `example.test/C:/…`) is the site's, not a machine's. A `file:` address is a machine's path, so it stays.
+ */
+const WEB = /\b(?!file:)[A-Za-z][\w+.-]*:\/\/[^\s"'`<>()[\]]+/gu;
+/** A path on its own, not inside a word or a name: no word character, dot or dash right before it; a drive letter not after a slash either. */
 const LEAD = String.raw`(?<![\w.-])`;
 const MACHINE = [
   { what: "a Windows drive path", re: new RegExp(String.raw`(?<![\w./\\-])[A-Za-z]:[\\/]+(?:Repos|Users|Projects|src|code)\b`, "gu") },
@@ -51,8 +56,9 @@ export function codeFiles(root: string, dir = root): string[] {
 export function findings(file: string, text: string): string[] {
   const found: string[] = [];
   text.split("\n").forEach((line, index) => {
+    const paths = line.replace(WEB, " ");
     for (const rule of [...MACHINE, ...HOOK]) {
-      for (const match of line.matchAll(rule.re)) {
+      for (const match of (MACHINE.includes(rule as (typeof MACHINE)[number]) ? paths : line).matchAll(rule.re)) {
         if ("user" in rule && file.startsWith(FIXTURE_DIR) && FIXTURE_USERS.has(match[rule.user]!)) continue;
         found.push(`${file}:${index + 1}: ${rule.what} (${match[0]})`);
       }
@@ -73,6 +79,10 @@ describe("the repository is portable and installs no Claude hook (ghostpen#86)",
     expect(findings("b.ts", 'const url = "https://example.com/home/page"; const p = join(homedir(), "x");')).toEqual([]);
     // The path part of a web address is not a machine's folder.
     expect(findings("c.ts", 'fetch("https://example.test/Users/alex/profile"); open("http://h.example/home/alex/x/")')).toEqual([]);
+    expect(findings("e.ts", 'go("https://example.test/?next=/Users/alex/profile#/home/alex/x"); go(`https://h.example/a?b=/home/alex/c`)')).toEqual([]);
+    // A file address is a path on the machine; so is a path right after a web address.
+    expect(findings("f.ts", 'open("file:///home/alex/x"); fetch("https://example.test/") + "/home/alex/y"')).toEqual([
+      "f.ts:1: a home folder (/home/alex/)", "f.ts:1: a home folder (/home/alex/)"]);
     expect(findings("d.ts", 'fetch("https://example.test/C:/Repos/docs"); const p = "D:\\\\Projects\\\\x";')).toEqual(["d.ts:1: a Windows drive path (D:\\\\Projects)"]);
   });
 
