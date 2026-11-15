@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PR_OPEN_FAILED, WRITE_FAILED } from "../src/publish/jobs.js";
@@ -157,8 +157,10 @@ describe("drafting", () => {
 describe("publishing", () => {
   const tools = () => { const dir = programIn("git"); programIn("gh", 0o755, dir); vi.stubEnv("PATH", dir); };
   const repo = () => { const dir = tempDir(); mkdirSync(join(dir, ".git")); return dir; };
-  const publishing = (repoDir = repo(), extra: Record<string, unknown> = {}) =>
-    installed({ draft: { writer: { command: [sh()] } }, publish: { repoDir, repo: "owner/blog", ...extra } });
+  /** The published-post index reads the clone's posts folder, as docs/publishing.md says (ghostpen#129). */
+  const publishing = (repoDir = repo(), extra: Record<string, unknown> = {}, blogDir: string | null = join(repoDir, "data", "blog")) =>
+    installed({ draft: { writer: { command: [sh()] } }, publish: { repoDir, repo: "owner/blog", ...extra },
+      ...(blogDir === null ? {} : { sources: { published: { blogDir, baseUrl: "https://blog.example" } } }) });
 
   it("is chosen off with no publish, and not_set_up with no draft", async () => {
     expect((await installed().read("publishing")).state).toBe("chosen_off");
@@ -177,6 +179,22 @@ describe("publishing", () => {
     expect(await publishing(repo(), { reviewCommand: ["no-such-review"] }).read("publishing")).toMatchObject({ why: "publish.reviewCommand[0]: it is not found on PATH" });
     vi.stubEnv("PATH", programIn("git"));
     expect(await publishing().read("publishing")).toMatchObject({ state: "failing", why: "gh: it is not found on PATH" });
+  });
+
+  it("fails while a post Publish merges would never reach the published-post index (ghostpen#129)", async () => {
+    tools();
+    const index = "so a post Publish merges never reaches the published-post index";
+    expect(await publishing(repo(), {}, null).read("publishing")).toMatchObject({ state: "failing", why: `sources.published is not set, ${index}` });
+    expect(await publishing(repo(), {}, tempDir()).read("publishing"))
+      .toMatchObject({ state: "failing", why: `sources.published.blogDir is not publish.repoDir's postsDir folder, ${index}` });
+    // The same folder through a link, or before the clone has made it: working.
+    const clone = repo(), link = join(tempDir(), "blog");
+    mkdirSync(join(clone, "data", "blog"), { recursive: true });
+    symlinkSync(join(clone, "data", "blog"), link);
+    expect((await publishing(clone, {}, link).read("publishing")).state).toBe("working");
+    expect((await publishing(repo(), { postsDir: "posts" }, null).read("publishing")).why).toContain("sources.published is not set");
+    const fresh = repo();
+    expect((await publishing(fresh, { postsDir: "posts" }, join(fresh, "posts")).read("publishing")).state).toBe("working");
   });
 
   it("counts drafts whose pull request did not open or whose merge failed, quoting none", async () => {

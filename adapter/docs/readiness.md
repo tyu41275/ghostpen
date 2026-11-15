@@ -69,4 +69,6 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
   15 minutes. Drafts that are ready, held or failed their checks are `working`: their cards already ask the operator.
 - `publishing` (`publish`): `chosen_off` with no setting, `not_set_up` with no `draft`. `failing` when `repoDir` is not a
   folder that can be written holding `.git`, when `git` or `gh` is not found on `PATH`, when the review command's program
-  cannot be run, or when a draft's pull request could not be opened or its merge failed (counted, never quoted).
+  cannot be run, when `sources.published` is unset or its `blogDir` is not `repoDir`'s `postsDir` folder (through links;
+  so a merged post would never reach the published-post index, ghostpen#129), or when a draft's pull request could not
+  be opened or its merge failed (counted, never quoted).

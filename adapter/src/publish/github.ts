@@ -54,21 +54,43 @@ function prBody(draft: Draft, preview: string | undefined): string {
  * its first branch, and so its pull request, even when its title changed.
  */
 export async function openPostPr(settings: PublishSettings, draft: Draft, date: string, run: Run = runIn, branch = branchOf(draft)): Promise<PostPr> {
+  const cwd = settings.repoDir, written: string[] = [];
+  let failure: unknown = null;
+  try {
+    await run(["git", "fetch", "origin", settings.base], { cwd });
+    return await postOnBranch(settings, draft, date, run, branch, written);
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    // Back on the base, so the published-post index (sources.published.blogDir, the clone's posts folder) never reads
+    // the unmerged post as published (ghostpen#129). A file this left untracked goes too. A failure here never hides the
+    // first one; on its own it fails the open, as the index would be wrong.
+    try {
+      await run(["git", "checkout", "-f", "-B", settings.base, `origin/${settings.base}`], { cwd });
+      if (written.length) await run(["git", "clean", "-f", "-q", "--", ...written], { cwd });
+    } catch (error) {
+      if (failure === null) throw error;
+    }
+  }
+}
+
+/** The post and its screenshots committed on `branch` and pushed, and its pull request opened or updated; `written` gets each file it writes. */
+async function postOnBranch(settings: PublishSettings, draft: Draft, date: string, run: Run, branch: string, written: string[]): Promise<PostPr> {
   const cwd = settings.repoDir;
   const slug = slugOf(draft.title);
-  await run(["git", "fetch", "origin", settings.base], { cwd });
   await run(["git", "checkout", "-f", "-B", branch, `origin/${settings.base}`], { cwd });
   const file = join(settings.postsDir, `${slug}.mdx`);
   mkdirSync(join(cwd, settings.postsDir), { recursive: true });
+  written.push(file);
   writeFileSync(join(cwd, file), postText(draft, date, slug, settings.imagesUrl));
-  const paths = [file];
   for (const [name, png] of Object.entries(draft.screenshots ?? {})) {
     const target = join(settings.imagesDir, slug, `${name}.png`);
     mkdirSync(join(cwd, settings.imagesDir, slug), { recursive: true });
+    written.push(target);
     copyFileSync(png, join(cwd, target));
-    paths.push(target);
   }
-  await run(["git", "add", "--", ...paths], { cwd });
+  await run(["git", "add", "--", ...written], { cwd });
   await run(["git", "commit", "-m", `Post: ${draft.title} (drafted by ghostpen)`], { cwd });
   const head = (await run(["git", "rev-parse", "HEAD"], { cwd })).trim();
   await run(["git", "push", "-f", "origin", branch], { cwd });
