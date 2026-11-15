@@ -23,10 +23,10 @@ const CODE = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".sh", ".json
 /** Test fixtures stand for "a path on some machine" with these names; the privacy checks must see them redacted. */
 const FIXTURE_USERS = new Set(["someone"]);
 
-/** A path, not the path part of a web address: no word character, dot or dash right before it (`example.test/Users/…`). */
+/** A path, not the path part of a web address: no word character, dot or dash right before it (`example.test/Users/…`); a drive letter not after a slash either (`example.test/C:/…`). */
 const LEAD = String.raw`(?<![\w.-])`;
 const MACHINE = [
-  { what: "a Windows drive path", re: /\b[A-Za-z]:[\\/]+(?:Repos|Users|Projects|src|code)\b/gu },
+  { what: "a Windows drive path", re: new RegExp(String.raw`(?<![\w./\\-])[A-Za-z]:[\\/]+(?:Repos|Users|Projects|src|code)\b`, "gu") },
   { what: "a Mac user folder", re: new RegExp(String.raw`${LEAD}/Users/[A-Za-z][\w.-]*/`, "gu") },
   { what: "a home folder", re: new RegExp(String.raw`${LEAD}/home/([a-z_][\w-]*)/`, "gu"), user: 1 },
 ] as const;
@@ -69,6 +69,7 @@ describe("the repository is portable and installs no Claude hook (ghostpen#86)",
     expect(findings("b.ts", 'const url = "https://example.com/home/page"; const p = join(homedir(), "x");')).toEqual([]);
     // The path part of a web address is not a machine's folder.
     expect(findings("c.ts", 'fetch("https://example.test/Users/alex/profile"); open("http://h.example/home/alex/x/")')).toEqual([]);
+    expect(findings("d.ts", 'fetch("https://example.test/C:/Repos/docs"); const p = "D:\\\\Projects\\\\x";')).toEqual(["d.ts:1: a Windows drive path (D:\\\\Projects)"]);
   });
 
   it("holds no machine-specific path or Claude hook in any code file", () => {
