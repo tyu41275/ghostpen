@@ -8,6 +8,15 @@ cd "$(dirname "$0")/.."
 yarn_js=$(sed -n 's/^yarnPath: *//p' .yarnrc.yml)
 yarn() { node "$PWD/$yarn_js" "$@"; }
 export HUSKY=0
-yarn install --immutable
+# A crashing yarn prints its whole minified source line, which buries the error itself in a check's log: keep its output
+# in a file and print only its last readable lines when it fails.
+log=$(mktemp "${RUNNER_TEMP:-${TMPDIR:?set RUNNER_TEMP or TMPDIR}}/ghostpen-yarn-install.XXXXXX")
+if ! yarn install --immutable >"$log" 2>&1; then
+  echo "build-e2e-sites: yarn install failed; the end of its output (long lines cut):" >&2
+  cut -c1-400 "$log" | tail -n 40 >&2
+  rm -f "$log"
+  exit 1
+fi
+rm -f "$log"
 GHOSTPEN_DIST_DIR=.next-e2e-legacy yarn build
 GHOSTPEN_DIST_DIR=.next-e2e-sample GHOSTPEN_CONTENT_DIR="$PWD/content-sample" yarn build
