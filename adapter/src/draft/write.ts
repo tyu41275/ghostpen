@@ -3,7 +3,7 @@
  * every check, and send a failed draft back with the check report up to `draft.revisions` times. A draft held for a
  * background post stops at once: rewording cannot write that post. So does one whose post links cannot be checked (the
  * blog's sitemap unread): it fails, as rewording cannot read the sitemap. Every draft is kept in `dataDir/drafts/` with its
- * report, ready, held or failed; nothing is published from here (Tim approves every post, brief D14).
+ * report, ready, held or failed; nothing is published from here (the operator approves every post).
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";

@@ -5,10 +5,10 @@
 # stack.yaml (--stack) allows ghostpen, and does not switch ghostpen on: that is the chatter Adapters page or direct
 # chat (ADR 0030).
 #
-#   adapter/scripts/install-host.sh --instance personal-comms-host --root ~/.ductor/host-chatter/ghostpen \
-#     --port 8794 --dropin-dir ~/.ductor/host-chatter/adapters.d \
-#     --stack <Obsidian checkout>/ensemble/personal-instances/personal-comms-host/config/stack.yaml \
-#     [--chatter-facts ~/.ductor/host-chatter/runtime/data/instance-facts.json] \
+#   adapter/scripts/install-host.sh --instance <instance> --root <chatter home>/ghostpen \
+#     --port 8794 --dropin-dir <chatter home>/adapters.d \
+#     --stack <the instance's stack.yaml in the notes repository> \
+#     [--chatter-facts <chatter home>/runtime/data/instance-facts.json] \
 #     [--readiness off]    # on unless given: the drop-in declares the readiness list (docs/readiness.md)
 set -euo pipefail
 # Tests only: a stand-in for systemctl; skipping the build of an already built checkout; a shorter wait for a restarted
@@ -36,7 +36,7 @@ UNIT="ghostpen-$INSTANCE.service"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$HERE/node_modules/yaml/package.json" ] || (cd "$HERE" && npm ci --no-audit --no-fund --silent)
 node "$HERE/scripts/allowed-here.mjs" "$STACK" "$INSTANCE" || exit 1
-[ -d "$CHECKOUT/.git" ] || { echo "no checkout at $CHECKOUT: clone tyu41275/ghostpen there first" >&2; exit 1; }
+[ -d "$CHECKOUT/.git" ] || { echo "no checkout at $CHECKOUT: clone the ghostpen repo there first" >&2; exit 1; }
 
 install -d -m 700 "$CONFIG" "$DATA"
 [ -n "${GHOSTPEN_INSTALL_SKIP_BUILD:-}" ] || (cd "$ADAPTER" && npm ci --no-audit --no-fund --silent && npm run -s build)

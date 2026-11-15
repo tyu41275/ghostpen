@@ -11,7 +11,7 @@ import { parseSettings } from "../src/settings.js";
 import { readShortlists, saveShortlists, type DraftState } from "../src/shortlist/state.js";
 import { KEY, keyFile, tempDir } from "./helpers.js";
 
-const OPERATOR = "234652039735541760";
+const OPERATOR = "200000000000000001";
 const WEEK = "2026-10-26";
 const PR = { number: 7, url: "https://github.com/o/blog/pull/7", branch: "ghostpen/t" };
 const servers: Server[] = [];

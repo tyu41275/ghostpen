@@ -22,7 +22,7 @@ async function app(ranking?: unknown, feedback?: unknown[]): Promise<string> {
   const dataDir = tempDir();
   if (ranking !== undefined) writeFileSync(join(dataDir, "ranking.json"), typeof ranking === "string" ? ranking : JSON.stringify(ranking));
   if (feedback !== undefined) writeFileSync(join(dataDir, "feedback.json"), JSON.stringify({ version: 1, entries: feedback }));
-  const server = createGhostpenServer({ instance: "personal-comms-host", dataDir, appKey: KEY, now: () => NOW });
+  const server = createGhostpenServer({ instance: "instance-a", dataDir, appKey: KEY, now: () => NOW });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   closers.push(() => server.close());
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}/app/`;
@@ -32,11 +32,11 @@ const signed = (login: string) => ({ "x-chatter-identity": identity({ aud: "ghos
 
 describe("ghostpen app page", () => {
   it("shows a signed viewer what ghostpen does and that nothing is ranked yet, with their name escaped", async () => {
-    const page = await (await browser.newContext({ extraHTTPHeaders: signed("<b>tim</b>") })).newPage();
+    const page = await (await browser.newContext({ extraHTTPHeaders: signed("<b>teo</b>") })).newPage();
     const response = await page.goto(await app());
     expect(response?.status()).toBe(200);
-    expect(await page.locator("h1").innerText()).toBe("ghostpen — personal-comms-host");
-    expect(await page.locator("header p").innerText()).toContain("Signed in as <b>tim</b>");
+    expect(await page.locator("h1").innerText()).toBe("ghostpen — instance-a");
+    expect(await page.locator("header p").innerText()).toContain("Signed in as <b>teo</b>");
     expect(await page.locator("header b").count()).toBe(0); // the login is text, never markup
     expect(await page.locator("[data-section=about] h2").innerText()).toBe("What ghostpen does");
     expect(await page.locator("[data-section=about] p").innerText()).toContain("Nothing is published until you press Publish.");
@@ -62,7 +62,7 @@ describe("ghostpen app page", () => {
         defined: [{ where: "/g/chatter/docs/CONTEXT.md:3", text: "The checks on every change." }] }],
       owed: [{ decision: "d:0022", title: "ADR 0022", bookedAt: "2026-10-01T00:00:00Z", due: true, evidence: ["gh:o/r#9"] }],
       problems: ["github: o/r cannot be read (GitHub answered 404)"] };
-    const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
+    const page = await (await browser.newContext({ extraHTTPHeaders: signed("teo") })).newPage();
     await page.goto(await app(ranking));
     const rows = page.locator("[data-section=ranking] tbody tr");
     expect(await rows.count()).toBe(2);
@@ -87,8 +87,8 @@ describe("ghostpen app page", () => {
   it("shows what the operator told ghostpen: context under its topic, every note newest first, as text", async () => {
     const ranking = { ranAt: "2026-10-25T00:00:00.000Z", problems: [], background: [], owed: [], entries: [
       { id: "d:1", kind: "decision", title: "ADR 1", topic: "One timer app", takeaway: "Fewer timers", total: 6, explain: [], location: "/o/1.md:1", scores: [] }] };
-    const note = (kind: string, text: string, action?: string) => ({ at: "2026-10-26T14:00:00Z", by: "234652039735541760", topic: "d:1", kind, text, intake: "pending", ...(action ? { action } : {}) });
-    const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
+    const note = (kind: string, text: string, action?: string) => ({ at: "2026-10-26T14:00:00Z", by: "200000000000000001", topic: "d:1", kind, text, intake: "pending", ...(action ? { action } : {}) });
+    const page = await (await browser.newContext({ extraHTTPHeaders: signed("teo") })).newPage();
     await page.goto(await app(ranking, [note("reason", "Others would find it useful", "write"), note("context", "We tried <b>three</b> timers first"),
       note("question", "Why first?"), note("answer", "It saved two hours a week.")]));
     expect(await page.locator("[data-candidate='d:1'] [data-field=context] li").allInnerTexts()).toEqual(["Your context: We tried <b>three</b> timers first"]);
@@ -104,7 +104,7 @@ describe("ghostpen app page", () => {
     for (const content of ["{ broken", "{}", "[]", JSON.stringify({ ...base, entries: {} }), JSON.stringify({ ...base, entries: [null] }),
       JSON.stringify({ ...base, entries: [{ ...goodEntry, scores: [{ factor: "stakes" }] }] }), JSON.stringify({ ...base, entries: [{ ...goodEntry, explain: "x" }] }),
       JSON.stringify({ ...base, background: [{ part: "ci" }] }), JSON.stringify({ ...base, owed: [{ decision: "d" }] }), JSON.stringify({ ...base, problems: [1] })]) {
-      const page = await (await browser.newContext({ extraHTTPHeaders: signed("tim") })).newPage();
+      const page = await (await browser.newContext({ extraHTTPHeaders: signed("teo") })).newPage();
       const response = await page.goto(await app(content));
       expect(response?.status()).toBe(200);
       expect(await page.locator("[data-error=ranking]").innerText()).toMatch(/^The last ranking cannot be read: /u);

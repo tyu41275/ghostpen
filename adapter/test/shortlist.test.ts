@@ -56,7 +56,7 @@ describe("the picks", () => {
     const text = proposalText(entry("a", 10, ["ci"]), 1);
     expect(text).toBe('**#1 Topic a** (Decision post, score 10)\nWhy: stakes 3/3: "CI is the main delivery bottleneck"\nA reader leaves with: Takeaway a\nNeeds first: a post explaining ci.');
   });
-  it("leaves out what Tim wrote or skipped, brings back Not yet, and adds no background post that unlocks only one", () => {
+  it("leaves out what the operator wrote or skipped, brings back Not yet, and adds no background post that unlocks only one", () => {
     const answered = { ...fresh, choices: [{ candidate: "a", choice: "write" as const, reason: "", at: "", scores: [] },
       { candidate: "c", choice: "skip" as const, reason: "narrow", at: "", scores: [] }, { candidate: "d", choice: "not-yet" as const, reason: "", at: "", scores: [] }] };
     expect(picks(view(), answered, 3).map((i) => i.id)).toEqual(["b", "d", "e"]);
@@ -85,7 +85,7 @@ async function service(over: Record<string, unknown> = {}, ranking: unknown = vi
   const facts = join(dataDir, "instance-facts.json");
   writeFileSync(facts, JSON.stringify({ adapterChannels: { ghostpen: { name: "ghostpen", channelId: "1563701613099745320" } } }));
   const settings = parseSettings({ instance: "host", port: 8794, dataDir, instanceFactsFile: facts,
-    shortlist: { operator: "234652039735541760", day: "monday", time: "09:00", timeZone: "America/New_York", count: 3 }, ...over });
+    shortlist: { operator: "200000000000000001", day: "monday", time: "09:00", timeZone: "America/New_York", count: 3 }, ...over });
   let now = Date.parse(nowIso);
   const ranker = rank ? new RankJobs(settings, { rank, now: () => new Date(now) }) : undefined;
   const server = createGhostpenServer({ instance: "host", dataDir, settings, adapterKey: KEY, now: () => now, ...(ranker ? { ranker } : {}) });
@@ -109,7 +109,7 @@ describe("the adapter routes", () => {
   it("make this week's shortlist once, from the last ranking, for the channel chatter made for ghostpen", async () => {
     const { call } = await service();
     const first = await call("GET", "/v1/adapter/shortlist");
-    expect(first.body).toMatchObject({ week: "2026-10-26", channel: "1563701613099745320", operator: "234652039735541760" });
+    expect(first.body).toMatchObject({ week: "2026-10-26", channel: "1563701613099745320", operator: "200000000000000001" });
     expect(first.body.items.map((i: any) => [i.index, i.id, i.answered])).toEqual([[0, "background:ci", false], [1, "a", false], [2, "b", false]]);
     const again = await call("GET", "/v1/adapter/shortlist");
     expect(again.body.items.map((i: any) => i.id)).toEqual(["background:ci", "a", "b"]); // fixed for the week
@@ -127,20 +127,20 @@ describe("the adapter routes", () => {
     expect((await call("POST", "/v1/adapter/shortlist/posted", { week, index: 1, channelRef: "c1", messageRef: "m1" })).body).toEqual({ ok: true });
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", reason: "useful", user: "1234567" })).body.refused)
       .toBe("Only the operator can answer ghostpen's shortlist, so nothing was done.");
-    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: " ", user: "234652039735541760" })).body.refused)
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: " ", user: "200000000000000001" })).body.refused)
       .toBe("A Skip needs a reason, so nothing was done.");
     // Every press needs its reason now, a Write and a Not yet too (ADR 0101, amended 2026-10-25).
-    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "234652039735541760" })).body.refused)
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "200000000000000001" })).body.refused)
       .toBe("A Write needs a reason, so nothing was done.");
-    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "", user: "234652039735541760" })).body.refused)
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "", user: "200000000000000001" })).body.refused)
       .toBe("A Not yet needs a reason, so nothing was done.");
-    const wrote = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", reason: "Others would find it useful", chip: true, user: "234652039735541760" });
+    const wrote = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", reason: "Others would find it useful", chip: true, user: "200000000000000001" });
     expect(wrote.body.posted).toEqual({ channelRef: "c1", messageRef: "m1" });
-    expect(wrote.body.text).toMatch(/\*\*Write: next to draft\*\* \(<@234652039735541760>: Others would find it useful\)$/u);
-    const skipped = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: "too narrow", user: "234652039735541760" });
-    expect(skipped.body.text).toMatch(/\*\*Skipped\*\* \(<@234652039735541760>: too narrow\)$/u);
-    await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "waiting", user: "234652039735541760" });
-    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "skip", reason: "x", user: "234652039735541760" })).body.already).toBe(true);
+    expect(wrote.body.text).toMatch(/\*\*Write: next to draft\*\* \(<@200000000000000001>: Others would find it useful\)$/u);
+    const skipped = await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: "too narrow", user: "200000000000000001" });
+    expect(skipped.body.text).toMatch(/\*\*Skipped\*\* \(<@200000000000000001>: too narrow\)$/u);
+    await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "waiting", user: "200000000000000001" });
+    expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "skip", reason: "x", user: "200000000000000001" })).body.already).toBe(true);
     // A reason given on a card answered already is kept too; the answer itself does not change.
     expect(readFeedback(dataDir).at(-1)).toMatchObject({ topic: "a", action: "skip", text: "x" });
     const choices = readChoices(dataDir);
@@ -158,7 +158,7 @@ describe("the adapter routes", () => {
 
   it("refuse a shortlist setting it cannot use, naming the field", () => {
     const base = { instance: "x", port: 8794, dataDir: "/d" };
-    expect(() => parseSettings({ ...base, shortlist: { operator: "tim" } })).toThrow("shortlist.operator must be a Discord user id");
+    expect(() => parseSettings({ ...base, shortlist: { operator: "teo" } })).toThrow("shortlist.operator must be a Discord user id");
     expect(() => parseSettings({ ...base, shortlist: { operator: "123456", count: 6 } })).toThrow("shortlist.count must be 3 to 5");
     expect(parseSettings({ ...base, shortlist: { operator: "123456" } }).shortlist).toEqual({ day: "monday", time: "09:00", timeZone: "UTC", operator: "123456", count: 5 });
   });

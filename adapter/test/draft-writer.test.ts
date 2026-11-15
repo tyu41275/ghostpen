@@ -215,7 +215,7 @@ describe("drafting a post", () => {
     expect(ok.status).toBe("ready");
     expect(Object.keys(ok.screenshots)).toEqual(["console"]);
     expect(ok.report.checks.at(-1)).toEqual({ name: "Screenshots show nothing private", passed: true, findings: [] });
-    const bad = await draftNow(settings, ID, { write: async () => answer(markdown), capture: async () => ({ png: Buffer.from("P"), text: ["tim@example.com"], unreadable: [] }) });
+    const bad = await draftNow(settings, ID, { write: async () => answer(markdown), capture: async () => ({ png: Buffer.from("P"), text: ["teo@example.com"], unreadable: [] }) });
     expect(bad).toMatchObject({ status: "failed", screenshots: {} });
     expect(existsSync(ok.screenshots.console!)).toBe(false); // the earlier run's picture is gone too
     expect(bad.report.passed).toBe(false);

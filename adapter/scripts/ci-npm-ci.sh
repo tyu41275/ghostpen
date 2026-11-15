@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# `npm ci --no-audit --no-fund` for the check runner's jobs (.ci/checks.json), with a deadline per attempt (tyu41275/Clock#34, tyu41275/Clock#57; copied from Reflection).
+# `npm ci --no-audit --no-fund` for the check runner's jobs (.ci/checks.json), with a deadline per attempt (Clock#34, Clock#57; copied from Reflection).
 # On the CI VMs about one install in twelve hangs: a registry connection stops mid-download or mid-TLS-handshake behind the
-# VMs' NAT and the kernel holds it ~15.5 min (tyu41275/chatter-ops#151); a good install takes seconds. --fetch-timeout fails a
+# VMs' NAT and the kernel holds it ~15.5 min (chatter-ops#151); a good install takes seconds. --fetch-timeout fails a
 # stalled download after 60 s so npm retries it; a hung attempt is stopped at the deadline, its last requests are printed
 # and the install starts again (npm ci removes node_modules first). Any other failure exits at once with npm's own status.
 # NPM_CI_DEADLINE_S (default 180), NPM_CI_ATTEMPTS (default 3) and NPM_CI_KILL_AFTER_S (default 10: a hung npm ignores

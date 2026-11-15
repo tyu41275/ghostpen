@@ -17,12 +17,12 @@ describe("adapter", () => {
 
   it("says ghostpen is on when its service answers", async () => {
     const dir = tempDir();
-    const server = createGhostpenServer({ instance: "personal-comms-host", dataDir: dir });
+    const server = createGhostpenServer({ instance: "instance-a", dataDir: dir });
     servers.push(server);
     await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
     const port = (server.address() as { port: number }).port;
     expect(await status.execute({}, ctx({ settingsFile: settingsFile(dir, { port }) })))
-      .toBe("ghostpen for personal-comms-host is on and answering.");
+      .toBe("ghostpen for instance-a is on and answering.");
   });
 
   it("says why when the service does not answer, and never throws", async () => {
@@ -43,7 +43,7 @@ describe("adapter", () => {
       await new Promise<void>((done) => other.listen(0, "127.0.0.1", done));
       const port = (other.address() as { port: number }).port;
       expect(await status.execute({}, ctx({ settingsFile: settingsFile(dir, { port }) })))
-        .toBe(`ghostpen is not answering (something else answers on port ${port} (not ghostpen for personal-comms-host)).`);
+        .toBe(`ghostpen is not answering (something else answers on port ${port} (not ghostpen for instance-a)).`);
     }
   });
 });

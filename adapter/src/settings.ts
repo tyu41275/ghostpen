@@ -15,7 +15,7 @@ export interface GhostpenSettings {
   instance: string;
   /** The service's loopback port (1024 to 65535): its health and app, which chatter and the adapter read. */
   port: number;
-  /** Absolute folder for ghostpen's own state (rankings, Tim's picks and skips); it must already exist. */
+  /** Absolute folder for ghostpen's own state (rankings, the operator's picks and skips); it must already exist. */
   dataDir: string;
   /**
    * The app identity key file chatter's console signs with (ADR 0030, pattern `adapter-app`): base64url text of at

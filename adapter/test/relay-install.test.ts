@@ -10,8 +10,8 @@ function world() {
   const checkout = join(home, "ghostpen", "checkout");
   const instances = join(home, "obsidian", "ensemble", "personal-instances");
   mkdirSync(checkout, { recursive: true });
-  mkdirSync(join(instances, "personal-comms-host", "config"), { recursive: true });
-  const env: Record<string, string> = { RELAY_INSTANCE: "personal-comms-host", RELAY_INSTANCES_ROOT: instances,
+  mkdirSync(join(instances, "instance-a", "config"), { recursive: true });
+  const env: Record<string, string> = { RELAY_INSTANCE: "instance-a", RELAY_INSTANCES_ROOT: instances,
     RELAY_INPUT_PORT: "8794", RELAY_INPUT_DROPIN_DIR: join(home, "adapters.d") };
   return { home, checkout, instances, env };
 }
@@ -23,8 +23,8 @@ describe("relay-install.mjs", () => {
     expect(OPTIONAL_INPUTS).toEqual(["chatter_facts", "readiness"]);
     expect(installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "/run/facts.json" }, checkout, checkout).slice(-2)).toEqual(["--chatter-facts", "/run/facts.json"]);
     expect(() => installArgs({ ...env, RELAY_INPUT_CHATTER_FACTS: "facts.json" }, checkout, checkout)).toThrow("chatter_facts input must be an absolute path");
-    expect(installArgs(env, checkout, checkout)).toEqual(["--instance", "personal-comms-host", "--root", join(home, "ghostpen"),
-      "--port", "8794", "--dropin-dir", join(home, "adapters.d"), "--stack", join(instances, "personal-comms-host", "config", "stack.yaml")]);
+    expect(installArgs(env, checkout, checkout)).toEqual(["--instance", "instance-a", "--root", join(home, "ghostpen"),
+      "--port", "8794", "--dropin-dir", join(home, "adapters.d"), "--stack", join(instances, "instance-a", "config", "stack.yaml")]);
   });
 
   it("hands the readiness input to install-host.sh only when given, and refuses one that is not on or off", () => {

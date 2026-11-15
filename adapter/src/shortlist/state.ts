@@ -1,6 +1,6 @@
 /**
- * The shortlists ghostpen has made (`dataDir/shortlist.json`): per week, its items, where each was posted and how Tim
- * answered it. A week's items are fixed when it is first asked for, so every press answers the card it was on.
+ * The shortlists ghostpen has made (`dataDir/shortlist.json`): per week, its items, where each was posted and how the
+ * operator answered it. A week's items are fixed when it is first asked for, so every press answers the card it was on.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

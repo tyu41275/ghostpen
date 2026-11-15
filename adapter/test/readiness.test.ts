@@ -123,7 +123,7 @@ describe("GET /readiness", () => {
 
   it("leaves /health and the unkeyed adapter routes as they were, and answers only GET", async () => {
     const world = installed(), port = await started(world.file);
-    expect(JSON.parse((await asked(port, "/health")).body)).toEqual({ ok: true, instance: "personal-comms-host", version: "0.1.0" });
+    expect(JSON.parse((await asked(port, "/health")).body)).toEqual({ ok: true, instance: "instance-a", version: "0.1.0" });
     expect(await asked(port, "/v1/adapter/shortlist")).toMatchObject({ status: 404, body: JSON.stringify({ error: "not found" }) });
     expect((await asked(port, READINESS_PATH, "POST")).status).toBe(404);
   });

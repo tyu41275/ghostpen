@@ -18,7 +18,7 @@ const REPORT = { passed: true, grade: 4, hold: [], later: [], checks: [{ name: "
 const draft = (over: Partial<Draft> = {}): Draft => ({ id: "d:1", kind: "decision", status: "ready", title: "Why we use one timer", summary: "It's simpler.",
   tags: ["ops"], markdown: "We picked one timer.\n\n![the console](screenshot:console)", report: REPORT, attempts: 1, madeAt: "x", problems: [], screenshots: {}, ...over });
 const NOW = new Date("2026-10-26T14:00:00Z");
-const OPERATOR = "234652039735541760";
+const OPERATOR = "200000000000000001";
 
 describe("the post file", () => {
   it("names posts by title", () => {
@@ -29,9 +29,9 @@ describe("the post file", () => {
   });
 
   it("writes the blog's frontmatter with the AI banner and the post's image addresses", () => {
-    expect(postText(draft({ title: "Tim's timer", summary: "One 'quote'." }), "2026-10-26", "tims-timer", "/static/images/ghostpen/")).toBe([
-      "---", "title: 'Tim''s timer'", "date: '2026-10-26'", "tags: ['ops']", "draft: false", "aiGenerated: true", "summary: 'One ''quote''.'", "---", "",
-      "We picked one timer.\n\n![the console](/static/images/ghostpen/tims-timer/console.png)", ""].join("\n"));
+    expect(postText(draft({ title: "Teo's timer", summary: "One 'quote'." }), "2026-10-26", "teos-timer", "/static/images/ghostpen/")).toBe([
+      "---", "title: 'Teo''s timer'", "date: '2026-10-26'", "tags: ['ops']", "draft: false", "aiGenerated: true", "summary: 'One ''quote''.'", "---", "",
+      "We picked one timer.\n\n![the console](/static/images/ghostpen/teos-timer/console.png)", ""].join("\n"));
   });
 });
 

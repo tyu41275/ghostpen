@@ -1,7 +1,7 @@
 /**
- * Tim's choices and what they teach (ADR 0101, brief D13): every Write pick and every Skip (with its one-line reason) is
- * kept in ghostpen's data folder. From them ghostpen **suggests** new weights: a factor that the posts Tim writes score
- * higher on than the ones he skips gains weight, and the other way round. A suggestion is shown and explained before it
+ * The operator's choices and what they teach: every Write pick and every Skip (with its one-line reason) is kept in
+ * ghostpen's data folder. From them ghostpen **suggests** new weights: a factor that the posts the operator writes score
+ * higher on than the ones they skip gains weight, and the other way round. A suggestion is shown and explained before it
  * applies (`applyWeights`, called only after the operator agrees); nothing changes a weight on its own.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";

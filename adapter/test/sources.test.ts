@@ -14,7 +14,7 @@ describe("the sources settings", () => {
     const parsed = parseSources({
       topics: [{ name: "decisions", kind: "markdown", root: "/o/products", include: ["*/decisions/**/*.md"] },
         { name: "experiments", kind: "markdown", root: "/o/exp", include: ["*.md"], as: "experiment" },
-        { name: "gh", kind: "github", repos: ["tyu41275/Relay"], incidentLabel: "incident", measuredPattern: "before.*after" }],
+        { name: "gh", kind: "github", repos: ["acme-org/Relay"], incidentLabel: "incident", measuredPattern: "before.*after" }],
       references: [{ name: "glossaries", kind: "glossary", root: "/o/products", include: ["*/docs/CONTEXT.md"] }],
       published: { blogDir: "/blog/data/blog", baseUrl: "https://example.com/" } });
     expect(parsed.topics.map((t) => [t.name, t.kind])).toEqual([["decisions", "markdown"], ["experiments", "markdown"], ["gh", "github"]]);

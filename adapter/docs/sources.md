@@ -20,26 +20,26 @@ The published-post index lives in `dataDir/published-index.json`. Each build rea
 
 Compass isn't a source yet. The readers return the same `Read<T>` shape (`src/sources/types.ts`), so a Compass reader can be added beside them later.
 
-## Example: Tim's Obsidian layout
+## Example: a notes repository's layout
 
-This block goes in his instance's settings, not in the code:
+This block goes in the instance's settings, not in the code:
 
 ```json
 "sources": {
   "topics": [
-    { "name": "decisions", "kind": "markdown", "root": "/home/ductor-user/.ductor/workspace/Obsidian/ensemble/products",
+    { "name": "decisions", "kind": "markdown", "root": "<notes checkout>/products",
       "include": ["*/decisions/adr/*.md", "*/decisions/vision-briefs/*.md"] },
     { "name": "experiments", "kind": "markdown", "as": "experiment",
-      "root": "/home/ductor-user/.ductor/workspace/Obsidian/ensemble/personal-instances/personal-comms/decisions/experiments",
+      "root": "<notes checkout>/decisions/experiments",
       "include": ["*.md"] },
-    { "name": "github", "kind": "github", "repos": ["tyu41275/ensemble-chatter", "tyu41275/Relay", "tyu41275/chatter-ops"],
-      "incidentLabel": "incident", "measuredPattern": "before.{0,200}after|measured", "tokenFile": "/home/ductor-user/.ductor/host-chatter/ghostpen/config/github-token" }
+    { "name": "github", "kind": "github", "repos": ["acme-org/app", "acme-org/deploy-tool"],
+      "incidentLabel": "incident", "measuredPattern": "before.{0,200}after|measured", "tokenFile": "<chatter home>/ghostpen/config/github-token" }
   ],
   "references": [
-    { "name": "glossaries", "kind": "glossary", "root": "/home/ductor-user/.ductor/workspace/Obsidian/ensemble/products",
+    { "name": "glossaries", "kind": "glossary", "root": "<notes checkout>/products",
       "include": ["*/docs/CONTEXT.md"] }
   ],
-  "published": { "blogDir": "/home/ductor-user/.ductor/host-chatter/ghostpen/checkout/data/blog", "baseUrl": "https://<the blog's address>" }
+  "published": { "blogDir": "<chatter home>/ghostpen/checkout/data/blog", "baseUrl": "https://<the blog's address>" }
 }
 ```
 
