@@ -23,8 +23,12 @@ export function postLinks(markdown: string, baseUrl?: string): string[] {
   const origin = baseUrl ? new URL(baseUrl).origin : undefined;
   const text = outsideCode(markdown);
   const hrefs = [...text.matchAll(/\bhref\s*=\s*\{?\s*["']([^"'\s]+)["']/gu)].map((m) => m[1]!);
-  // Reference definitions, for `[text][name]` links: `[name]: /blog/slug`.
-  const refs = [...text.matchAll(/^ {0,3}\[[^\]\n]+\]:[ \t]*<?([^\s>]+)>?/gmu)].map((m) => m[1]!);
+  // Reference definitions (`[name]: /blog/slug`), each only when a link uses it: `[text][name]`, `[name][]` or `[name]`.
+  const DEFINITION = /^ {0,3}\[([^\]\n]+)\]:[ \t]*<?([^\s>]+)>?.*$/gmu;
+  const label = (name: string) => name.trim().replace(/\s+/gu, " ").toLowerCase();
+  const body = text.replace(DEFINITION, " ");
+  const used = new Set([...body.matchAll(/\[([^\]\n]+)\](?:\[([^\]\n]*)\])?(?![(:])/gu)].map((m) => label(m[2] || m[1]!)));
+  const refs = [...text.matchAll(DEFINITION)].filter((m) => used.has(label(m[1]!))).map((m) => m[2]!);
   const out = new Set<string>();
   for (const target of [...linkTargets(markdown), ...hrefs, ...refs]) {
     const local = target.startsWith("/") && !target.startsWith("//");
