@@ -20,8 +20,10 @@ const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".contentlayer", "di
 /** Content folders, skipped by their path from the repository root: the posts and their images. */
 const SKIP_PATHS = new Set(["data/blog", "public/static"]);
 const CODE = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".sh", ".json", ".yml", ".yaml", ".toml"]);
-/** Test fixtures stand for "a path on some machine" with these names; the privacy checks must see them redacted. */
+/** Test fixtures stand for "a path on some machine" with these names; the privacy checks must see them redacted. Only the
+ * adapter's tests may use them: anywhere else such a path is as machine-specific as any other. */
 const FIXTURE_USERS = new Set(["someone"]);
+const FIXTURE_DIR = "adapter/test/";
 
 /** A path, not the path part of a web address: no word character, dot or dash right before it (`example.test/Users/…`); a drive letter not after a slash either (`example.test/C:/…`). */
 const LEAD = String.raw`(?<![\w.-])`;
@@ -51,7 +53,7 @@ export function findings(file: string, text: string): string[] {
   text.split("\n").forEach((line, index) => {
     for (const rule of [...MACHINE, ...HOOK]) {
       for (const match of line.matchAll(rule.re)) {
-        if ("user" in rule && FIXTURE_USERS.has(match[rule.user]!)) continue;
+        if ("user" in rule && file.startsWith(FIXTURE_DIR) && FIXTURE_USERS.has(match[rule.user]!)) continue;
         found.push(`${file}:${index + 1}: ${rule.what} (${match[0]})`);
       }
     }
@@ -60,9 +62,11 @@ export function findings(file: string, text: string): string[] {
 }
 
 describe("the repository is portable and installs no Claude hook (ghostpen#86)", () => {
-  it("finds each kind of machine path and hook, and passes a fixture's /home/someone", () => {
-    expect(findings("x.py", 'default=os.environ.get("ECOORCHESTRA_DIR", "C:/Repos/EcoOrchestra")\nok = "/home/someone/x"')).toEqual([
-      "x.py:1: a Windows drive path (C:/Repos)"]);
+  it("finds each kind of machine path and hook, and passes /home/someone only in the adapter's tests", () => {
+    expect(findings("adapter/test/x.py", 'default=os.environ.get("ECOORCHESTRA_DIR", "C:/Repos/EcoOrchestra")\nok = "/home/someone/x"')).toEqual([
+      "adapter/test/x.py:1: a Windows drive path (C:/Repos)"]);
+    // Outside the adapter's tests the fixture name is a real home folder.
+    expect(findings("data/siteMetadata.js", 'dir: "/home/someone/private"')).toEqual(["data/siteMetadata.js:1: a home folder (/home/someone/)"]);
     expect(findings("a.sh", 'cd /home/alex/repos && open /Users/alex/Desktop/\njq .hooks ~/.claude/settings.json # PostToolUse')).toEqual([
       "a.sh:1: a Mac user folder (/Users/alex/)", "a.sh:1: a home folder (/home/alex/)",
       "a.sh:2: a Claude settings file (.claude/settings.json)", "a.sh:2: a Claude hook event (PostToolUse)"]);
