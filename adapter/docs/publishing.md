@@ -7,6 +7,7 @@ Tim approves every post. Nothing merges without his Publish press, and Publish l
   - ghostpen works in its own clone of the blog repo (`publish.repoDir`; nothing else may edit it). Each post gets a branch `ghostpen/<post-name>` from the base.
   - On it go the post file (`postsDir/<post-name>.mdx`, with the blog's frontmatter and `aiGenerated: true` so it carries the AI banner) and its screenshots (`imagesDir/<post-name>/`).
   - ghostpen pushes the branch and opens one pull request. Its body carries the summary, the preview link (`previewUrl`, `{branch}` filled in) and the check report.
+  - Then, opened or not, the clone goes back to the base, and a file it wrote that was left untracked is removed. The published-post index reads the clone's posts folder, so it never takes an unmerged post as published (ghostpen#129). A failure on the way back never hides the first error; on its own it fails the open.
   - The operator's review (`reviewCommand`, an argv with `{repo}`, `{pr}`, `{dir}` and `{round}` filled in) starts at once, detached. Its output goes to `dataDir/reviews/pr-<n>-<round>.log`.
   - An edited draft keeps its first branch, and so its pull request, even when its title changes.
   - With no `settings.publish`, a ready draft stays in ghostpen.
@@ -16,7 +17,7 @@ Tim approves every post. Nothing merges without his Publish press, and Publish l
   - Statuses belong to a commit, so ghostpen keeps the commit it pushed for the current draft. It checks and merges only that commit (`--match-head-commit`). After an Edit, the earlier draft's approval never counts: the new commit needs its own review.
   - Otherwise it says why in plain words ("the independent review is still running", "these checks failed: build") and changes nothing.
   - A ready post is marked `publishing` and merged in the background. Its card then says `Published`, or goes back to ready saying why the merge failed. A service stopped mid-merge puts it back to ready, and the next Publish checks again.
-  - After merging, it brings the clone back to the base, so the published index sees the new post. Point `sources.published.blogDir` at `repoDir/postsDir`.
+  - After merging, it brings the clone back to the base, so the published index sees the new post on its next read (each ranking, draft and thread question builds it). Point `sources.published.blogDir` at `repoDir/postsDir`: the `publishing` need fails until it is (`docs/readiness.md`).
 - **Edit** (`POST /v1/adapter/draft/edit`, the operator only): the operator's changes go to the writer with the last draft. The new draft runs every check again and updates the same pull request, and the review runs again.
 
 Settings (`publish`):

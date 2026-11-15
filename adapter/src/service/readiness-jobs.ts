@@ -6,8 +6,8 @@
  * Drafting and publishing run in this service; what they last did is kept on each draft in shortlist.json.
  */
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
-import { join } from "node:path";
+import { access, realpath } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { HEARTBEAT_MS } from "../adapter/index.js";
 import { PR_OPEN_FAILED, WRITE_FAILED } from "../publish/jobs.js";
 import { FRESH_MS } from "../ranking/jobs.js";
@@ -106,6 +106,22 @@ async function draftingReading(f: Facts): Promise<Reading> {
   return working("the writer can be run and no draft stopped", f.started.getTime());
 }
 
+/** A folder as the file system resolves it (through links); one that is not there, as written. */
+const resolved = (dir: string) => realpath(dir).catch(() => resolve(dir));
+
+/**
+ * Why a post Publish merges would never reach the published-post index (ghostpen#129): the index reads
+ * `sources.published.blogDir`, which must be the clone's posts folder, the one Publish brings back to the base.
+ */
+async function indexProblem(f: Facts): Promise<string | undefined> {
+  const { publish, sources } = f.settings;
+  if (publish === undefined) return undefined;
+  if (sources.published === undefined) return "sources.published is not set, so a post Publish merges never reaches the published-post index";
+  const [index, posts] = await Promise.all([resolved(sources.published.blogDir), resolved(join(publish.repoDir, publish.postsDir))]);
+  return index === posts ? undefined
+    : "sources.published.blogDir is not publish.repoDir's postsDir folder, so a post Publish merges never reaches the published-post index";
+}
+
 async function publishingReading(f: Facts): Promise<Reading> {
   const { publish } = f.settings;
   if (publish === undefined) return chosenOff("publish is not set, so drafts stay in ghostpen", f);
@@ -117,6 +133,7 @@ async function publishingReading(f: Facts): Promise<Reading> {
     programProblem("git").then((p) => p && `git: ${p}`),
     programProblem("gh").then((p) => p && `gh: ${p}`),
     publish.reviewCommand ? programProblem(publish.reviewCommand[0]!).then((p) => p && `publish.reviewCommand[0]: ${p}`) : undefined,
+    indexProblem(f),
   ])).filter((p): p is string => p !== undefined);
   if (problems[0] !== undefined) return failing(`${problems[0]}${more(problems.length - 1)}`, f.now.getTime());
   const kept = await f.shortlists();

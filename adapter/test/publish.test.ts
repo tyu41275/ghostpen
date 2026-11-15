@@ -63,6 +63,10 @@ function blogRepo(): { remote: string; clone: string } {
   return { remote, clone };
 }
 
+/** The clone's branch, whether the post file is in its work tree, and what `git status` shows. */
+const cloneState = (clone: string, slug: string) => [execFileSync("git", ["branch", "--show-current"], { cwd: clone }).toString().trim(),
+  existsSync(join(clone, "data", "blog", `${slug}.mdx`)), execFileSync("git", ["status", "--porcelain"], { cwd: clone }).toString()];
+
 describe("the pull request", () => {
   it("puts the post and its screenshots on a branch, pushes it, and opens one pull request", async () => {
     const { remote, clone } = blogRepo();
@@ -85,6 +89,8 @@ describe("the pull request", () => {
     expect(create.slice(0, 11)).toEqual(["gh", "pr", "create", "-R", "o/blog", "--base", "main", "--head", "ghostpen/why-we-use-one-timer", "--title", "Post: Why we use one timer"]);
     expect(create[12]).toContain("Preview: https://blog-git-ghostpen-why-we-use-one-timer.example");
     expect(create[12]).toContain("✅ Plain words");
+    // Back on main with no post file: the published-post index never reads the unmerged post (ghostpen#129).
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
 
     // An edit with a new title keeps the branch and updates the open pull request.
     gh.length = 0;
@@ -98,6 +104,31 @@ describe("the pull request", () => {
     const after = execFileSync("git", ["ls-tree", "-r", "--name-only", pr.branch], { cwd: remote }).toString();
     expect(after).toContain("data/blog/one-timer-is-enough.mdx");
     expect(after).not.toContain("why-we-use-one-timer.mdx");
+    expect(cloneState(clone, "one-timer-is-enough")).toEqual(["main", false, ""]);
+  });
+
+  it("returns the clone to main with nothing left over when the open fails, keeping the first error (ghostpen#129)", async () => {
+    const { clone } = blogRepo();
+    const settings = parsePublish({ repoDir: clone, repo: "o/blog" });
+    const back = (argv: string[]) => argv[1] === "checkout" && argv[4] === "main";
+    /** git and gh as usual, but the calls `fails` picks throw. */
+    const failing = (fails: (argv: string[]) => boolean): Run => async (argv, options) => {
+      if (fails(argv)) throw new Error(`${argv.slice(0, 3).join(" ")} failed`);
+      if (argv[0] === "gh") return argv[2] === "list" ? "[]" : "";
+      return runIn(argv, options);
+    };
+    await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[2] === "create"))).rejects.toThrow("gh pr create failed");
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
+    // Added but never committed: the file left in the work tree goes too.
+    await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "commit"))).rejects.toThrow("git commit");
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
+    // The way back fails too: the first error is the one reported.
+    await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "commit" || back(argv)))).rejects.toThrow("git commit");
+    // The open worked but the way back did not: it fails, as the index would read the draft.
+    await expect(openPostPr(settings, draft(), "2026-10-26", async (argv, options) => {
+      if (back(argv)) throw new Error("checkout failed");
+      return argv[0] === "gh" ? (argv[2] === "list" ? "[]" : "https://github.com/o/blog/pull/8\n") : runIn(argv, options);
+    })).rejects.toThrow("checkout failed");
   });
 
   it("starts the review with its placeholders filled, detached, logging to a file", async () => {
