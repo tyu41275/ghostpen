@@ -4,7 +4,7 @@
  * public/static/images/, removing only what it copied before. Each test runs it against its own temporary root.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -86,6 +86,21 @@ describe("the blog's content step (ghostpen#135)", () => {
     expect(existsSync(image(root, "x/b.png"))).toBe(false);
     expect(lines).toContain("ghostpen content: kept public/static/images/x/pic.png, changed since it was copied");
     expect(record(root)).toEqual([]);
+  });
+
+  it("never removes or copies through a symbolic link under public/static/images/", () => {
+    const root = tempDir(), base = tempDir(), outside = tempDir();
+    prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "one", { "x/pic.png": "1" }) }, log: () => {} });
+    put(join(outside, "pic.png"), "1");
+    rmSync(image(root, "x"), { recursive: true });
+    symlinkSync(outside, image(root, "x"));
+    const lines: string[] = [];
+    prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "two") }, log: (line: string) => lines.push(line) });
+    expect(read(join(outside, "pic.png"))).toBe("1");
+    expect(lines).toContain("ghostpen content: kept public/static/images/x/pic.png, reached through a symbolic link");
+    expect(() => prepareContent({ root, env: { GHOSTPEN_CONTENT_DIR: folder(base, "three", { "x/new.png": "n" }) }, log: () => {} }))
+      .toThrow("GHOSTPEN_CONTENT_DIR: images/x/new.png would be copied through a symbolic link under public/static/images/");
+    expect(existsSync(join(outside, "new.png"))).toBe(false);
   });
 
   it("refuses a record without a SHA-256 for each path, removing nothing", () => {

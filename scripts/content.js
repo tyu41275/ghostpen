@@ -120,7 +120,8 @@ function previousImages(root) {
       `.content/${RECORD} is unreadable (${e.message}): check public/static/images/ by hand, then delete it`
     )
   }
-  const entry = (e) => e && typeof e === 'object' && typeof e.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
+  const entry = (e) =>
+    e && typeof e === 'object' && typeof e.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
   if (!Array.isArray(list) || !list.every(entry)) {
     throw new Error(
       `.content/${RECORD} must hold a list of { path, sha256 }: check public/static/images/ by hand, then delete it`
@@ -130,13 +131,33 @@ function previousImages(root) {
 }
 
 /**
+ * Whether public/static/images/ or any existing part of `rel` under it is a symbolic link, which would take a removal
+ * or a copy outside it. The parts after the first missing one cannot be links.
+ */
+function throughLink(base, rel) {
+  let at = base
+  for (const part of ['', ...rel.split('/')]) {
+    at = part ? path.join(at, part) : at
+    const stat = fs.lstatSync(at, { throwIfNoEntry: false })
+    if (!stat) return false
+    if (stat.isSymbolicLink()) return true
+  }
+  return false
+}
+
+/**
  * Removes the recorded files whose contents are still what was copied, and the folders they leave empty, under
- * public/static/images/. A recorded file changed since (or no longer a file) is kept and logged.
+ * public/static/images/. A recorded file changed since, no longer a plain file, or reached through a symbolic link is
+ * kept and logged.
  */
 function removeImages(root, list, log) {
   const base = path.join(root, IMAGES)
   for (const { path: rel, sha256: was } of list) {
     const file = path.join(base, rel)
+    if (throughLink(base, rel)) {
+      log(`ghostpen content: kept public/static/images/${rel}, reached through a symbolic link`)
+      continue
+    }
     if (!fs.existsSync(file)) continue
     if (!isFile(file) || sha256(file) !== was) {
       log(`ghostpen content: kept public/static/images/${rel}, changed since it was copied`)
@@ -161,6 +182,11 @@ function copyImages(root, dir, copied) {
   for (const rel of filesUnder(from)) {
     const src = path.join(from, rel)
     const dest = path.join(base, rel)
+    if (throughLink(base, rel)) {
+      throw new Error(
+        `${VAR}: images/${rel} would be copied through a symbolic link under public/static/images/`
+      )
+    }
     if (fs.existsSync(dest)) {
       if (fs.readFileSync(dest).equals(fs.readFileSync(src))) continue
       throw new Error(
