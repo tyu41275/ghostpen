@@ -119,8 +119,15 @@ describe("the pull request", () => {
     };
     await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[2] === "create"))).rejects.toThrow("gh pr create failed");
     expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
-    // Added but never committed: the file left in the work tree goes too.
+    // Added but never committed: the forced checkout drops it.
     await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "commit"))).rejects.toThrow("git commit");
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
+    // Written but never added: untracked, so only the clean removes it.
+    await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "add"))).rejects.toThrow("git add");
+    expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
+    // Left on another branch, then the fetch fails: still back on main.
+    execFileSync("git", ["checkout", "-q", "-b", "stray"], { cwd: clone });
+    await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "fetch"))).rejects.toThrow("git fetch");
     expect(cloneState(clone, "why-we-use-one-timer")).toEqual(["main", false, ""]);
     // The way back fails too: the first error is the one reported.
     await expect(openPostPr(settings, draft(), "2026-10-26", failing((argv) => argv[1] === "commit" || back(argv)))).rejects.toThrow("git commit");

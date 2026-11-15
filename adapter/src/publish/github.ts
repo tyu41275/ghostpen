@@ -55,9 +55,9 @@ function prBody(draft: Draft, preview: string | undefined): string {
  */
 export async function openPostPr(settings: PublishSettings, draft: Draft, date: string, run: Run = runIn, branch = branchOf(draft)): Promise<PostPr> {
   const cwd = settings.repoDir, written: string[] = [];
-  await run(["git", "fetch", "origin", settings.base], { cwd });
   let failure: unknown = null;
   try {
+    await run(["git", "fetch", "origin", settings.base], { cwd });
     return await postOnBranch(settings, draft, date, run, branch, written);
   } catch (error) {
     failure = error;
