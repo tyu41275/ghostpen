@@ -16,10 +16,10 @@ import { readSources, type SourcesRead } from "../sources/read.js";
 import type { TopicDocument } from "../sources/types.js";
 import { contextFor } from "../feedback/store.js";
 import { checkDraft, type CheckReport } from "./checks.js";
+import { readDiagramSources } from "./diagram-files.js";
 import type { StackGraph } from "./diagrams.js";
 import { editPrompt, parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
 import { playwrightCapture, screenshotRefs, takeScreenshots, type Capturer } from "./screenshots.js";
-import { readStackMap } from "./stack-map.js";
 
 export const DRAFTS_DIR = "drafts";
 const BACKGROUND = "background:";
@@ -33,7 +33,7 @@ export interface Draft extends Written {
   report: CheckReport;
   attempts: number;
   madeAt: string;
-  /** What could not be read (sources, the stack map), shown with the draft. */
+  /** What could not be read (sources, the stack map, a diagram file), shown with the draft. */
   problems: string[];
   /** The screenshots taken, by name: their files. */
   screenshots: Record<string, string>;
@@ -71,7 +71,7 @@ function target(read: SourcesRead, id: string): { kind: DraftKind; subject: stri
   return { kind: candidate.kind, subject: candidate.title, documents: [candidate.document] };
 }
 
-/** The stack map cut, for the prompt, to the arrows touching a part named and the parts at their ends. */
+/** The stack map (and diagram files) cut, for the prompt, to the arrows touching a part named and the parts at their ends. */
 function cut(graph: StackGraph | null, parts: string[]): StackGraph | null {
   if (!graph) return null;
   const wanted = new Set(parts.map((p) => p.toLowerCase()));
@@ -109,22 +109,22 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     const post = postsAbout(read.index, term)[0];
     return post ? { term, post: { url: post.url, title: post.title } } : { term, ...(definitionOf.has(term.toLowerCase()) ? { definition: definitionOf.get(term.toLowerCase())! } : {}) };
   });
-  const map = await readStackMap(draft.stackMap, seams.stackMap);
+  const diagrams = await readDiagramSources(draft, seams.stackMap);
   const rankingPath = join(settings.dataDir, RANKING_FILE);
   const ranking = existsSync(rankingPath) ? JSON.parse(readFileSync(rankingPath, "utf8")) as unknown : null;
   const entry = isRankingView(ranking) ? ranking.entries.find((e) => e.id === id) : undefined;
   const brief: WriterBrief = { kind: goal.kind, subject: goal.subject, documents: goal.documents, parts,
-    graph: cut(map.graph, [goal.subject, ...named]), voice: voice(settings, read, draft.voicePosts),
+    graph: cut(diagrams.graph, [goal.subject, ...named]), voice: voice(settings, read, draft.voicePosts),
     ...(entry ? { topic: entry.topic, takeaway: entry.takeaway } : {}),
     ...(contextFor(settings.dataDir, id).length ? { context: contextFor(settings.dataDir, id) } : {}),
     ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}),
     ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
   const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));
-  const context = { terms: read.terms, index: read.index, graph: map.graph, ...(goal.kind === "background" ? { subject: goal.subject } : {}) };
+  const context = { terms: read.terms, index: read.index, graph: diagrams.graph, diagramProblems: diagrams.unread, ...(goal.kind === "background" ? { subject: goal.subject } : {}) };
   let written = parseWritten(await write(edit ? editPrompt(brief, edit.previous, edit.notes) : writerPrompt(brief)));
   let report = checkDraft(written, context);
   let attempts = 1;
-  const problems = [...read.problems.map((p) => `${p.source}: ${p.problem}`), ...(map.problem ? [`stack map: ${map.problem}`] : [])];
+  const problems = [...read.problems.map((p) => `${p.source}: ${p.problem}`), ...diagrams.problems];
   while (!report.passed && report.hold.length === 0 && attempts <= draft.revisions) {
     try {
       written = parseWritten(await write(revisePrompt(brief, written, report)));

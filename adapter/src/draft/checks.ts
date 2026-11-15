@@ -23,12 +23,14 @@ export interface CheckContext {
   terms: string[]; index: PublishedIndex; graph: StackGraph | null; plain?: PlainOptions;
   /** A background post's subject: the part it explains, so it is not asked to link or hold for it. */
   subject?: string;
+  /** Configured diagram sources that could not be read: every diagram with boxes then fails, naming the first. */
+  diagramProblems?: string[];
 }
 
 export function checkDraft(draft: DraftInput, context: CheckContext): CheckReport {
   const plain = checkPlain(draft.markdown, context.plain ?? PLAIN_DEFAULTS);
   const parts = checkStackParts(draft.title, draft.markdown, context.terms, context.index, context.subject ? [context.subject] : []);
-  const diagrams = checkDiagrams(draft.markdown, context.graph);
+  const diagrams = checkDiagrams(draft.markdown, context.graph, context.diagramProblems);
   const checks = [
     { name: "Plain words", passed: plain.passed, findings: plain.findings },
     { name: "Every stack part linked or explained", passed: parts.passed, findings: parts.findings },

@@ -10,10 +10,12 @@ Every draft must pass these checks before Tim sees it. Each check can fail a dra
   - **A part with a published post** must link that post (its full address or its path). The check uses the newest post that is about the part.
   - **A central part with no post** holds the draft. A part is central if it's in the title or named three times or more. Its background post gets written first.
   - **A part only mentioned in passing** must be explained right where it first appears. The rule: within about 12 words, there must be an explaining phrase (" is ", " are ", " (", a dash, ", a ", ", the ", ", which ", ": a "). The part then goes on the "posts to write later" list.
-- **Diagrams match the stack map** (`src/draft/diagrams.ts`): the stack map is Relay's `relay graph --format json`.
+- **Diagrams match the stack map** (`src/draft/diagrams.ts`): the stack map is Relay's `relay graph --format json`, the Mermaid flowcharts in `draft.diagramFiles`, or both (`src/draft/diagram-files.ts`).
   - In a Mermaid flowchart, every arrow between two boxes the map knows (matched by label, any case) must be an edge of the map, in either direction.
+  - With files set, the map is every source joined by box label (any case): an arrow passes when the stack map or any file draws it.
   - Arrows to boxes the map doesn't know are left alone, so concept diagrams pass.
   - With no map configured, a diagram with boxes can't be checked. The check fails and says so instead of passing it.
+  - **It fails closed on a file.** A configured file that is missing or unreadable, isn't a flowchart (`flowchart` or `graph` first) or draws no arrows gives no map at all, even when the stack map reads. So does a stack map that fails beside files. The writer is told to draw no diagram, the draft's problems name the setting (`draft.diagramFiles[1]: it draws no arrows`, never its path), and every diagram with boxes fails as one that can't be checked.
 
 - **Screenshots show nothing private** (`src/draft/screenshots.ts`): runs once the words pass, only when the draft asks for a screenshot.
   - The writer may place `![what it shows](screenshot:<name>)` only for a page in `draft.screenshots.pages`.
@@ -36,7 +38,8 @@ The `id` is a shortlist item's: a candidate id, or `background:<part>` for a bac
   - the kind of post. A decision post whose outcome isn't known yet says so; a follow-up post-mortem tells how it went.
   - the topic and takeaway from the last ranking, when the candidate is ranked;
   - every stack part the sources name, each with the post to link or its glossary definition to explain it from;
-  - the stack map's arrows touching those parts. It may draw only those. With no map, it draws no diagram of the setup.
+  - the arrows touching those parts, from the stack map and the diagram files. It may draw only those. With no map, or a configured source that can't be read, it draws no diagram of the setup.
+  - a line that diagrams and screenshots carry the visuals, and a code snippet goes in only where a diagram can't show the idea. This is guidance, not a check: whether a diagram could show it is a judgement.
   - the style guide (`draft.styleGuide`) and the author's recent published posts for the voice (`draft.voicePosts`; never drafts or `aiGenerated` posts);
   - the source documents. A background post gets the part's definition and the (up to 3) documents that name it most.
 - **What it answers**: one JSON object with `title`, `summary`, `tags` and `markdown`.
@@ -54,5 +57,6 @@ Settings (`draft`):
 | `styleGuide` | absolute path of a markdown style guide | none |
 | `voicePosts` | recent published posts read for the voice, 0 to 5 | 2 |
 | `stackMap` | `{command, timeoutSeconds}` printing `relay.stack.graph/v1` JSON (`relay graph --format json`) | none: diagrams can't be checked; 60 s |
+| `diagramFiles` | 1 to 10 different absolute paths of Mermaid flowchart files (`.mmd`), joined with the stack map or used instead of it | none |
 | `revisions` | times a failed draft is sent back, 0 to 3 | 2 |
 | `screenshots` | `{pages, private, timeoutSeconds}`: each page `{name, url, description, mask?, waitFor?, width?, height?}` (1 to 20 pages; 1280×800 by default); `private` adds regular expressions; timeout 5 to 300 s | none: no screenshots; 30 s |

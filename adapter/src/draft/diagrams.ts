@@ -1,7 +1,8 @@
 /**
  * The diagram check (ADR 0101, brief D10): a Mermaid diagram in a draft that draws the author's stack must match the
  * stack map (Relay's `relay graph --format json`, `relay.stack.graph/v1`): every arrow between two boxes that are parts
- * the map knows (by label, any case) must be an edge of the map, in either direction. Arrows to boxes the map does not
+ * the map knows (by label, any case) must be an edge of the map, in either direction. `draft.diagramFiles` adds the
+ * arrows of configured Mermaid flowcharts to the map (`diagram-files.ts`). Arrows to boxes the map does not
  * know are left alone, so concept diagrams pass. With no map configured, no diagram with boxes can be checked, and the
  * check says so instead of passing it.
  */
@@ -59,7 +60,8 @@ function splitLinks(line: string): Array<{ ids: string[]; invisible: boolean }> 
 
 const key = (text: string) => text.trim().toLowerCase();
 
-export function checkDiagrams(markdown: string, graph: StackGraph | null): DiagramResult {
+/** `unread`: configured sources that could not be read (`readDiagramSources`); while one is, no diagram with boxes passes. */
+export function checkDiagrams(markdown: string, graph: StackGraph | null, unread: string[] = []): DiagramResult {
   const findings: string[] = [];
   const blocks = mermaidBlocks(markdown);
   const byLabel = new Map((graph?.nodes ?? []).map((n) => [key(n.label), n.id]));
@@ -67,6 +69,11 @@ export function checkDiagrams(markdown: string, graph: StackGraph | null): Diagr
   blocks.forEach((block, i) => {
     const { labels, arrows } = parseFlowchart(block);
     const label = (id: string) => labels.get(id) ?? id;
+    if (unread.length > 0) {
+      const extra = unread.length > 1 ? ` (and ${unread.length - 1} more)` : "";
+      if (labels.size > 0 || arrows.length > 0) findings.push(`diagram ${i + 1} cannot be checked: ${unread[0]}${extra}`);
+      return;
+    }
     if (!graph) {
       if (labels.size > 0 || arrows.length > 0) findings.push(`diagram ${i + 1} cannot be checked: no stack map is configured`);
       return;

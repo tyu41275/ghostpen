@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseWritten, revisePrompt, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
+import { parseWritten, revisePrompt, SNIPPET_LINE, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
 import { parseStackMap, readStackMap, STACK_MAP_FORMAT } from "../src/draft/stack-map.js";
 import { draftFile, draftNow, readDraft } from "../src/draft/write.js";
 import { addFeedback } from "../src/feedback/store.js";
@@ -223,6 +223,29 @@ describe("drafting a post", () => {
       { write: async () => answer(`${PLAIN} We use Clock.\n\n![x](screenshot:console)`), capture: async () => { captured += 1; return { png: Buffer.from(""), text: [], unreadable: [] }; } });
     expect(draft.status).toBe("failed");
     expect(captured).toBe(0);
+  });
+
+  it("draws from a configured Mermaid file, and still ends with the screenshot check", async () => {
+    const mmd = join(tree({ "setup.mmd": "flowchart LR\n  c[Clock] --> t[Tempo]\n" }), "setup.mmd");
+    const shots = { pages: [{ name: "console", url: "http://127.0.0.1:1/", description: "the console" }] };
+    const markdown = `${LINKED}\n\n\`\`\`mermaid\nflowchart LR\n  a[Tempo] --> b[Clock]\n\`\`\`\n\n![the console](screenshot:console)`;
+    const prompts: string[] = [];
+    const draft = await draftNow(setup({ draft: { writer: { command: ["true"] }, diagramFiles: [mmd], screenshots: shots } }), ID,
+      { write: async (p) => { prompts.push(p); return answer(markdown); }, capture: async () => ({ png: Buffer.from("P"), text: ["3 tasks"], unreadable: [] }) });
+    expect(prompts[0]).toContain("- Clock --> Tempo");
+    expect(prompts[0]).toContain(SNIPPET_LINE); // the text only: the snippet rule is guidance (docs/drafting.md)
+    expect(draft).toMatchObject({ status: "ready", problems: [] });
+    expect(draft.report.checks.map((c) => c.name)).toEqual(["Plain words", "Every stack part linked or explained", "Diagrams match the stack map", "Screenshots show nothing private"]);
+  });
+
+  it("draws nothing and fails a diagram when a configured file cannot be read", async () => {
+    const prompts: string[] = [];
+    const markdown = `${LINKED}\n\n\`\`\`mermaid\nflowchart LR\n  a[Tempo] --> b[Clock]\n\`\`\``;
+    const draft = await draftNow(setup({ draft: { writer: { command: ["true"] }, revisions: 0, diagramFiles: [join(tempDir(), "gone.mmd")] } }), ID,
+      { write: async (p) => { prompts.push(p); return answer(markdown); } });
+    expect(prompts[0]).toContain("Draw no diagram of the setup");
+    expect(draft).toMatchObject({ status: "failed", problems: ["draft.diagramFiles[0]: the file cannot be read"] });
+    expect(draft.report.checks[2]!.findings).toEqual(["diagram 1 cannot be checked: draft.diagramFiles[0]: the file cannot be read"]);
   });
 
   it("keeps drafts under distinct files per id", () => {

@@ -45,8 +45,11 @@ function partLines(parts: PartBrief[]): string[] {
     : `- ${p.term}: no post explains it. Where it first appears, say what it is in a few plain words, like "${p.term}, a ...". Its definition: ${(p.definition ?? "none given").replace(/\s+/gu, " ").slice(0, 400)}`);
 }
 
+/** Guidance, not a check (ghostpen#90): whether a diagram could show it is a judgement no check can make. */
+export const SNIPPET_LINE = "Diagrams and screenshots carry the visuals. Add a code snippet only where a diagram cannot show the idea.";
+
 function graphLines(graph: StackGraph | null): string[] {
-  if (!graph) return ["Draw no diagram of the setup: there is no stack map to check it against."];
+  if (!graph) return ["Draw no diagram of the setup: there is no stack map or diagram file to check it against."];
   if (graph.edges.length === 0) return ["Draw no diagram of the setup: the stack map has no arrows for these parts."];
   const label = new Map(graph.nodes.map((n) => [n.id, n.label]));
   return ["You may add one Mermaid flowchart (```mermaid) of the setup. Draw only these arrows, between boxes labelled with these names:",
@@ -71,6 +74,7 @@ export function writerPrompt(brief: WriterBrief): string {
       ? ["You may add screenshots of these pages, written `![<what it shows, in plain words>](screenshot:<name>)`:",
         ...brief.screenshots.map((s) => `- ${s.name}: ${s.description}`)]
       : ["Add no screenshots or images."]),
+    SNIPPET_LINE,
     "",
     "Use only facts from the source documents and the author's own context below. Do not invent numbers, names or events.",
     ...(brief.context?.length ? ["", "The author added this context about the topic. It is true; use it where it fits:", ...brief.context.map((c) => `- ${c.replace(/\s+/gu, " ")}`)] : []),
