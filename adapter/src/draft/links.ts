@@ -1,6 +1,6 @@
 /**
  * The link check (ghostpen#108): every link a draft makes to one of the blog's posts (`/blog/<slug>`, by path or by the
- * blog's own address, outside code) leads to a post the site serves. A post file that is a draft, or that the site's
+ * blog's own address, inline, by reference or as an `href`, outside code) leads to a post the site serves. A post file that is a draft, or that the site's
  * build left out, is no post yet; a slug with no file is none at all. Other paths and other sites are not checked.
  * When the blog's sitemap was not read, a post link cannot be checked and fails as such, never passes.
  */
@@ -21,9 +21,12 @@ export interface LinksContext {
 /** The draft's links to the blog's posts, as `/blog/<slug>` paths, each once. */
 export function postLinks(markdown: string, baseUrl?: string): string[] {
   const origin = baseUrl ? new URL(baseUrl).origin : undefined;
-  const hrefs = [...outsideCode(markdown).matchAll(/\bhref\s*=\s*\{?\s*["']([^"'\s]+)["']/gu)].map((m) => m[1]!);
+  const text = outsideCode(markdown);
+  const hrefs = [...text.matchAll(/\bhref\s*=\s*\{?\s*["']([^"'\s]+)["']/gu)].map((m) => m[1]!);
+  // Reference definitions, for `[text][name]` links: `[name]: /blog/slug`.
+  const refs = [...text.matchAll(/^ {0,3}\[[^\]\n]+\]:[ \t]*<?([^\s>]+)>?/gmu)].map((m) => m[1]!);
   const out = new Set<string>();
-  for (const target of [...linkTargets(markdown), ...hrefs]) {
+  for (const target of [...linkTargets(markdown), ...hrefs, ...refs]) {
     const local = target.startsWith("/") && !target.startsWith("//");
     let url: URL;
     try { url = new URL(target, baseUrl ?? "http://blog.invalid"); } catch { continue; }

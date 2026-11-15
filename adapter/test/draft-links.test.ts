@@ -23,6 +23,9 @@ describe("the draft's post links", () => {
       "[g](https://other.example/blog/z) [h](/tags/ai) [i](/blog/page/2) [k](/blog) [l](/about)"].join("\n");
     expect(postLinks(markdown, BASE)).toEqual(["/blog/live", "/blog/x", "/blog/y", "/blog/jsx"]);
     expect(postLinks("[b](https://blog.example/blog/live)")).toEqual([]); // no blog configured: its address is another site's
+    // Reference-style links: the definition holds the target, also inside the blog's address; one in code is not a link.
+    expect(postLinks("See [it][one] and [that][two].\n\n[one]: /blog/ref-a\n  [two]: https://blog.example/blog/ref-b \"T\"\n```\n[three]: /blog/fenced\n```", BASE))
+      .toEqual(["/blog/ref-a", "/blog/ref-b"]);
   });
 
   it("passes a draft whose post links all lead to a post the blog serves", async () => {
