@@ -54,6 +54,21 @@ variable the build still uses the repository's own content (`data/`, `data/site.
 GHOSTPEN_CONTENT_DIR=$PWD/content-sample yarn build
 ```
 
+## Deploying the live site
+
+The live site is built on the deploy host from its content folder, and only the built site goes to Vercel: the content
+never leaves the host. `scripts/deploy-site.sh` installs the dependencies, then runs a pinned Vercel CLI to pull the
+project's settings, build (`yarn build`, with `GHOSTPEN_REQUIRE_CONTENT=1`) and deploy the prebuilt site to production.
+It prints the deployment's URL. It reads four inputs from the environment:
+
+- `GHOSTPEN_CONTENT_DIR`: the content folder (above).
+- `VERCEL_TOKEN_FILE`: a file holding a Vercel token, readable only by the service user (`VERCEL_TOKEN` also works,
+  but leaves the token in the process environment).
+- `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`: the Vercel team and project.
+
+`scripts/deploy-site.sh --build-only` pulls and builds without deploying, as a check. Vercel's own Git builds, such as
+those of pull requests, have no content folder and show the sample or legacy content.
+
 ## Local development
 
 ```bash
