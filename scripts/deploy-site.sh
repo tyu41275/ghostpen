@@ -31,6 +31,8 @@ if [ ${#missing[@]} -gt 0 ]; then
   exit 2
 fi
 
+# An inherited `token` would keep its export when assigned, and so reach every process below: start from none.
+unset token
 if [ -n "${VERCEL_TOKEN_FILE:-}" ]; then
   if [ ! -r "$VERCEL_TOKEN_FILE" ]; then
     echo "deploy-site: VERCEL_TOKEN_FILE ($VERCEL_TOKEN_FILE) is not a readable file" >&2

@@ -9,7 +9,8 @@ const script = join(__dirname, "..", "..", "scripts", "deploy-site.sh");
 const TOKEN = "tok-test-5ec7e7-value";
 const URL = "https://ghostpen-test-abc123.vercel.app";
 
-interface Run { code: number; out: string; calls: string[] }
+/** `seen`: the `token` variable each stand-in saw in its environment, one line per call. */
+interface Run { code: number; out: string; calls: string[]; seen: string[] }
 
 /**
  * Runs the script with stand-ins for `node` (the yarn install) and `npx` (the Vercel CLI) first on PATH. Each records
@@ -19,8 +20,10 @@ async function run(env: Record<string, string>, args: string[] = [], fail?: stri
   const dir = tempDir(), bin = join(dir, "bin"), calls = join(dir, "calls");
   mkdirSync(bin);
   writeFileSync(calls, "");
+  writeFileSync(`${calls}.token`, "");
   const record = `printf '%s | REQUIRE=%s CONTENT=%s DIST=%s HUSKY=%s\\n' "$0 $*" "\${GHOSTPEN_REQUIRE_CONTENT-unset}" ` +
-    `"\${GHOSTPEN_CONTENT_DIR-unset}" "\${GHOSTPEN_DIST_DIR-unset}" "\${HUSKY-unset}" >> ${calls}\n`;
+    `"\${GHOSTPEN_CONTENT_DIR-unset}" "\${GHOSTPEN_DIST_DIR-unset}" "\${HUSKY-unset}" >> ${calls}\n` +
+    `printf '%s\\n' "\${token-unset}" >> ${calls}.token\n`;
   writeFileSync(join(bin, "node"), `#!/bin/sh\n${record}exit 0\n`, { mode: 0o755 });
   // With `pulled`, the script runs from a copy in the temp folder and `pull` writes that file where the real CLI would.
   let target = script;
@@ -42,10 +45,10 @@ async function run(env: Record<string, string>, args: string[] = [], fail?: stri
   for (const [k, v] of Object.entries(full)) if (v === "@token-file") full[k] = tokenFile; else if (v === "@empty-token-file") full[k] = emptyFile;
   try {
     const { stdout, stderr } = await promisify(execFile)("bash", [target, ...args], { env: full });
-    return { code: 0, out: stdout + stderr, calls: lines(calls) };
+    return { code: 0, out: stdout + stderr, calls: lines(calls), seen: lines(`${calls}.token`) };
   } catch (error) {
     const e = error as { code?: number; stdout?: string; stderr?: string };
-    return { code: e.code ?? -1, out: `${e.stdout ?? ""}${e.stderr ?? ""}`, calls: lines(calls) };
+    return { code: e.code ?? -1, out: `${e.stdout ?? ""}${e.stderr ?? ""}`, calls: lines(calls), seen: lines(`${calls}.token`) };
   }
 }
 
@@ -89,6 +92,13 @@ describe("deploy-site.sh", () => {
     for (const c of r.calls) expect(c).toContain("| REQUIRE=1 CONTENT=/srv/content DIST=unset HUSKY=0");
     expect(r.out).not.toContain(TOKEN);
     expect(r.out).toContain(`deploy-site: deployed ${URL}`);
+  });
+
+  it("keeps the token out of every process it starts, even when the caller exported a variable named token", async () => {
+    const r = await run({ ...ALL, token: "inherited-value" });
+    expect(r.code).toBe(0);
+    expect(r.seen.length).toBe(r.calls.length);
+    expect(r.seen.every((one) => one === "unset")).toBe(true);
   });
 
   it("takes the token from VERCEL_TOKEN when no file is named", async () => {
