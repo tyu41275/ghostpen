@@ -1,4 +1,12 @@
 const { withContentlayer } = require('next-contentlayer2')
+const { prepareContent } = require('./scripts/content.js')
+
+// The content folder (GHOSTPEN_CONTENT_DIR, README.md "Content") becomes .content/ before Contentlayer reads it. Once per
+// build or dev server: the processes Next.js starts load this file again and inherit the marker.
+if (process.env.GHOSTPEN_CONTENT_PREPARED !== '1') {
+  prepareContent({ root: __dirname, env: process.env })
+  process.env.GHOSTPEN_CONTENT_PREPARED = '1'
+}
 
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
   enabled: process.env.ANALYZE === 'true',
@@ -61,6 +69,8 @@ module.exports = () => {
   const plugins = [withContentlayer, withBundleAnalyzer]
   return plugins.reduce((acc, next) => next(acc), {
     reactStrictMode: true,
+    // The browser suite builds two sites side by side (scripts/build-e2e-sites.sh); everything else uses .next.
+    distDir: process.env.GHOSTPEN_DIST_DIR || '.next',
     pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
     eslint: {
       dirs: ['app', 'components', 'layouts', 'scripts'],

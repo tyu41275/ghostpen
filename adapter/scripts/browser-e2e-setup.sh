@@ -12,6 +12,8 @@ export PATH="$RUNNER_TEMP/node24/bin:$PATH"
 echo "$RUNNER_TEMP/node24/bin" >> "$GITHUB_PATH"
 node --version
 cd adapter && bash scripts/ci-npm-ci.sh
+# The two blog sites adapter/e2e/blog.browser.test.ts serves.
+bash ../scripts/build-e2e-sites.sh
 if ! sudo -n true 2>/dev/null; then
   npx playwright install --only-shell chromium
   exit 0

@@ -1,24 +1,23 @@
-/** @type {import("pliny/config").PlinyConfig } */
+// The site's own values (title, author, links, the home page's profile) come from the content folder's site.json, which
+// scripts/content.js copies to .content/ before the build (README.md, "Content"). What follows is the generic rest.
+const site = require('../.content/site.json')
+
+/**
+ * @typedef {{ label: string, href: string }} HomeLink
+ * @typedef {{ name: string, avatar: string, role: string, links: HomeLink[], aiTag: string, sourceRepo: string,
+ *   howItWorks: string }} Home
+ */
+/** @type {import("pliny/config").PlinyConfig & { home?: Home }} */
 const siteMetadata = {
-  title: 'Posts',
-  author: 'Tim',
-  headerTitle: 'Posts',
-  description: 'A blog created with Next.js and Tailwind.css',
+  title: 'Blog',
+  author: '',
+  headerTitle: 'Blog',
+  description: '',
   language: 'en-us',
   theme: 'system', // system, dark or light
-  siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
-  siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
+  siteUrl: '',
   siteLogo: '/static/images/logo.png',
   socialBanner: '/static/images/twitter-card.png',
-  mastodon: 'https://mastodon.social/@mastodonuser',
-  email: 'address@yoursite.com',
-  github: 'https://github.com',
-  twitter: 'https://twitter.com/Twitter',
-  facebook: 'https://facebook.com',
-  youtube: 'https://youtube.com',
-  linkedin: 'https://www.linkedin.com/in/yutim1275',
-  threads: 'https://www.threads.net',
-  instagram: 'https://www.instagram.com',
   locale: 'en-US',
   analytics: {
     // If you want to use an analytics provider you have to add it to the
@@ -90,6 +89,19 @@ const siteMetadata = {
     //   apiKey: '599cec31baffa4868cae4e79f180729b',
     //   indexName: 'docsearch',
     // },
+  },
+  ...site,
+  // The home page's profile: name, avatar and role line, profile links, the AI tag, the source repository, a post on how
+  // the blog works. An empty value hides its part. Only legacy mode leaves it out (app/Main.tsx shows the legacy intro).
+  home: site.home && {
+    name: '',
+    avatar: '',
+    role: '',
+    links: [],
+    aiTag: '',
+    sourceRepo: '',
+    howItWorks: '',
+    ...site.home,
   },
 }
 

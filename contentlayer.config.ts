@@ -1,5 +1,5 @@
 import { defineDocumentType, ComputedFields, makeSource } from 'contentlayer2/source-files'
-import { writeFileSync } from 'fs'
+import { readFileSync, readdirSync, writeFileSync } from 'fs'
 import readingTime from 'reading-time'
 import { slug } from 'github-slugger'
 import path from 'path'
@@ -59,7 +59,22 @@ function createTagCount(allBlogs) {
       })
     }
   })
-  writeFileSync('./app/tag-data.json', JSON.stringify(tagCount))
+  writeFileSync('./.content/tag-data.json', JSON.stringify(tagCount))
+}
+
+/**
+ * Contentlayer2 writes `assert { type: 'json' }` imports, which Node.js 22+ rejects, so onSuccess's import of them
+ * failed and left the tag counts unwritten. They become `with` first, as scripts/postbuild.mjs does for its own import.
+ */
+function patchGeneratedImports() {
+  const dir = path.join(root, '.contentlayer', 'generated')
+  for (const name of readdirSync(dir, { recursive: true }) as string[]) {
+    if (!name.endsWith('.mjs')) continue
+    const file = path.join(dir, name)
+    const src = readFileSync(file, 'utf8')
+    const patched = src.replaceAll("assert { type: 'json' }", "with { type: 'json' }")
+    if (patched !== src) writeFileSync(file, patched)
+  }
 }
 
 function createSearchIndex(allBlogs) {
@@ -130,7 +145,8 @@ export const Authors = defineDocumentType(() => ({
 }))
 
 export default makeSource({
-  contentDirPath: 'data',
+  // Built by scripts/content.js from the content folder (GHOSTPEN_CONTENT_DIR) before Contentlayer runs.
+  contentDirPath: '.content',
   documentTypes: [Blog, Authors],
   mdx: {
     cwd: process.cwd(),
@@ -146,13 +162,14 @@ export default makeSource({
       rehypeSlug,
       rehypeAutolinkHeadings,
       rehypeKatex,
-      [rehypeCitation, { path: path.join(root, 'data') }],
+      [rehypeCitation, { path: path.join(root, '.content') }],
       [rehypePrismPlus, { defaultLanguage: 'js', ignoreMissing: true }],
       rehypePresetMinify,
     ],
   },
   onSuccess: async (importData) => {
     try {
+      patchGeneratedImports()
       const { allBlogs } = await importData()
       createTagCount(allBlogs)
       createSearchIndex(allBlogs)

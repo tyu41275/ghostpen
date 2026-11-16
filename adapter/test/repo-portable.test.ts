@@ -16,7 +16,7 @@ const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SELF = "adapter/test/repo-portable.test.ts";
 
 /** Folders skipped by name wherever they are: version control, dependencies and build output. */
-const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".contentlayer", "dist", ".yarn"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".next-e2e-legacy", ".next-e2e-sample", ".contentlayer", ".content", "dist", ".yarn"]);
 /** Content folders, skipped by their path from the repository root: the posts and their images. */
 const SKIP_PATHS = new Set(["data/blog", "public/static"]);
 const CODE = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".sh", ".json", ".yml", ".yaml", ".toml"]);
@@ -94,7 +94,7 @@ describe("the repository is portable and installs no Claude hook (ghostpen#86)",
     const files = codeFiles(REPO_ROOT).filter((file) => file !== SELF);
     // The walk reached both the blog and the adapter: a wrong root would pass on nothing.
     expect(files).toEqual(expect.arrayContaining(["contentlayer.config.ts", "adapter/src/settings.ts", "adapter/scripts/install-host.sh", "scripts/rss.mjs",
-      "data/siteMetadata.js", "data/projectsData.ts", "public/admin/config.yml"]));
+      "data/siteMetadata.js", "data/site.legacy.js", "data/projectsData.ts", "public/admin/config.yml", "scripts/content.js", "content-sample/site.json"]));
     expect(files.flatMap((file) => findings(file, readFileSync(join(REPO_ROOT, file), "utf8")))).toEqual([]);
   });
 });

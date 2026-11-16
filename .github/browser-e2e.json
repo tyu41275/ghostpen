@@ -4,12 +4,20 @@
   "report": "test-results/browser-e2e.xml",
   "ui": [
     "adapter/src/service/app*.ts",
-    "adapter/src/service/server.ts"
+    "adapter/src/service/server.ts",
+    "app/Main.tsx",
+    "layouts/PostLayout.tsx",
+    "components/LegacyIntro.tsx",
+    "components/LegacyPostLinks.tsx",
+    "scripts/content.js",
+    "content-sample/**"
   ],
   "tests": [
     "adapter/e2e/**",
     "adapter/vitest.browser.config.ts",
-    "adapter/scripts/browser-e2e-setup.sh"
+    "adapter/scripts/browser-e2e-setup.sh",
+    "scripts/build-e2e-sites.sh",
+    "adapter/e2e/blog.browser.test.ts"
   ],
   "artifacts": [
     "test-results/"

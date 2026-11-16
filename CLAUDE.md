@@ -10,15 +10,19 @@ app/                    # Next.js 14 app directory (pages, layouts, API routes)
   about/                # About page
   tags/                 # Tag listing and per-tag post pages
   projects/             # Projects page
-data/
+content-sample/         # A generic content folder (README.md, "Content folder"): the build reads the folder
+                        # GHOSTPEN_CONTENT_DIR names, copied by scripts/content.js into the git-ignored .content/
+data/                   # Without GHOSTPEN_CONTENT_DIR the build still reads data/ (to be removed)
+  site.legacy.js        # The site's own values in legacy mode (title, author, links)
   blog/                 # .mdx blog posts (YAML frontmatter + MDX body)
   authors/              # Author profiles (default.mdx = the blog's author)
   style-guide.md        # Writing style extracted from existing posts — AI generators MUST follow this. Read the "Anti-Formula Rules" section as binding over the example lists above it: the "Characteristic phrases" list and the rejection criteria describe RANGE, and a generator optimising against them as a checklist produces six near-identical posts (#67-#75; #74 used 7 of the 8 example catchphrases in the guide's own order, against 0-2 for the human posts). The rules cap catchphrase reuse at two, ban the templated Problem/Investigation/Solution/Conclusion header set, and set the length target from the published corpus.
-  siteMetadata.js       # Site-wide config (title, URL, analytics, search, comments)
+  siteMetadata.js       # Site-wide config (analytics, search, comments), merged with the content's site.json
   projectsData.ts       # Projects page content
   headerNavLinks.ts     # Navigation links
   logo.svg              # Site logo
 scripts/
+  content.js            # Builds .content/ from GHOSTPEN_CONTENT_DIR (or data/) — next.config.js runs it first
   postbuild.mjs         # RSS generation — runs automatically after `next build` via the build script
   rss.mjs               # RSS feed generator — called by postbuild.mjs to create feed.xml
 contentlayer.config.ts  # Content schema definition — Contentlayer2 reads this to type-check and process all .mdx files
@@ -116,9 +120,9 @@ ghostpen drafts posts as an optional chatter adapter in `adapter/` (Obsidian ADR
 **For page routing / layouts** -> `app/` (Next.js app directory) + `layouts/` (page layout components)
 **For UI components** -> `components/` — shared React components (Tag, SearchButton, navigation, etc.)
 **For styling** -> `css/` + `tailwind.config.js` — Tailwind CSS configuration and global styles
-**For site metadata** -> `data/siteMetadata.js` — title, URL, analytics, search, comments config
+**For site metadata** -> the content folder's `site.json` (title, URL, author, home page) + `data/siteMetadata.js` (analytics, search, comments)
 **For build scripts** -> `scripts/postbuild.mjs` + `scripts/rss.mjs` — RSS generation, post-build tasks
 
-**Ignore**: `node_modules/`, `.next/`, `.contentlayer/`, `yarn.lock`, `.claude/worktrees/`
+**Ignore**: `node_modules/`, `.next/`, `.contentlayer/`, `.content/`, `yarn.lock`, `.claude/worktrees/`
 
 **When to escalate**: For drafting, ranking or publishing, read `adapter/docs/` first; for chatter's side (the drop-in, readiness, the app page's sign-in), read chatter's docs. For blog styling, layout, content, or Next.js issues, stay local.
