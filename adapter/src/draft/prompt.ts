@@ -1,5 +1,5 @@
 /**
- * What the draft writer is told (ADR 0101, brief D1–D3, D10, D12). The plain-words rule comes first, ahead of the voice:
+ * What the draft writer is told. The plain-words rule comes first, ahead of the voice:
  * a 10-year-old must be able to follow every sentence. Then the stack parts the sources name, each with the post to
  * link or the definition to explain it from, the stack map's arrows a diagram may draw, the author's style guide and
  * recent posts for the voice, and the source documents. A failed draft goes back with the check report.
@@ -22,7 +22,7 @@ export interface WriterBrief {
   graph: StackGraph | null;
   styleGuide?: string;
   voice: Array<{ title: string; body: string }>;
-  /** What the author added about this topic in its card's thread (ADR 0101, amended 2026-10-25), oldest first. */
+  /** What the author added about this topic in its card's thread, oldest first. */
   context?: string[];
   /** Pages the writer may screenshot, by name, with what each shows. */
   screenshots?: Array<{ name: string; description: string }>;

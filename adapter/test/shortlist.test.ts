@@ -129,7 +129,7 @@ describe("the adapter routes", () => {
       .toBe("Only the operator can answer ghostpen's shortlist, so nothing was done.");
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 2, action: "skip", reason: " ", user: "200000000000000001" })).body.refused)
       .toBe("A Skip needs a reason, so nothing was done.");
-    // Every press needs its reason now, a Write and a Not yet too (ADR 0101, amended 2026-10-25).
+    // Every press needs its reason now, a Write and a Not yet too.
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 1, action: "write", user: "200000000000000001" })).body.refused)
       .toBe("A Write needs a reason, so nothing was done.");
     expect((await call("POST", "/v1/adapter/shortlist/answer", { week, index: 0, action: "later", reason: "", user: "200000000000000001" })).body.refused)

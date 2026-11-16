@@ -1,5 +1,5 @@
 /**
- * Drafting one post (ADR 0101, brief D1–D3, D10–D12): gather what the writer needs from the sources, run the writer, run
+ * Drafting one post: gather what the writer needs from the sources, run the writer, run
  * every check, and send a failed draft back with the check report up to `draft.revisions` times. A draft held for a
  * background post stops at once: rewording cannot write that post. So does one whose post links cannot be checked (the
  * blog's sitemap unread): it fails, as rewording cannot read the sitemap. Every draft is kept in `dataDir/drafts/` with its

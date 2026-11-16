@@ -1,5 +1,5 @@
 /**
- * One ranking run (ADR 0101): read every configured source, make the candidates, score the changed ones, rank them, and
+ * One ranking run: read every configured source, make the candidates, score the changed ones, rank them, and
  * keep the result in `dataDir/ranking.json` for the app page and the weekly shortlist. Every source problem and every
  * scorer failure is kept with the result, shown to the operator, never hidden.
  */

@@ -1,4 +1,4 @@
-// The `instance:` and `adapters:` of an instance's Obsidian `config/stack.yaml`, for scripts/allowed-here.mjs (ADR 0030).
+// The `instance:` and `adapters:` of an instance's Obsidian `config/stack.yaml`, for scripts/allowed-here.mjs.
 // Read with the `yaml` parser chatter reads the same file with, so the install gate and chatter's own check agree on
 // what the file says. A file that is not one YAML mapping, a key given twice, an alias, or either key missing or of
 // another type refuses, naming why: nothing is allowed that could not be read.

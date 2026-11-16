@@ -23,7 +23,7 @@ export const draftButtons = (week: string, index: number, view: DraftView): Butt
   ...(view.publish ? [{ label: "Publish", style: "success" as const, id: `${OWNER}${DRAFT_PREFIX}publish:${week}:${index}:${view.round}` }] : []),
   ...(view.edit ? [{ label: "Edit", style: "secondary" as const, id: `${OWNER}${DRAFT_PREFIX}edit:${week}:${index}:${view.round}` }] : [])];
 
-/** A ready draft's reason choices for Publish (ADR 0101, amended 2026-10-25): one pick publishes with that reason. */
+/** A ready draft's reason choices for Publish: one pick publishes with that reason. */
 export const draftSelects = (week: string, index: number, view: DraftView): Select[] => (view.publish
   ? [{ id: `${OWNER}${DRAFT_PREFIX}reason:${week}:${index}:${view.round}`, placeholder: "Pick a reason to publish, or press Publish to type one",
     options: chipOptions(["publish"]) }] : []);

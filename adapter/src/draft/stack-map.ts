@@ -1,5 +1,5 @@
 /**
- * The stack map a draft's diagrams are checked against (ADR 0101, brief D10): the output of the command in
+ * The stack map a draft's diagrams are checked against: the output of the command in
  * `draft.stackMap` (on the author's host, `relay graph --format json`, format `relay.stack.graph/v1`). Unset, or a map
  * that cannot be read, gives no map: the diagram check then says it cannot check, never passes a diagram unchecked.
  */

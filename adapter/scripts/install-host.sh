@@ -3,7 +3,7 @@
 # given checkout's adapter/, creates the settings, the app key and the adapter config once (never overwriting them),
 # installs the user service, and writes chatter's adapter drop-in. It installs only where the instance's Obsidian
 # stack.yaml (--stack) allows ghostpen, and does not switch ghostpen on: that is the chatter Adapters page or direct
-# chat (ADR 0030).
+# chat.
 #
 #   adapter/scripts/install-host.sh --instance <instance> --root <chatter home>/ghostpen \
 #     --port 8794 --dropin-dir <chatter home>/adapters.d \
@@ -31,7 +31,7 @@ case "$READINESS" in on|off) ;; *) echo "--readiness must be on or off" >&2; exi
 CHECKOUT="$ROOT/checkout" CONFIG="$ROOT/config" DATA="$ROOT/data"
 ADAPTER="$CHECKOUT/adapter"
 UNIT="ghostpen-$INSTANCE.service"
-# Installed only where the instance allows it (ADR 0030): checked before anything is configured or built. The check
+# Installed only where the instance allows it: checked before anything is configured or built. The check
 # reads the file with the yaml parser chatter uses, so a checkout without its dependencies gets them first.
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$HERE/node_modules/yaml/package.json" ] || (cd "$HERE" && npm ci --no-audit --no-fund --silent)

@@ -1,5 +1,5 @@
 /**
- * The short reasons a card offers for each press (ADR 0101, amended 2026-10-25; Reflection D6: "a chip counts"). A
+ * The short reasons a card offers for each press (a chip counts). A
  * reason not on the list is typed through the button itself ("Other…"). Values are `<action>:<n>`, so a choice names
  * its press and its words.
  */

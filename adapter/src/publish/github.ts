@@ -1,5 +1,5 @@
 /**
- * A draft becomes a blog pull request, and Publish lands it (ghostpen#90, ADR 0101 amended 2026-10-25). ghostpen works
+ * A draft becomes a blog pull request, and Publish lands it (ghostpen#90). ghostpen works
  * in its own clone of the blog repo (`publish.repoDir`; nothing else edits it): one branch per post, the post file and
  * its screenshots, a pull request carrying the check report and preview link. The operator's independent review
  * (`publish.reviewCommand`) starts as the pull request opens. Publish merges only when the review's status

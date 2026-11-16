@@ -1,5 +1,5 @@
 /**
- * Scores (ADR 0101, brief D5 and D6). A decision post is scored on stakes, carry-over and thought process; a post-mortem
+ * Scores. A decision post is scored on stakes, carry-over and thought process; a post-mortem
  * on evidence, surprise and completeness; 0 to 3 each. **Every score quotes the line that earns it**, and the quote is
  * checked here against the document itself: a quote that is not in it, word for word, makes the score 0. Whoever scores
  * (a model, a person) cannot raise a candidate with words the source does not hold.

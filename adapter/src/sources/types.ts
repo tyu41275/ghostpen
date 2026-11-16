@@ -1,5 +1,5 @@
 /**
- * What ghostpen reads (ADR 0101, brief D8). Every item keeps where it came from (a file and line, or a URL), so a score
+ * What ghostpen reads. Every item keeps where it came from (a file and line, or a URL), so a score
  * can quote the exact line that earns it, and every source that cannot be read is reported by name, never treated as
  * empty.
  */

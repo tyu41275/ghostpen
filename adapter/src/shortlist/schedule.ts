@@ -1,5 +1,5 @@
 /**
- * When a weekly shortlist is due (ADR 0101, brief D13): once a week, at the operator's day and time in their time zone
+ * When a weekly shortlist is due: once a week, at the operator's day and time in their time zone
  * (settings; Monday 09:00 UTC unless they say otherwise). A week is named by the local date of its slot, so a shortlist
  * posts once per week however often the adapter asks, and a week missed while ghostpen was off is never caught up.
  */

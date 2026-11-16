@@ -1,4 +1,4 @@
-# Feedback: reasons, questions and context (ADR 0101, amended 2026-10-25)
+# Feedback: reasons, questions and context
 
 ghostpen keeps everything the operator tells it, so a learning loop can grow from it.
 

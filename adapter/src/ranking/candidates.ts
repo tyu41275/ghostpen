@@ -1,5 +1,5 @@
 /**
- * Candidates (ADR 0101, brief D4 and D5): one possible post per source document, with the parts that make it up. A
+ * Candidates: one possible post per source document, with the parts that make it up. A
  * decision document (a brief or an ADR) gives a **decision post**: its decisions, the options it turned down,
  * and anything it says happened. An experiment record, an incident issue or a pull request with measured results gives
  * a **post-mortem**. The parts of one document always merge into one candidate, so a rich document is never counted twice.

@@ -1,5 +1,5 @@
 /**
- * Readers for folders of markdown (ADR 0101, brief D8): decision documents and experiment records as topic documents,
+ * Readers for folders of markdown: decision documents and experiment records as topic documents,
  * and glossaries (`## Term` sections) as definitions. Plain files only: nothing here knows Obsidian. A folder that is
  * missing, or a pattern that matches nothing, is a problem named with its source, never an empty result.
  */

@@ -1,5 +1,5 @@
 /**
- * Messages in a card's thread (ADR 0101, amended 2026-10-25). chatter hands every message to its adapters before its
+ * Messages in a card's thread. chatter hands every message to its adapters before its
  * own routing; a message in a thread that is a ghostpen card's (the one ghostpen opened, or one the operator opened on
  * the card) is ghostpen's: chatter is told it is handled at once, and the answer, which can take a model a minute,
  * is posted into the thread when it comes. Any other message is left to chatter.

@@ -1,5 +1,5 @@
 /**
- * One instance's ghostpen settings (ADR 0101). Written from the operator's own config: every machine-specific value
+ * One instance's ghostpen settings. Written from the operator's own config: every machine-specific value
  * lives here, never in code. Every error names the field, never the value.
  */
 import { readFileSync } from "node:fs";
@@ -18,7 +18,7 @@ export interface GhostpenSettings {
   /** Absolute folder for ghostpen's own state (rankings, the operator's picks and skips); it must already exist. */
   dataDir: string;
   /**
-   * The app identity key file chatter's console signs with (ADR 0030, pattern `adapter-app`): base64url text of at
+   * The app identity key file chatter's console signs with (pattern `adapter-app`): base64url text of at
    * least 32 bytes. Unset: the app opens to nobody.
    */
   appIdentityKeyFile?: string;

@@ -1,6 +1,6 @@
 /**
  * How a timed-out scorer and the children it started are stopped (process groups, KILL_GRACE_MS). Each case waits out
- * a real timeout and the kill grace, seconds each, so this runs with the slow tests (ADR 0028), not on every PR.
+ * a real timeout and the kill grace, seconds each, so this runs with the slow tests, not on every PR.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

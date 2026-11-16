@@ -1,4 +1,4 @@
-# From a Write to the blog (ghostpen#90, ADR 0101 amended 2026-10-25)
+# From a Write to the blog (ghostpen#90)
 
 The operator approves every post. Nothing merges without their Publish press, and Publish lands a post only after the independent review approves it.
 

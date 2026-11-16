@@ -1,5 +1,5 @@
 /**
- * The ranking (ADR 0101, brief D3 to D7): candidates ordered by their weighted score, each with its **explanation cost**
+ * The ranking: candidates ordered by their weighted score, each with its **explanation cost**
  * (the stack parts a reader would need explained that have no post of their own yet), the **background posts** those
  * costs add up to, ordered by how many top candidates each would unlock, and the **post-mortems owed** for decision
  * posts already published before their outcome. Explanation cost orders background posts; it never lowers a score.

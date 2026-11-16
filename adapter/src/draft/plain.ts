@@ -1,5 +1,5 @@
 /**
- * The plain-language check (ADR 0101, brief D2: everything ghostpen writes must be explainable to a 10-year-old). It is
+ * The plain-language check (everything ghostpen writes must be explainable to a 10-year-old). It is
  * a rule anyone can rerun, not a model's opinion: the Flesch-Kincaid grade of the draft's prose must be at most
  * `maxGrade` (default 8) and no sentence may run past `maxSentenceWords` (default 30). Code blocks, diagrams, link
  * addresses and headings are not prose and are left out. A failure names the grade and the longest sentences.

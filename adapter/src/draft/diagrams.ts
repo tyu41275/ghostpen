@@ -1,5 +1,5 @@
 /**
- * The diagram check (ADR 0101, brief D10): a Mermaid diagram in a draft that draws the author's stack must match the
+ * The diagram check: a Mermaid diagram in a draft that draws the author's stack must match the
  * stack map (Relay's `relay graph --format json`, `relay.stack.graph/v1`): every arrow between two boxes that are parts
  * the map knows (by label, any case) must be an edge of the map, in either direction. `draft.diagramFiles` adds the
  * arrows of configured Mermaid flowcharts to the map (`diagram-files.ts`). Arrows to boxes the map does not

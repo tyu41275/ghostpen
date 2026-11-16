@@ -21,7 +21,7 @@ Configured sources    ->   Ranking + weekly    ->   Draft PR             ->   Pu
                                                     screenshots)               Vercel deploys)
 ```
 
-ghostpen runs as an optional chatter adapter (`adapter/`, see `adapter/docs/adapter.md`): what it reads is `adapter/docs/sources.md`, the ranking `adapter/docs/ranking.md`, the shortlist `adapter/docs/shortlist.md`, drafting and its checks `adapter/docs/drafting.md`, and publishing `adapter/docs/publishing.md`. The post-ship hook, the Python generator it ran and the "has a decision record, so it's worth writing about" rule are retired (Obsidian ADR 0101).
+ghostpen runs as an optional chatter adapter (`adapter/`, see `adapter/docs/adapter.md`): what it reads is `adapter/docs/sources.md`, the ranking `adapter/docs/ranking.md`, the shortlist `adapter/docs/shortlist.md`, drafting and its checks `adapter/docs/drafting.md`, and publishing `adapter/docs/publishing.md`. The post-ship hook, the Python generator it ran and the "has a decision record, so it's worth writing about" rule are retired.
 
 AI-generated posts are transparently labeled with an `aiGenerated` frontmatter field and a banner on the post.
 

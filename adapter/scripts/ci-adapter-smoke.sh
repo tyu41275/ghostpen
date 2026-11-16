@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The adapter-smoke check (ghostpen ADR 0101): chatter's own `chatter smoke`, from the ensemble-chatter checkout
+# The adapter-smoke check: chatter's own `chatter smoke`, from the ensemble-chatter checkout
 # the check runner provides ($CHECK_WITH), runs adapter/smoke/cases.json through chatter's real adapter loader and
 # command handlers against a real ghostpen service started here, with a fresh data folder in $RUNNER_TEMP. Run from the repository root; the adapter lives in adapter/
 set -euo pipefail

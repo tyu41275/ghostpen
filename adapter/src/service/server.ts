@@ -1,5 +1,5 @@
 /**
- * ghostpen's service on loopback (ADR 0101). `GET /health` is what chatter's Adapters page and the adapter's `status`
+ * ghostpen's service on loopback. `GET /health` is what chatter's Adapters page and the adapter's `status`
  * read; it checks the data folder on every request, so a folder that went away reads as down (503, saying why).
  * `/app/` opens only to a person chatter's console signed (`app-identity.ts`); anyone else finds nothing (404).
  * `GET /readiness` is chatter's readiness list (`readiness.ts`), with no key, like `/health`.

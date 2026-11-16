@@ -1,7 +1,7 @@
 # Readiness (ghostpen#117)
 
 `GET /readiness` tells chatter what ghostpen needs and whether it has it, in version 1 of chatter's format (chatter's
-`docs/adapter-readiness.md`, fleet ADR 0112). It is on the service's port and, like `/health`, has no key, since chatter
+`docs/adapter-readiness.md`). It is on the service's port and, like `/health`, has no key, since chatter
 sends none. Code: `src/service/readiness*.ts`.
 
 - **It reads, and does nothing else.** It reads the settings and local files. It calls nothing outside: no GitHub, no
