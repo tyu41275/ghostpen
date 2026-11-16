@@ -37,7 +37,9 @@ async function run(env: Record<string, string>, args: string[] = [], fail?: stri
   const tokenFile = join(dir, "token");
   writeFileSync(tokenFile, `${TOKEN}\n`, { mode: 0o600 });
   const full = { PATH: `${bin}:${process.env.PATH}`, HOME: dir, TMPDIR: dir, ...env };
-  for (const [k, v] of Object.entries(full)) if (v === "@token-file") full[k] = tokenFile;
+  const emptyFile = join(dir, "empty-token");
+  writeFileSync(emptyFile, " \n", { mode: 0o600 });
+  for (const [k, v] of Object.entries(full)) if (v === "@token-file") full[k] = tokenFile; else if (v === "@empty-token-file") full[k] = emptyFile;
   try {
     const { stdout, stderr } = await promisify(execFile)("bash", [target, ...args], { env: full });
     return { code: 0, out: stdout + stderr, calls: lines(calls) };
@@ -55,8 +57,20 @@ const ALL = { GHOSTPEN_CONTENT_DIR: "/srv/content", VERCEL_TOKEN_FILE: "@token-f
 describe("deploy-site.sh", () => {
   it("refuses in one line naming every missing input, and runs nothing", async () => {
     const r = await run({ VERCEL_ORG_ID: "team_x" });
-    expect(r.code).not.toBe(0);
+    expect(r.code).toBe(2);
     expect(r.out.trim()).toBe("deploy-site: missing GHOSTPEN_CONTENT_DIR, VERCEL_TOKEN_FILE (or VERCEL_TOKEN), VERCEL_PROJECT_ID");
+    expect(r.calls).toEqual([]);
+  });
+
+  it.each([
+    ["an unknown argument", ALL, ["--prod"], "deploy-site: unknown argument: --prod (only --build-only)"],
+    ["a token file it cannot read", { ...ALL, VERCEL_TOKEN_FILE: "/nonexistent/token" }, [],
+      "deploy-site: VERCEL_TOKEN_FILE (/nonexistent/token) is not a readable file"],
+    ["an empty token file", { ...ALL, VERCEL_TOKEN_FILE: "@empty-token-file" }, [], "deploy-site: the Vercel token is empty"],
+  ])("refuses %s with exit 2 before any install or Vercel call", async (_what, env, args, line) => {
+    const r = await run(env, args);
+    expect(r.code).toBe(2);
+    expect(r.out.trim()).toBe(line);
     expect(r.calls).toEqual([]);
   });
 
