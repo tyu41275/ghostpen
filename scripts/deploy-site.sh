@@ -51,18 +51,10 @@ unset VERCEL_TOKEN VERCEL_TOKEN_FILE
 export GHOSTPEN_REQUIRE_CONTENT=1
 unset GHOSTPEN_DIST_DIR
 
-# The root dependencies, as scripts/build-e2e-sites.sh installs them: the pinned yarn release, git's hooks left alone,
-# and only the end of yarn's output when it fails.
-yarn_js=$(sed -n 's/^yarnPath: *//p' .yarnrc.yml)
+# The root dependencies (scripts/yarn-install.sh: the pinned yarn, its link-step crash tried once more). HUSKY=0 stays
+# set for the CLI too, as `vercel build` may run its own install.
 export HUSKY=0
-log=$(mktemp "${TMPDIR:-/tmp}/ghostpen-yarn-install.XXXXXX")
-if ! node "$PWD/$yarn_js" install --immutable >"$log" 2>&1; then
-  echo "deploy-site: yarn install failed; the end of its output (long lines cut):" >&2
-  cut -c1-400 "$log" | tail -n 40 >&2
-  rm -f "$log"
-  exit 1
-fi
-rm -f "$log"
+TMPDIR="${TMPDIR:-/tmp}" bash scripts/yarn-install.sh deploy-site
 
 vercel() { npx --yes "vercel@$VERCEL_CLI_VERSION" "$@" --token "$token"; }
 

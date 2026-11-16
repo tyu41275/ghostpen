@@ -28,6 +28,7 @@ async function run(env: Record<string, string>, args: string[] = [], fail?: stri
     mkdirSync(join(dir, "root", "scripts"), { recursive: true });
     copyFileSync(script, (target = join(dir, "root", "scripts", "deploy-site.sh")));
     copyFileSync(join(script, "..", "..", ".yarnrc.yml"), join(dir, "root", ".yarnrc.yml"));
+    copyFileSync(join(script, "..", "yarn-install.sh"), join(dir, "root", "scripts", "yarn-install.sh"));
     writeFileSync(join(dir, "pulled"), pulled);
   }
   const pull = pulled === undefined ? "" : `[ "$3" = pull ] && mkdir -p .vercel && cp ${join(dir, "pulled")} .vercel/.env.production.local\n`;
