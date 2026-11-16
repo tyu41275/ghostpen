@@ -1,6 +1,6 @@
 # Installing ghostpen's adapter
 
-ghostpen installs only where the instance's Obsidian `config/stack.yaml` lists `ghostpen` under `adapters:` (ADR 0030). Its Command Center channel appears only there too, through `commandCenter.adapterChannels`, the same way Clock's `clock-alerts` does. Installing never switches it on: that's chatter's Adapters page or direct chat.
+ghostpen installs only where the instance's Obsidian `config/stack.yaml` lists `ghostpen` under `adapters:`. Its Command Center channel appears only there too, through `commandCenter.adapterChannels`, the same way Clock's `clock-alerts` does. Installing never switches it on: that's chatter's Adapters page or direct chat.
 
 **Through Relay** (the normal route; updates go the same way): the catalogue entry for `ghostpen` (Relay's adapter catalogue, kept in the notes repository) names `adapter/scripts/relay-install.mjs`. An instance opts in with `install_inputs: {ghostpen: {port: <1024-65535>, dropin_dir: <absolute>}}` in its `stack.yaml`, with the optional `chatter_facts` and `readiness` (`on` or `off`; any other value is refused, and absent is the install's default, on). Relay runs it in that instance's own checkout, `<root>/checkout`.
 

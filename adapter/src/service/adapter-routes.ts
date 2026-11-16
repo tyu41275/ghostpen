@@ -88,7 +88,7 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
   const action = body.action as Action;
   if (!ACTIONS.includes(action)) return { status: 400, body: { error: "action must be write, skip or later" } };
   const reason = typeof body.reason === "string" ? body.reason.trim().split("\n")[0]!.slice(0, 200) : "";
-  // Every press carries its reason (ADR 0101, amended 2026-10-25): a choice on the card, or typed through the button.
+  // Every press carries its reason: a choice on the card, or typed through the button.
   if (!reason) return { status: 200, body: { refused: `${action === "write" ? "A Write" : action === "skip" ? "A Skip" : "A Not yet"} needs a reason, so nothing was done.` } };
   // Kept whatever the press does next: a reason given on a card answered already still teaches.
   addFeedback(settings.dataDir, { at: now.toISOString(), by: String(body.user), topic: found.id, kind: "reason", action, chip: body.chip === true, text: reason });

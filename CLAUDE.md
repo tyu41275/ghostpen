@@ -103,7 +103,7 @@ yarn analyze    # Bundle analysis — sets ANALYZE=true to generate @next/bundle
 
 ## Drafting: the chatter adapter
 
-ghostpen drafts posts as an optional chatter adapter in `adapter/` (Obsidian ADR 0101; see `adapter/docs/adapter.md`). The post-ship hook and the Python generator it ran (`scripts/generate_post.py`, which read Ensemble's artifacts) are retired and removed.
+ghostpen drafts posts as an optional chatter adapter in `adapter/` (see `adapter/docs/adapter.md`). The post-ship hook and the Python generator it ran (`scripts/generate_post.py`, which read Ensemble's artifacts) are retired and removed.
 
 - **Sources:** only what its settings' `sources` block names (`adapter/docs/sources.md`); nothing in code names a machine or a person's folders. `adapter/test/repo-portable.test.ts` fails on a machine-specific path (a drive path, a home or user folder) or a Claude hook in any code file.
 - **Ranking and shortlist:** it ranks topics by value on its own before each weekly shortlist (`adapter/docs/ranking.md`; by hand, `node adapter/dist/cli/rank.js <settings>`), shown on its app page, and proposes the shortlist in its channel with Write, Skip and Not yet (`adapter/docs/shortlist.md`).

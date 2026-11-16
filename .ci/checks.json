@@ -26,7 +26,7 @@
       "with": {
         "ensemble-chatter": "cd1f77ad337d46d824dc48085614e93f2b4e6eb3"
       },
-      "run": "# chatter's adapter smoke over ghostpen's adapter, against a real ghostpen service (ADR 0101).\nbash adapter/scripts/ci-adapter-smoke.sh\n"
+      "run": "# chatter's adapter smoke over ghostpen's adapter, against a real ghostpen service.\nbash adapter/scripts/ci-adapter-smoke.sh\n"
     }
   }
 }

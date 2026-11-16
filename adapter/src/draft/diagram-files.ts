@@ -1,5 +1,5 @@
 /**
- * What a draft's diagrams are checked against (ADR 0101, brief D10, ghostpen#90): the stack map, the configured Mermaid
+ * What a draft's diagrams are checked against (ghostpen#90): the stack map, the configured Mermaid
  * flowcharts (`draft.diagramFiles`), or both, joined by box label (any case). A configured source that cannot be read
  * fails closed: there is then no graph, and every diagram with boxes is named as one that cannot be checked.
  */

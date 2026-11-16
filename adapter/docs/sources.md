@@ -1,4 +1,4 @@
-# What ghostpen reads (ghostpen#87, ADR 0101 brief D8)
+# What ghostpen reads (ghostpen#87)
 
 ghostpen reads only what its settings' `sources` block names. Nothing in the code knows Obsidian or any one person's folders. A source that can't be read (a missing folder, a pattern matching nothing, a link leading out of its folder, a repository GitHub refuses) is reported by name. It's never treated as empty. Every item keeps where it came from: a file and line, or a web address. That way a score can quote the exact line that earns it.
 
@@ -9,7 +9,7 @@ ghostpen reads only what its settings' `sources` block names. Nothing in the cod
 | `references[]` | `glossary`: `root`, `include` | each `## Term` section: the term, its text up to the next heading, and the heading's line | `src/sources/markdown.ts` |
 | `published` | `blogDir`, `baseUrl` | the published-post index: per post, the stack parts it's **about** (in its title, tags or summary) and the ones it only **mentions** (its body), against the glossary terms; and which posts the site serves, from `<baseUrl>/sitemap.xml` | `src/sources/published.ts`, `src/sources/served.ts` |
 
-The published-post index lives in `dataDir/published-index.json`. Each build reads every post to hash it. A post whose hash, the term list and the blog address haven't changed keeps its stored entry, so only changed posts are parsed again. `postsAbout(index, term)` returns the published (not draft) posts about a stack part, newest first. That's the link a draft uses instead of explaining the part again (brief D1, D3).
+The published-post index lives in `dataDir/published-index.json`. Each build reads every post to hash it. A post whose hash, the term list and the blog address haven't changed keeps its stored entry, so only changed posts are parsed again. `postsAbout(index, term)` returns the published (not draft) posts about a stack part, newest first. That's the link a draft uses instead of explaining the part again.
 
 **What the site serves** (ghostpen#108). A post file the site's build leaves out (an empty `lastmod`, say) answers 404, so it is no post to link. Each read of the sources also reads `<baseUrl>/sitemap.xml` once (10 s, at most 2 MB):
 - Only paths are compared: the sitemap's addresses may carry another host (the blog's `siteUrl`). A post is served when `/blog/<file name>` is listed.

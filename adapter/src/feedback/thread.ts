@@ -1,5 +1,5 @@
 /**
- * A card's thread (ADR 0101, amended 2026-10-25): the operator asks why a topic is there, or adds context for it. Any
+ * A card's thread: the operator asks why a topic is there, or adds context for it. Any
  * message in the thread ghostpen opened under a card, or in a thread the operator opened on the card himself (on
  * Discord that thread's id is the card's message id), is about that card's topic. ghostpen answers with the
  * operator's configured command (the writer's, else the scorer's) from the topic's source documents, its scores with

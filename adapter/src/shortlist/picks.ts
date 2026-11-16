@@ -1,7 +1,7 @@
 /**
  * What a week's shortlist holds: the top candidates of the last ranking that the operator has not written or
  * skipped yet; one they answered "Not yet" comes back in a later week. When one part of the setup would need
- * explaining in two or more of them and no post explains it yet, its background post is ranked in first (brief D3, D7):
+ * explaining in two or more of them and no post explains it yet, its background post is ranked in first:
  * writing it lets those topics link to it.
  */
 import type { ChoicesState } from "../ranking/choices.js";

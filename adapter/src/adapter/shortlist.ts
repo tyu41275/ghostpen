@@ -1,5 +1,5 @@
 /**
- * The weekly shortlist in chatter (ghostpen#89, ADR 0101 brief D13). On each heartbeat the adapter asks the service for
+ * The weekly shortlist in chatter (ghostpen#89). On each heartbeat the adapter asks the service for
  * this week's shortlist and posts every card not posted yet, keeping where it went; a card posted before this adapter run
  * and not answered yet is redrawn once, which re-arms its buttons after a chatter restart. Buttons: Write, Skip (asks
  * for a one-line reason through chatter's private form) and Not yet. The service decides who may answer and keeps the
@@ -32,7 +32,7 @@ interface Item { index: number; id: string; text: string; posted?: { channelRef:
 interface Week { week?: string; channel?: string; operator?: string; items?: Item[]; off?: string; waiting?: string }
 
 const SHORTLIST_ACTIONS: readonly ReasonAction[] = ["write", "skip", "later"];
-/** The card's reason choices (ADR 0101, amended 2026-10-25): one pick answers the card with that reason. */
+/** The card's reason choices: one pick answers the card with that reason. */
 const reasons = (week: string, index: number): Select[] => [{ id: `${BUTTON_OWNER}${BUTTON_PREFIX}reason:${week}:${index}`,
   placeholder: "Pick a reason, or press a button to type your own", options: chipOptions(SHORTLIST_ACTIONS) }];
 const ASK: Record<string, { title: string; label: string; placeholder: string }> = {
@@ -72,7 +72,7 @@ export async function syncShortlist(ctx: ShortlistContext, redrawn: Set<string>,
     if (posted >= CARDS_PER_BEAT) continue;
     // The week's first card pings the operator once; the rest arrive quietly under it.
     const ping = item.index === 0 && state.operator ? { singleUserNotification: { userId: state.operator } } : {};
-    // Each card opens its thread (ADR 0101, amended 2026-10-25): where the operator asks about the topic or adds context.
+    // Each card opens its thread: where the operator asks about the topic or adds context.
     const refs = await ctx.postToChannel(state.channel, { text: item.text, ...ping, selects: reasons(state.week, item.index), thread: { name: threadName(item.text) } },
       buttons(state.week, item.index));
     if (!refs?.messageRef || !refs.channelRef) throw new Error(`chatter posted nothing to ghostpen's channel ${state.channel}`);

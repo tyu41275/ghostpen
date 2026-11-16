@@ -1,5 +1,5 @@
 /**
- * The scorer (ADR 0101, brief D2, D5, D6): whatever proposes a candidate's scores, run as the command the settings name
+ * The scorer: whatever proposes a candidate's scores, run as the command the settings name
  * (`scorer.command`, an argv run without a shell). Which model and account it uses is the operator's choice, in their
  * settings; nothing here names one. It gets one prompt on stdin, the rubric and the document with numbered lines, and
  * answers one JSON object. Its scores are only proposals: `checkScores` keeps a score only when its quote is in the

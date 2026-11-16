@@ -1,5 +1,5 @@
 /**
- * Screenshots in drafts (ADR 0101, brief D11): the writer may place `![what it shows](screenshot:<name>)` for a page
+ * Screenshots in drafts: the writer may place `![what it shows](screenshot:<name>)` for a page
  * the operator configured (`settings.draft.screenshots.pages`). Each is taken in a real browser with the page's `mask`
  * selectors painted over, and is kept only if the text the page draws outside the masks (read from Chrome's layout
  * snapshot, web components included) shows nothing private. The check fails closed: a page that cannot be loaded, that

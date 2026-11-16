@@ -1,5 +1,5 @@
 /**
- * Everything the operator tells ghostpen (ADR 0101, amended 2026-10-25 "threads and reasons"): the reason behind every
+ * Everything the operator tells ghostpen: the reason behind every
  * press, and, from a card's thread, questions with their answers and context for a topic. Kept in
  * `dataDir/feedback.json`, oldest first. Each entry waits for chatter's operator intake (ensemble-chatter#4637), so
  * Reflection can learn from it once that exists (`intake: "pending"` until then); ghostpen itself reads the context for

@@ -1,4 +1,4 @@
-# Draft checks (ghostpen#90, ADR 0101 brief D1–D3, D10, D14)
+# Draft checks (ghostpen#90)
 
 Every draft must pass these checks before the operator sees it. Each check can fail a draft by itself. They are rules anyone can rerun, not a model's opinion. The report (`reportText`) says in plain words which check failed and why.
 

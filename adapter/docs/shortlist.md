@@ -1,4 +1,4 @@
-# The weekly shortlist (ghostpen#89, ADR 0101 brief D13)
+# The weekly shortlist (ghostpen#89)
 
 Once a week, at the operator's slot, ghostpen proposes 3 to 5 topics in its channel. The slot is a day and time in their time zone (`settings.shortlist`: `day`, `time`, `timeZone`; Monday 09:00 UTC by default). Each proposal says, in plain words: the topic and why it ranked there (its best scores with their quotes), what a reader leaves with, and what it needs explained first. Buttons: **Write**, **Skip** and **Not yet**, each asking for a one-line reason, plus a pick list of short reasons that answers the card in one pick (`docs/feedback.md`).
 

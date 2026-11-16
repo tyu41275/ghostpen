@@ -1,6 +1,6 @@
-# The value ranking (ghostpen#88, ADR 0101 brief D4–D7, D13)
+# The value ranking (ghostpen#88)
 
-ghostpen ranks possible posts by the value they give a reader. It doesn't use what the reader already knows: that's handled by explaining (brief D1).
+ghostpen ranks possible posts by the value they give a reader. It doesn't use what the reader already knows: that's handled by explaining.
 
 - **Candidates** (`src/ranking/candidates.ts`): one per source document, so a rich document never takes two places.
   - A decision document gives a **decision post**. Its parts are its decisions (numbered bold items, and list items under "Decision" or "What we want"), the options it turned down, and what it says happened.

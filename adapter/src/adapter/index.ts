@@ -1,5 +1,5 @@
 /**
- * ghostpen's chatter adapter (ADR 0101, ADR 0030). Chatter loads it only while ghostpen is allowed and switched on for
+ * ghostpen's chatter adapter. Chatter loads it only while ghostpen is allowed and switched on for
  * the instance; switching it off runs the drop-in's `stop`, which stops ghostpen's service and keeps its data. Its
  * chatter config (`ctx.config.settingsFile`) names the settings file the service reads. It contributes `status` and the
  * weekly shortlist (`shortlist.ts`); nothing here may break chatter, so a ghostpen that does not answer is reported,

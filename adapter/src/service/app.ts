@@ -1,10 +1,10 @@
 /**
- * ghostpen's app page (ADR 0101, pattern `adapter-app`): served by chatter's console under its sign-in at
+ * ghostpen's app page (pattern `adapter-app`): served by chatter's console under its sign-in at
  * `<console>/apps/ghostpen/`, which proxies to `/app/` here. One server-rendered page, every value escaped, styled by
  * the host's shared site look two levels above the app's address. It shows the last ranking (ghostpen#88): every candidate
  * with its scores and the quote behind each, the background posts to write first, the post-mortems owed, and every
- * problem with the sources or the scorer, and what the last ranking try did (ghostpen#118). All in plain words (ADR 0101:
- * a 10-year-old could follow it).
+ * problem with the sources or the scorer, and what the last ranking try did (ghostpen#118). All in plain words:
+ * a 10-year-old could follow it.
  */
 import type { FeedbackEntry } from "../feedback/store.js";
 import type { RankingAttempt } from "../ranking/attempt.js";
@@ -56,7 +56,7 @@ function rankingSection(view: RankingView | null | Error, notes: FeedbackEntry[]
 <tbody>${rows}</tbody></table>`;
 }
 
-/** The context the operator gave for a topic in its card's thread, shown with it (ADR 0101, amended 2026-10-25). */
+/** The context the operator gave for a topic in its card's thread, shown with it. */
 function contextOf(notes: FeedbackEntry[], topic: string): string {
   const context = notes.filter((n) => n.topic === topic && n.kind === "context");
   return context.length ? `<ul data-field="context">${context.map((c) => `<li>Your context: ${escape(c.text)}</li>`).join("")}</ul>` : "";

@@ -1,10 +1,10 @@
 # ghostpen's chatter adapter and service
 
-ghostpen is an optional chatter adapter (Obsidian ADR 0101 and ADR 0030). Chatter loads this package's built adapter (`dist/adapter`) only while ghostpen is allowed in the instance's Obsidian `stack.yaml` and switched on from the Adapters page. Switching it off runs the drop-in's `stop`, which stops ghostpen's service; its data is kept. The blog in the repo root keeps building and deploying as before. This folder is only the adapter.
+ghostpen is an optional chatter adapter. Chatter loads this package's built adapter (`dist/adapter`) only while ghostpen is allowed in the instance's Obsidian `stack.yaml` and switched on from the Adapters page. Switching it off runs the drop-in's `stop`, which stops ghostpen's service; its data is kept. The blog in the repo root keeps building and deploying as before. This folder is only the adapter.
 
 - **Its own service** (`node dist/service/main.js <settings.json>`), on loopback. It answers:
   - **`GET /health`:** `{ok, instance, version}`. It checks the data folder on every request. A missing or unwritable folder answers 503 with the reason (`dataDir: <dir> is not a folder` or `cannot be written`). Chatter's Adapters page probes it through the drop-in's `optional.health`.
-  - **`/app/`:** the app page, following the `adapter-app` pattern (Obsidian `ensemble/products/fleet/patterns/adapter-app.md`):
+  - **`/app/`:** the app page, following the `adapter-app` pattern:
     - it opens only to a request whose `X-Chatter-Identity` header is signed with the key in `appIdentityKeyFile`, for audience `ghostpen`, and not expired (`src/service/app-identity.ts`, the same check as Tempo's);
     - any other request gets 404, and with no key file set the app opens to nobody;
     - a key file that's named but unreadable or under 32 bytes stops the start;
@@ -42,4 +42,4 @@ npx playwright install --only-shell chromium && npm run test:browser   # the app
 
 ## Checks on every PR
 
-The check runner (chatter-ops) runs on each PR head: `test` (the fast unit tests, ADR 0028), `adapter-smoke` (chatter's adapter smoke over a real ghostpen service), `browser-e2e` (the app page in real Chromium, `.github/browser-e2e.json`: a UI change under `adapter/src/service/app*.ts` or `server.ts` needs a browser test change beside it, or a `no-browser-test: <reason>` line the reviewer accepts), `sizing`, `closing-keyword` and `e2e-gate`. The suite's JUnit report is `test-results/browser-e2e.xml` at the repository root; vitest resolves the path from its root, the repository, not from `adapter/` (ghostpen#113).
+The check runner (chatter-ops) runs on each PR head: `test` (the fast unit tests), `adapter-smoke` (chatter's adapter smoke over a real ghostpen service), `browser-e2e` (the app page in real Chromium, `.github/browser-e2e.json`: a UI change under `adapter/src/service/app*.ts` or `server.ts` needs a browser test change beside it, or a `no-browser-test: <reason>` line the reviewer accepts), `sizing`, `closing-keyword` and `e2e-gate`. The suite's JUnit report is `test-results/browser-e2e.xml` at the repository root; vitest resolves the path from its root, the repository, not from `adapter/` (ghostpen#113).

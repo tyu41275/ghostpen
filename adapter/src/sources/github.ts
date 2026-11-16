@@ -1,5 +1,5 @@
 /**
- * GitHub as a topic source (ADR 0101, brief D8, Q9): issues carrying the configured incident label, and merged pull
+ * GitHub as a topic source: issues carrying the configured incident label, and merged pull
  * requests whose body matches the configured "measured results" pattern, from the last `days` days. Each becomes a
  * topic document whose lines are its body, located by its web address. A repository that cannot be read is a problem
  * named with its source, never an empty result.

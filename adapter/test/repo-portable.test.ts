@@ -1,6 +1,6 @@
 /**
  * ghostpen#86's done-when, as a gate: no code or default in the repository names one machine's folders (a Windows drive
- * path, a person's home or Mac user folder), and nothing installs a Claude hook (the post-ship hook ADR 0101 retired).
+ * path, a person's home or Mac user folder), and nothing installs a Claude hook (the retired post-ship hook).
  * Settings name every machine-specific value (docs/sources.md, docs/install.md).
  * It walks the files on disk rather than asking git, so it runs on a copy with no `.git`. Markdown, the blog's posts and
  * images, dependencies and the build's output are out of scope: they describe or are not ours. The blog's own code and

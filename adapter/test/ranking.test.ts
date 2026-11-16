@@ -34,7 +34,7 @@ describe("candidates", () => {
     // An ADR whose decisions are bullets under "## Decision" gives them as decisions too.
     expect(partsOf(doc("x", ["# ADR", "## Decision", "Option 3.", "- **Declaration.** Each instance gets one.", "- Relay acts on it."])))
       .toEqual([{ kind: "decision", text: "Declaration. Each instance gets one.", line: 4 }, { kind: "decision", text: "Relay acts on it.", line: 5 }]);
-    // A decision not yet run is a decision post now (D5), never held back.
+    // A decision not yet run is a decision post now, never held back.
     expect(candidateOf(ADR).kind).toBe("decision");
     const experiment = doc("exp/compaction", ["# Compaction trial", "", "Cost per step fell 28%."], { kind: "experiment" });
     expect(candidateOf(experiment)).toMatchObject({ kind: "post-mortem", parts: [{ kind: "outcome", text: "Compaction trial", line: 1 }] });

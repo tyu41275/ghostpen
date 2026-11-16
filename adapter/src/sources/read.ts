@@ -1,5 +1,5 @@
 /**
- * Every configured source read once (ADR 0101, brief D8): the topic documents, the stack parts' definitions, and the
+ * Every configured source read once: the topic documents, the stack parts' definitions, and the
  * published-post index built from them, with which of its posts the blog serves (its sitemap). The ranking and the
  * draft writer read the same way; every problem is returned.
  */

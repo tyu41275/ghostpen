@@ -1,5 +1,5 @@
 /**
- * The stack-part check (ADR 0101, brief D1 and D3): every part of the author's setup a draft names (a glossary term) is
+ * The stack-part check: every part of the author's setup a draft names (a glossary term) is
  * handled. A part with a published post must link that post (a markdown link outside code, by address or path). A part with no post that is **central** to the draft (in
  * its title, or named three times or more) holds the draft: its background post is written first. A part only mentioned
  * in passing must be explained where it first appears, and goes on the "posts to write later" list.
