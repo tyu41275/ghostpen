@@ -5,19 +5,24 @@
  *   POST /v1/adapter/turn/claim    {}: the next turn `{turn: {id, persona, instructionsVersion, prompt, timeoutMs}}`, waiting
  *                                  up to 25 s for one (`{turn: null}` then); a claim whose request went away puts its turn back
  *   POST /v1/adapter/turn/answer   {id, ok, text?, why?, release?, …chatter's answer fields}: ends the turn with ctx.runCapability's
- *                                  answer, or with why it failed; `release: true` puts it back unrun. Its body may be 512 KiB,
- *                                  the other routes' 64 KiB being too small for a 100,000-character answer.
+ *                                  answer, or with why it failed; `release: true` puts it back unrun. Its body may hold the
+ *                                  longest answer at its worst JSON escape (6 bytes a character), the other routes' 64 KiB
+ *                                  being too small for a 100,000-character answer.
  *
  * An answer for an id no claimed turn has (unknown, or the turn already ended) is ignored: 409, saying so.
  */
-import type { TurnQueue } from "../turns/queue.js";
+import { MAX_ANSWER_TEXT, type TurnQueue } from "../turns/queue.js";
 import type { Reply } from "./adapter-routes.js";
 
 export const TURN_CLAIM_PATH = "/v1/adapter/turn/claim";
 export const TURN_ANSWER_PATH = "/v1/adapter/turn/answer";
 /** How long a claim waits for a turn before answering none: the adapter asks again at once. */
 export const CLAIM_WAIT_MS = 25_000;
-export const MAX_TURN_ANSWER_BODY = 512 * 1024;
+/**
+ * The answer route's body limit: the longest answer chatter gives (`MAX_ANSWER_TEXT` characters) at JSON's widest escape,
+ * `\u0001` being 6 bytes for one character, plus 64 KiB for the answer's other fields; never less than a valid answer needs.
+ */
+export const MAX_TURN_ANSWER_BODY = MAX_ANSWER_TEXT * 6 + 64 * 1024;
 
 const ENDED: Reply = { status: 409, body: { error: "no turn is waiting for that answer: its id is unknown, or the turn already ended" } };
 

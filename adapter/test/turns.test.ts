@@ -140,13 +140,15 @@ describe("the turn routes", () => {
     return { turns, post };
   };
 
-  it("claims a turn and takes a 100,000-character answer, while other routes keep their 64 KiB limit", async () => {
+  it("claims a turn and takes a 100,000-character answer at its widest JSON escape, while other routes keep their 64 KiB limit", async () => {
     const { turns, post } = await start();
     const asked = turns.ask("ghostpen.writer", "writer-v2", "write the post", 60_000);
     const claimed = await post("turn/claim", {});
     expect(claimed).toMatchObject({ status: 200, body: { turn: { persona: "ghostpen.writer", instructionsVersion: "writer-v2", prompt: "write the post" } } });
     const id = (claimed.body.turn as Claim).id;
-    const text = "é".repeat(100_000); // 200,000 bytes, over the other routes' 64 KiB
+    // The widest a valid answer gets on the wire: each character JSON-escaped to 6 bytes, 600,000 bytes in all.
+    const text = "\u0001".repeat(100_000);
+    expect(JSON.stringify({ text }).length).toBeGreaterThan(600_000);
     expect(await post("turn/answer", { id, ok: true, text, ...CHATTER, persona: "ghostpen.writer" })).toEqual({ status: 200, body: { status: "taken" } });
     expect(await asked).toEqual({ text, ran: { persona: "ghostpen.writer", instructionsVersion: "writer-v2", provider: "claude", model: "a-model",
       effort: null, thinkingLevel: "a-level" } });
