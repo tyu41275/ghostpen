@@ -18,6 +18,8 @@ const claimNow = (queue: TurnQueue) => queue.claim(0).next as Promise<Claim>;
 
 describe("the turn queue", () => {
   it("hands a turn to a claim and resolves the answer with what it ran on", async () => {
+    // A claim gets the time left from asking (ghostpen#149): the clock stands still, so it is all of it.
+    vi.useFakeTimers();
     const queue = new TurnQueue();
     const asked = queue.ask("ghostpen.scorer", "scorer-v3", "score this", 60_000);
     const claim = await claimNow(queue);

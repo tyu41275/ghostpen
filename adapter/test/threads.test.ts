@@ -115,7 +115,10 @@ describe("answering in a thread", () => {
     const turns = new TurnQueue();
     const reply = adapterRoute(settings, "POST", "/v1/adapter/thread/message", { thread: "t1", user: OPERATOR, text: "Why first?" }, NOW, undefined, undefined, turns);
     const claim = await turns.claim(2_000).next;
-    expect(claim).toMatchObject({ persona: THREAD_PERSONA, instructionsVersion: THREAD_VERSION, timeoutMs: 900_000 });
+    expect(claim).toMatchObject({ persona: THREAD_PERSONA, instructionsVersion: THREAD_VERSION });
+    // The time left from asking (ghostpen#149): the 15-minute turn less the moments before the claim.
+    expect(claim!.timeoutMs).toBeLessThanOrEqual(900_000);
+    expect(claim!.timeoutMs).toBeGreaterThan(890_000);
     turns.answer(claim!.id, { ok: true, text: JSON.stringify({ kind: "question", reply: "Because it saved time." }), model: "m" });
     expect(await reply).toEqual({ status: 200, body: { reply: "Because it saved time." } });
     expect(readFeedback(settings.dataDir).at(-1)?.ran).toMatchObject({ persona: null, instructionsVersion: THREAD_VERSION, model: "m" });
