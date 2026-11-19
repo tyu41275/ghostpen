@@ -8,6 +8,7 @@ import { MERGE_FAILED } from "../src/service/draft-routes.js";
 import { RANKING_STALE_MS, SHORTLIST_DUE_MS, SHORTLIST_STALE_MS } from "../src/service/readiness-jobs.js";
 import { currentWeek } from "../src/shortlist/schedule.js";
 import { SHORTLIST_FILE, saveShortlists, type DraftState, type WeekItem } from "../src/shortlist/state.js";
+import { ANSWER_GRACE_MS } from "../src/turns/queue.js";
 import { after, bare, folder, installed, MINUTE, programIn, STARTED } from "./readiness-seed.js";
 import { tempDir } from "./helpers.js";
 
@@ -159,14 +160,14 @@ describe("drafting", () => {
   });
 
   it("reads failing on a draft waiting or drafting past the writer's time limits and a margin", async () => {
-    const world = installed(writer()), limit = 60_000 * 2 + 15 * MINUTE;
+    const world = installed(writer()), limit = (60_000 + ANSWER_GRACE_MS) * 2 + 15 * MINUTE;
     week(world.dataDir, after(0), [drafted({ status: "drafting" }), drafted({ status: "queued" })]);
     expect((await world.read("drafting", { now: after(limit) })).state).toBe("working");
-    expect(await world.read("drafting", { now: after(limit + 1) })).toMatchObject({ state: "failing", why: "2 drafts have been waiting or drafting for over 17 minutes" });
-    // A writer turn gets at most chatter's 30 minutes, whatever older settings say.
+    expect(await world.read("drafting", { now: after(limit + 1) })).toMatchObject({ state: "failing", why: "2 drafts have been waiting or drafting for over 19 minutes" });
+    // A writer turn gets at most chatter's 30 minutes and the answer grace, whatever older settings say.
     const long = installed({ draft: { writer: { timeoutSeconds: 3600 }, revisions: 0 } });
     week(long.dataDir, after(0), [drafted({ status: "drafting" })]);
-    expect(await long.read("drafting", { now: after(45 * MINUTE + 1) })).toMatchObject({ state: "failing", why: "1 draft has been waiting or drafting for over 45 minutes" });
+    expect(await long.read("drafting", { now: after(46 * MINUTE + 1) })).toMatchObject({ state: "failing", why: "1 draft has been waiting or drafting for over 46 minutes" });
   });
 });
 

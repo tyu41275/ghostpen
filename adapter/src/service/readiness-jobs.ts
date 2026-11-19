@@ -15,6 +15,7 @@ import { FRESH_MS } from "../ranking/jobs.js";
 import type { DraftState, ShortlistState } from "../shortlist/state.js";
 import { currentWeek } from "../shortlist/schedule.js";
 import { writerTimeoutMs } from "../settings.js";
+import { ANSWER_GRACE_MS } from "../turns/queue.js";
 import { MERGE_FAILED } from "./draft-routes.js";
 import { chosenOff, failing, type Facts, fileProblem, folderProblem, more, type Need, notSetUp, programProblem, type Reading, short, timeOf, working } from "./readiness-reading.js";
 import { RANK } from "./readiness-settings.js";
@@ -108,7 +109,8 @@ async function draftingReading(f: Facts): Promise<Reading> {
     return failing(`${plural(stopped.length, "draft", "drafts")} stopped because the writer failed; each card says so`, earliest(stopped, f),
       "Press Edit on the draft's card to try again; if it stops again, check that ghostpen is on in chatter and its ghostpen.writer route (adapter/docs/drafting.md).");
   }
-  const limit = writerTimeoutMs(draft) * (draft.revisions + 1) + DRAFT_MARGIN_MS;
+  // Each turn of a draft (the first and each revision) ends by its time and a minute from asking (`turns/queue.ts`).
+  const limit = (writerTimeoutMs(draft) + ANSWER_GRACE_MS) * (draft.revisions + 1) + DRAFT_MARGIN_MS;
   const stuck = drafts.filter((d) => (d.status === "queued" || d.status === "drafting") && f.now.getTime() - (timeOf(d.at) ?? 0) > limit);
   if (stuck.length > 0) {
     return failing(`${plural(stuck.length, "draft has", "drafts have")} been waiting or drafting for over ${Math.round(limit / 60_000)} minutes`,
