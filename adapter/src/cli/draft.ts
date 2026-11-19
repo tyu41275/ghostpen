@@ -1,13 +1,9 @@
-/** `node dist/cli/draft.js <settings.json> <id>`: draft one post now (a candidate id, or `background:<part>`); prints its report. */
-import { reportText } from "../draft/checks.js";
-import { draftFile, draftNow } from "../draft/write.js";
-import { readSettings } from "../settings.js";
-
-const [path, id] = process.argv.slice(2);
-if (!path || !id) { console.error("usage: node dist/cli/draft.js <settings.json> <id>"); process.exit(2); }
-const settings = readSettings(path);
-draftNow(settings, id).then((draft) => {
-  console.log(`${draft.status}: "${draft.title}" after ${draft.attempts} attempt(s), kept in ${draftFile(settings.dataDir, id)}`);
-  console.log(reportText(draft.report));
-  for (const problem of draft.problems) console.log(`problem: ${problem}`);
-}, (error: unknown) => { console.error(`ghostpen draft: ${error instanceof Error ? error.message : String(error)}`); process.exit(1); });
+/**
+ * `node dist/cli/draft.js`: drafts no longer run here. The writer is a model turn chatter runs for ghostpen's service
+ * (ghostpen#146), and a command-line process has no chatter, so a draft is made in the service: Write on a shortlist card,
+ * or Edit on a draft's card. This says so and exits 1.
+ */
+console.error("ghostpen draft: drafts are written in ghostpen's service, which asks chatter to run the writer, so this command "
+  + "cannot write one. Press Write on the topic's card in ghostpen's channel, or Edit on a draft's card; the draft comes back there.");
+process.exit(1);
+export {};

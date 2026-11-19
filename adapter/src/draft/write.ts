@@ -1,6 +1,7 @@
 /**
- * Drafting one post: gather what the writer needs from the sources, run the writer, run
- * every check, and send a failed draft back with the check report up to `draft.revisions` times. A draft held for a
+ * Drafting one post: gather what the writer needs from the sources, ask the writer's model turn (`ghostpen.writer`, run
+ * by chatter: ghostpen#146), run every check, and send a failed draft back with the check report up to `draft.revisions`
+ * times. A draft held for a
  * background post stops at once: rewording cannot write that post. So does one whose post links cannot be checked (the
  * blog's sitemap unread): it fails, as rewording cannot read the sitemap. Every draft is kept in `dataDir/drafts/` with its
  * report, ready, held or failed; nothing is published from here (the operator approves every post).
@@ -10,17 +11,18 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import { candidatesOf } from "../ranking/candidates.js";
 import { isRankingView, RANKING_FILE } from "../ranking/run.js";
-import { runScorer } from "../ranking/scorer.js";
-import type { GhostpenSettings } from "../settings.js";
+import { writerTimeoutMs, type GhostpenSettings } from "../settings.js";
 import { frontmatter, isPublished, postsAbout } from "../sources/published.js";
 import { readSources, type SourcesRead } from "../sources/read.js";
 import type { SitemapGet } from "../sources/served.js";
 import type { TopicDocument } from "../sources/types.js";
+import type { TurnAsker } from "../turns/queue.js";
+import type { Ran } from "../turns/ran.js";
 import { contextFor } from "../feedback/store.js";
 import { checkDraft, type CheckReport } from "./checks.js";
 import { readDiagramSources } from "./diagram-files.js";
 import type { StackGraph } from "./diagrams.js";
-import { editPrompt, parseWritten, revisePrompt, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
+import { editPrompt, parseWritten, revisePrompt, WRITER_PERSONA, WRITER_VERSION, writerPrompt, type DraftKind, type PartBrief, type WriterBrief, type Written } from "./prompt.js";
 import { playwrightCapture, screenshotRefs, takeScreenshots, type Capturer } from "./screenshots.js";
 
 export const DRAFTS_DIR = "drafts";
@@ -39,10 +41,15 @@ export interface Draft extends Written {
   problems: string[];
   /** The screenshots taken, by name: their files. */
   screenshots: Record<string, string>;
+  /** What the turn that wrote the kept text ran on (ghostpen#146); absent on a draft kept before, or one a `write` seam wrote. */
+  ran?: Ran;
 }
 
 export interface DraftSeams {
-  write?: (prompt: string) => Promise<string>; stackMap?: (prompt: string) => Promise<string>; capture?: Capturer; now?: Date;
+  write?: (prompt: string) => Promise<string>;
+  /** The service's model turns: the writer asks here unless `write` is given (ghostpen#146). */
+  turns?: TurnAsker;
+  stackMap?: (prompt: string) => Promise<string>; capture?: Capturer; now?: Date;
   /** The blog's sitemap reader (`sources/served.ts`); the live one by default. */
   sitemap?: SitemapGet;
 }
@@ -106,6 +113,8 @@ function voice(settings: GhostpenSettings, read: SourcesRead, count: number): Wr
 export async function draftNow(settings: GhostpenSettings, id: string, seams: DraftSeams = {}, edit?: { previous: Written; notes: string }): Promise<Draft> {
   const draft = settings.draft;
   if (!draft) throw new Error("no draft writer is set (settings.draft)");
+  const { turns, write: writeSeam } = seams;
+  if (!writeSeam && !turns) throw new Error("drafts are written in ghostpen's service, which asks chatter's adapter for the writer's model turns");
   const read = await readSources(settings, seams.now, seams.sitemap);
   const goal = target(read, id);
   const text = [goal.definition ?? "", ...goal.documents.map((d) => d.lines.join("\n"))].join("\n");
@@ -125,16 +134,21 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     ...(contextFor(settings.dataDir, id).length ? { context: contextFor(settings.dataDir, id) } : {}),
     ...(draft.styleGuide ? { styleGuide: readFileSync(draft.styleGuide, "utf8") } : {}),
     ...(draft.screenshots ? { screenshots: draft.screenshots.pages.map((p) => ({ name: p.name, description: p.description })) } : {}) };
-  const write = seams.write ?? ((prompt: string) => runScorer(draft.writer, prompt, "draft writer"));
+  const write = (prompt: string): Promise<{ text: string; ran?: Ran }> =>
+    writeSeam ? writeSeam(prompt).then((text) => ({ text })) : turns!.ask(WRITER_PERSONA, WRITER_VERSION, prompt, writerTimeoutMs(draft));
   const context = { terms: read.terms, index: read.index, graph: diagrams.graph, diagramProblems: diagrams.unread, ...(goal.kind === "background" ? { subject: goal.subject } : {}),
     ...(settings.sources.published ? { baseUrl: settings.sources.published.baseUrl } : {}), ...(read.served ? { served: read.served } : {}) };
-  let written = parseWritten(await write(edit ? editPrompt(brief, edit.previous, edit.notes) : writerPrompt(brief)));
+  const first = await write(edit ? editPrompt(brief, edit.previous, edit.notes) : writerPrompt(brief));
+  let written = parseWritten(first.text);
+  let ran = first.ran;
   let report = checkDraft(written, context);
   let attempts = 1;
   const problems = [...read.problems.map((p) => `${p.source}: ${p.problem}`), ...diagrams.problems];
   while (!report.passed && report.hold.length === 0 && !report.unknown && attempts <= draft.revisions) {
     try {
-      written = parseWritten(await write(revisePrompt(brief, written, report)));
+      const next = await write(revisePrompt(brief, written, report));
+      written = parseWritten(next.text);
+      ran = next.ran;
     } catch (error) {
       // The last draft and its report are kept; the failed revision is said, never hidden.
       problems.push(`revision ${attempts}: ${error instanceof Error ? error.message : String(error)}`);
@@ -154,7 +168,7 @@ export async function draftNow(settings: GhostpenSettings, id: string, seams: Dr
     report = { ...report, passed: shots.passed, checks: [...report.checks, { name: "Screenshots show nothing private", passed: shots.passed, findings: shots.findings }] };
   }
   const result: Draft = { id, kind: goal.kind, ...written, status: report.passed ? "ready" : report.hold.length ? "held" : "failed", report, attempts,
-    madeAt: (seams.now ?? new Date()).toISOString(), problems, screenshots };
+    madeAt: (seams.now ?? new Date()).toISOString(), problems, screenshots, ...(ran ? { ran } : {}) };
   const path = draftFile(settings.dataDir, id);
   mkdirSync(join(settings.dataDir, DRAFTS_DIR), { recursive: true });
   writeFileSync(`${path}.tmp`, JSON.stringify(result, null, 2));

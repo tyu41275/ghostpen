@@ -5,14 +5,14 @@
  * answers one JSON object. Its scores are only proposals: `checkScores` keeps a score only when its quote is in the
  * document word for word. Results are kept by document hash, so a weekly run scores only documents that changed.
  */
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runStdin, type CommandSettings } from "../command.js";
 import type { Candidate } from "./candidates.js";
 import { checkScores, FACTORS, type ProposedScore, type Score } from "./scores.js";
 
-export interface ScorerSettings { command: string[]; timeoutSeconds: number }
+export type ScorerSettings = CommandSettings;
 /** What a scorer says about a candidate, after its scores are checked. */
 export interface Scored { topic: string; takeaway: string; scores: Score[] }
 export const SCORES_FILE = "scores.json";
@@ -50,41 +50,6 @@ export function parseAnswer(text: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-/** How long a timed-out scorer gets after SIGTERM before its whole process group is killed. */
-export const KILL_GRACE_MS = 2_000;
-
-/**
- * Runs the scorer (or another command, named `name` in errors, such as the draft writer) once on `prompt`; resolves its
- * stdout, rejects on a failure, a timeout or a non-zero exit. It runs in a process group of its own, so a timeout stops
- * it and anything it started: SIGTERM to the group, then SIGKILL after `KILL_GRACE_MS` for whatever ignores it. Its
- * streams are closed, so nothing it left keeps ghostpen waiting.
- */
-export function runScorer(settings: ScorerSettings, prompt: string, name = "scorer"): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const [command, ...args] = settings.command;
-    const child = spawn(command!, args, { stdio: ["pipe", "pipe", "pipe"], detached: true });
-    let out = "", err = "", settled = false;
-    const settle = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
-    const group = (signal: NodeJS.Signals) => { try { if (child.pid) process.kill(-child.pid, signal); } catch { /* already gone */ } };
-    const timer = setTimeout(() => {
-      group("SIGTERM");
-      // Kept even once the scorer itself exits: a child it started may still ignore SIGTERM. A group already gone is a no-op.
-      setTimeout(() => group("SIGKILL"), KILL_GRACE_MS).unref();
-      child.stdout.destroy(); child.stderr.destroy(); child.stdin.destroy();
-      settle(() => reject(new Error(`the ${name} did not answer within ${settings.timeoutSeconds} s`)));
-    }, settings.timeoutSeconds * 1000);
-    child.stdout.on("data", (chunk: Buffer) => { out += chunk.toString(); });
-    child.stderr.on("data", (chunk: Buffer) => { err += chunk.toString(); });
-    child.stdin.on("error", () => { /* a scorer that exits without reading its prompt */ });
-    child.on("error", (error) => settle(() => reject(new Error(`the ${name} could not start (${error.message})`))));
-    child.on("close", (code) => settle(() => {
-      if (code === 0) resolve(out);
-      else reject(new Error(`the ${name} exited ${String(code)}${err.trim() ? `: ${err.trim().split("\n").pop()!.slice(0, 200)}` : ""}`));
-    }));
-    child.stdin.end(prompt);
-  });
-}
-
 const line = (value: unknown, fallback: string) => (typeof value === "string" && value.trim() ? value.trim().split("\n")[0]!.slice(0, 200) : fallback);
 
 /** The scorer's answer for a candidate, its scores checked against the document. */
@@ -101,7 +66,7 @@ const hashOf = (candidate: Candidate) => createHash("sha256").update(`${candidat
  * A candidate the scorer fails on is left out and its failure returned, never given made-up scores.
  */
 export async function scoreAll(candidates: Candidate[], settings: ScorerSettings, dataDir: string,
-  run: (prompt: string) => Promise<string> = (prompt) => runScorer(settings, prompt)):
+  run: (prompt: string) => Promise<string> = (prompt) => runStdin(settings, prompt, "scorer")):
   Promise<{ scored: Map<string, Scored>; failures: Array<{ candidate: string; problem: string }> }> {
   const path = join(dataDir, SCORES_FILE);
   let kept: Kept = { version: 1, entries: {} };

@@ -7,7 +7,10 @@
 import { callAdapterRoute } from "./service.js";
 import type { PressEvent, ShortlistContext } from "./shortlist.js";
 
-/** How long an answer may take: the answering command's own limit is the operator's setting, at most an hour. */
+/**
+ * How long an answer may take. A model turn never outlives its time (`draft.writer.timeoutSeconds`, at most 30 minutes)
+ * and a minute from when it was asked, however late it was claimed (`turns/queue.ts`), so an hour always covers it.
+ */
 export const ANSWER_TIMEOUT_MS = 60 * 60 * 1000;
 
 export async function answerThreadMessage(event: PressEvent, ctx: ShortlistContext): Promise<{ handled: true } | undefined> {

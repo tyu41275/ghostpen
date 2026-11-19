@@ -5,7 +5,9 @@
  *
  * - A thread answer goes ahead of every other queued turn: the operator is waiting on it. Otherwise first asked, first claimed,
  *   so the turns of one job keep their order.
- * - A turn nobody claims within its `timeoutMs` rejects, as does a claimed one with no answer within `timeoutMs` and a minute.
+ * - A turn has one deadline, `timeoutMs` from when it was asked: unclaimed by then it rejects, and a claim hands the adapter
+ *   only the time left, so a claimed turn with no answer by the deadline and a minute (the post back) rejects too. A turn
+ *   never outlives `timeoutMs` and a minute, however late it was claimed or how often it was put back.
  * - A request chatter would refuse (chatter docs/adapter-capability-run.md: a prompt over 400,000 characters, a timeout
  *   outside 1 s to 30 minutes, an instructions version that is not 1 to 128 characters) is refused here at once.
  * Every rejection says why in plain words. In memory only: a restarted service starts with none.
@@ -32,7 +34,8 @@ export interface TurnResult { text: string; ran: Ran }
 export type TurnAnswer = { ok?: unknown; text?: unknown; why?: unknown } & Record<string, unknown>;
 
 interface Turn extends Claim {
-  claimBy: number; resolve: (result: TurnResult) => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout>;
+  /** When the turn ends, claimed or not: asked time plus `timeoutMs`. */
+  endBy: number; resolve: (result: TurnResult) => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout>;
 }
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} s`;
@@ -62,7 +65,7 @@ export class TurnQueue {
     const refused = refusal(persona, instructionsVersion, prompt, timeoutMs);
     if (refused) return Promise.reject(new Error(`ghostpen did not ask for a model turn: ${refused}`));
     return new Promise<TurnResult>((resolve, reject) => {
-      const turn: Turn = { id: randomUUID(), persona, instructionsVersion, prompt, timeoutMs, claimBy: Date.now() + timeoutMs, resolve, reject };
+      const turn: Turn = { id: randomUUID(), persona, instructionsVersion, prompt, timeoutMs, endBy: Date.now() + timeoutMs, resolve, reject };
       const waiter = this.waiters.shift();
       if (waiter) waiter(this.take(turn));
       else this.enqueue(turn, false);
@@ -125,7 +128,7 @@ export class TurnQueue {
     const at = head ? this.queued.findIndex((one) => first || one.persona !== FIRST_PERSONA)
       : first ? this.queued.findIndex((one) => one.persona !== FIRST_PERSONA) : -1;
     this.queued.splice(at < 0 ? this.queued.length : at, 0, turn);
-    turn.timer = later(Math.max(0, turn.claimBy - Date.now()), () => {
+    turn.timer = later(Math.max(0, turn.endBy - Date.now()), () => {
       const index = this.queued.indexOf(turn);
       if (index >= 0) this.queued.splice(index, 1);
       turn.reject(new Error(`nobody took ghostpen's ${turn.persona} turn within ${seconds(turn.timeoutMs)}: ghostpen's adapter in chatter `
@@ -136,10 +139,15 @@ export class TurnQueue {
   private take(turn: Turn): Claim {
     clearTimeout(turn.timer);
     this.claimed.set(turn.id, turn);
-    turn.timer = later(turn.timeoutMs + ANSWER_GRACE_MS, () => {
+    // Only the time left to the turn's deadline (at least chatter's 1 s floor): a late claim never extends the turn.
+    const left = Math.max(MIN_TIMEOUT_MS, turn.endBy - Date.now());
+    turn.timer = later(left + ANSWER_GRACE_MS, () => {
       if (!this.claimed.delete(turn.id)) return;
-      turn.reject(new Error(`ghostpen's adapter took the ${turn.persona} turn but no answer came back within ${seconds(turn.timeoutMs + ANSWER_GRACE_MS)}`));
+      turn.reject(new Error(`ghostpen's adapter took the ${turn.persona} turn but no answer came back within ${seconds(turn.timeoutMs + ANSWER_GRACE_MS)} of asking`));
     });
-    return { id: turn.id, persona: turn.persona, instructionsVersion: turn.instructionsVersion, prompt: turn.prompt, timeoutMs: turn.timeoutMs };
+    return { id: turn.id, persona: turn.persona, instructionsVersion: turn.instructionsVersion, prompt: turn.prompt, timeoutMs: left };
   }
 }
+
+/** What a job needs of the queue: asking (a test passes a fake). */
+export type TurnAsker = Pick<TurnQueue, "ask">;

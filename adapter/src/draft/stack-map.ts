@@ -3,8 +3,7 @@
  * `draft.stackMap` (on the author's host, `relay graph --format json`, format `relay.stack.graph/v1`). Unset, or a map
  * that cannot be read, gives no map: the diagram check then says it cannot check, never passes a diagram unchecked.
  */
-import type { ScorerSettings } from "../ranking/scorer.js";
-import { runScorer } from "../ranking/scorer.js";
+import { runStdin, type CommandSettings } from "../command.js";
 import type { StackGraph } from "./diagrams.js";
 
 export const STACK_MAP_FORMAT = "relay.stack.graph/v1";
@@ -24,8 +23,8 @@ export function parseStackMap(text: string): StackGraph {
   return { nodes: nodes.map((n) => ({ id: n.id as string, label: n.label as string })), edges: edges.map((e) => ({ from: e.from as string, to: e.to as string })) };
 }
 
-export async function readStackMap(settings: ScorerSettings | undefined,
-  run: (prompt: string) => Promise<string> = (prompt) => runScorer(settings!, prompt, "stack map command")):
+export async function readStackMap(settings: CommandSettings | undefined,
+  run: (prompt: string) => Promise<string> = (prompt) => runStdin(settings!, prompt, "stack map command")):
   Promise<{ graph: StackGraph | null; problem?: string }> {
   if (!settings) return { graph: null, problem: "no stack map is configured (settings.draft.stackMap)" };
   try { return { graph: parseStackMap(await run("")) }; } catch (error) {

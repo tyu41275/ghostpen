@@ -18,6 +18,8 @@ const claimNow = (queue: TurnQueue) => queue.claim(0).next as Promise<Claim>;
 
 describe("the turn queue", () => {
   it("hands a turn to a claim and resolves the answer with what it ran on", async () => {
+    // A claim gets the time left from asking (ghostpen#149): the clock stands still, so it is all of it.
+    vi.useFakeTimers();
     const queue = new TurnQueue();
     const asked = queue.ask("ghostpen.scorer", "scorer-v3", "score this", 60_000);
     const claim = await claimNow(queue);
@@ -50,7 +52,7 @@ describe("the turn queue", () => {
 
     const unanswered = queue.ask("ghostpen.writer", "v1", "p", 5_000);
     const claim = await claimNow(queue);
-    const said = expect(unanswered).rejects.toThrow(`ghostpen's adapter took the ghostpen.writer turn but no answer came back within ${5 + ANSWER_GRACE_MS / 1000} s`);
+    const said = expect(unanswered).rejects.toThrow(`ghostpen's adapter took the ghostpen.writer turn but no answer came back within ${5 + ANSWER_GRACE_MS / 1000} s of asking`);
     await vi.advanceTimersByTimeAsync(5_000 + ANSWER_GRACE_MS);
     await said;
     expect(queue.answer(claim.id, { ok: true, text: "late" })).toBe(false);
@@ -64,6 +66,21 @@ describe("the turn queue", () => {
     const long = queue.ask("ghostpen.scorer", "v1", "p", 5_000);
     queue.answer((await claimNow(queue)).id, { ok: true, text: "x".repeat(100_001) });
     await expect(long).rejects.toThrow("the answer was 100001 characters, over 100000");
+  });
+
+  it("counts a turn's time from asking: a late claim gets only what is left, and the answer wait ends a grace after that", async () => {
+    vi.useFakeTimers();
+    const queue = new TurnQueue();
+    const late = queue.ask("ghostpen.writer", "v1", "p", 10_000);
+    const settled = expect(late).rejects.toThrow(`no answer came back within ${10 + ANSWER_GRACE_MS / 1000} s of asking`);
+    await vi.advanceTimersByTimeAsync(7_000);
+    const claim = await claimNow(queue);
+    expect(claim.timeoutMs).toBe(3_000);
+    await vi.advanceTimersByTimeAsync(3_000 + ANSWER_GRACE_MS - 1);
+    expect(queue.size).toEqual({ queued: 0, claimed: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+    await settled;
+    expect(queue.size).toEqual({ queued: 0, claimed: 0 });
   });
 
   it("refuses at once a turn chatter would refuse", async () => {

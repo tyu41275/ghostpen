@@ -19,12 +19,12 @@ export async function startService(settingsPath: string, port?: number): Promise
   const appKey = settings.appIdentityKeyFile ? readAppKey(settings.appIdentityKeyFile) : undefined;
   // The adapter key, like the app key: named but unreadable or short stops the start; none named closes the routes.
   const adapterKey = settings.adapterKeyFile ? readAppKey(settings.adapterKeyFile, "adapterKeyFile") : undefined;
-  // Drafting runs here, one draft at a time; drafts a stopped service left unfinished start again.
-  const jobs = settings.draft ? new DraftJobs(settings) : undefined;
+  const turns = new TurnQueue();
+  // Drafting runs here, one draft at a time, its writer on the model turns; drafts a stopped service left unfinished start again.
+  const jobs = settings.draft ? new DraftJobs(settings, { turns }) : undefined;
   jobs?.resume();
   // The ranking runs here when a shortlist ask finds it due (ghostpen#118); with no scorer or no topics nothing would rank.
   const ranker = settings.scorer && settings.sources.topics.length > 0 ? new RankJobs(settings) : undefined;
-  const turns = new TurnQueue();
   const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
     ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}), ...(ranker ? { ranker } : {}), readiness: { settingsFile: settingsPath, started }, turns });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });

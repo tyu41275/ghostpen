@@ -111,13 +111,13 @@ export function answer(settings: GhostpenSettings, body: Record<string, unknown>
 }
 
 /** A message in a card's thread: the operator's only; kept, and answered in plain words. */
-async function threadMessage(settings: GhostpenSettings, body: Record<string, unknown>, now: Date): Promise<Reply> {
+async function threadMessage(settings: GhostpenSettings, body: Record<string, unknown>, now: Date, turns?: TurnQueue): Promise<Reply> {
   const found = threadTopic(settings.dataDir, typeof body.thread === "string" ? body.thread : "");
   if (!found) return { status: 404, body: { error: "no card has that thread" } };
   if (body.user !== settings.shortlist?.operator) return { status: 200, body: { reply: "ghostpen takes questions and context from the operator only." } };
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return { status: 200, body: { reply: "That message was empty, so nothing was kept." } };
-  return { status: 200, body: { reply: await answerInThread(settings, { ...found, user: String(body.user), text, now }) } };
+  return { status: 200, body: { reply: await answerInThread(settings, { ...found, user: String(body.user), text, now }, turns) } };
 }
 
 /**
@@ -137,6 +137,6 @@ export function adapterRoute(settings: GhostpenSettings, method: string, path: s
   if (path === "/v1/adapter/thread/match" && method === "POST") {
     return { status: 200, body: { ours: threadTopic(settings.dataDir, typeof body.thread === "string" ? body.thread : "") !== null } };
   }
-  if (path === "/v1/adapter/thread/message" && method === "POST") return threadMessage(settings, body, now);
+  if (path === "/v1/adapter/thread/message" && method === "POST") return threadMessage(settings, body, now, turns);
   return path.startsWith("/v1/adapter/") ? { status: 405, body: { error: "not allowed" } } : null;
 }

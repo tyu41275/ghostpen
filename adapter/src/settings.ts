@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import type { ScorerSettings } from "./ranking/scorer.js";
+import { MAX_TIMEOUT_MS } from "./turns/queue.js";
 import { parseScreenshots, type ScreenshotSettings } from "./draft/screenshots.js";
 import { parsePublish, type PublishSettings } from "./publish/github.js";
 import { checkSlot, type Slot } from "./shortlist/schedule.js";
@@ -39,8 +40,11 @@ export interface GhostpenSettings {
 }
 
 export interface DraftSettings {
-  /** The command that writes a draft (argv, no shell; `timeoutSeconds` 10 to 3600, default 900). */
-  writer: ScorerSettings;
+  /**
+   * The writer: a `ghostpen.writer` model turn chatter runs (ghostpen#146), its time per turn (`timeoutSeconds` 10 to 3600,
+   * default 900; a turn gets at most chatter's 30 minutes, `writerTimeoutMs`). A `command` left from older settings is ignored.
+   */
+  writer: { timeoutSeconds: number };
   /** A writing style guide (a markdown file); unset: the published posts alone set the voice. */
   styleGuide?: string;
   /** How many recent published posts the writer reads for the author's voice (0 to 5, default 2). */
@@ -135,11 +139,21 @@ const whole = (value: unknown, field: string, min: number, max: number): number 
   return value;
 };
 
-/** `draft`: `writer` (required), optional `styleGuide`, `stackMap`, `diagramFiles` and `screenshots`, `voicePosts` (default 2), `revisions` (default 2). */
+/** `draft.writer`: optional, `{timeoutSeconds?}`; a `command` older settings still carry is tolerated and ignored, never refused. */
+function parseWriter(raw: unknown): DraftSettings["writer"] {
+  if (raw === undefined) return { timeoutSeconds: 900 };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: draft.writer must be an object");
+  return { timeoutSeconds: whole((raw as Record<string, unknown>).timeoutSeconds ?? 900, "draft.writer.timeoutSeconds", 10, 3600) };
+}
+
+/** One writer turn's time: `draft.writer.timeoutSeconds`, at most chatter's 30-minute maximum for a model turn. */
+export const writerTimeoutMs = (draft: DraftSettings): number => Math.min(draft.writer.timeoutSeconds * 1000, MAX_TIMEOUT_MS);
+
+/** `draft`: optional `writer`, optional `styleGuide`, `stackMap`, `diagramFiles` and `screenshots`, `voicePosts` (default 2), `revisions` (default 2). */
 function parseDraft(raw: unknown): DraftSettings {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: draft must be an object");
   const value = raw as Record<string, unknown>;
-  const draft: DraftSettings = { writer: parseScorer(value.writer, "draft.writer", 900), voicePosts: whole(value.voicePosts ?? 2, "draft.voicePosts", 0, 5),
+  const draft: DraftSettings = { writer: parseWriter(value.writer), voicePosts: whole(value.voicePosts ?? 2, "draft.voicePosts", 0, 5),
     revisions: whole(value.revisions ?? 2, "draft.revisions", 0, 3) };
   if (value.styleGuide !== undefined) draft.styleGuide = absolute(value.styleGuide, "draft.styleGuide");
   if (value.stackMap !== undefined) draft.stackMap = parseScorer(value.stackMap, "draft.stackMap", 60);
