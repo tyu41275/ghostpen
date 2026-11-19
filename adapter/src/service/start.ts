@@ -3,10 +3,12 @@ import type { Server } from "node:http";
 import { DraftJobs } from "../publish/jobs.js";
 import { RankJobs } from "../ranking/jobs.js";
 import { readSettings } from "../settings.js";
+import { TurnQueue } from "../turns/queue.js";
 import { readAppKey } from "./app-identity.js";
 import { checkDataDir, createGhostpenServer } from "./server.js";
 
-export interface RunningService { server: Server; port: number }
+/** `turns`: the model turns the service asks for and the adapter in chatter runs (ghostpen#146). */
+export interface RunningService { server: Server; port: number; turns: TurnQueue }
 
 /** `port` overrides the settings' (0 in tests). */
 export async function startService(settingsPath: string, port?: number): Promise<RunningService> {
@@ -22,9 +24,10 @@ export async function startService(settingsPath: string, port?: number): Promise
   jobs?.resume();
   // The ranking runs here when a shortlist ask finds it due (ghostpen#118); with no scorer or no topics nothing would rank.
   const ranker = settings.scorer && settings.sources.topics.length > 0 ? new RankJobs(settings) : undefined;
+  const turns = new TurnQueue();
   const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
-    ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}), ...(ranker ? { ranker } : {}), readiness: { settingsFile: settingsPath, started } });
+    ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}), ...(ranker ? { ranker } : {}), readiness: { settingsFile: settingsPath, started }, turns });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });
   const address = server.address();
-  return { server, port: typeof address === "object" && address ? address.port : settings.port };
+  return { server, port: typeof address === "object" && address ? address.port : settings.port, turns };
 }

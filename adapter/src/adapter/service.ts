@@ -10,9 +10,9 @@ import { readSettings } from "../settings.js";
 export const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_ANSWER = 1024 * 1024;
 
-/** One call to an adapter route; resolves the JSON answer of a 200, throws with the service's words otherwise. */
+/** One call to an adapter route; resolves the JSON answer of a 200, throws with the service's words otherwise. `maxAnswer` in bytes. */
 export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GET" | "POST", route: string, body?: unknown,
-  timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
+  timeoutMs = REQUEST_TIMEOUT_MS, maxAnswer = MAX_ANSWER): Promise<T> {
   const settingsFile = config.settingsFile;
   if (typeof settingsFile !== "string") return Promise.reject(new Error("ghostpen adapter config needs settingsFile"));
   let port: number, key: string;
@@ -30,7 +30,7 @@ export function callAdapterRoute<T>(config: Record<string, unknown>, method: "GE
       headers: { authorization: `Bearer ${key}`, ...(payload ? { "content-type": "application/json", "content-length": payload.length } : {}) } }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
-      res.on("data", (chunk: Buffer) => { size += chunk.length; if (size > MAX_ANSWER) req.destroy(new Error("ghostpen's service answered too much")); else chunks.push(chunk); });
+      res.on("data", (chunk: Buffer) => { size += chunk.length; if (size > maxAnswer) req.destroy(new Error("ghostpen's service answered too much")); else chunks.push(chunk); });
       res.on("end", () => {
         let answer: Record<string, unknown> = {};
         try { answer = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>; } catch { /* reported below */ }

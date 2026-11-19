@@ -10,6 +10,7 @@
  *   POST /v1/adapter/draft/...           a Write's draft: its card, Publish and Edit (`draft-routes.ts`)
  *   POST /v1/adapter/thread/match        {thread}: whether it is a card's thread (quick, no model)
  *   POST /v1/adapter/thread/message      {thread, user, text}: the operator wrote in a card's thread; answers `{reply}`
+ *   POST /v1/adapter/turn/...            ghostpen's model turns, claimed and answered by the adapter (`turn-routes.ts`)
  *
  * Every answer is JSON. The service decides; the adapter only posts and relays presses.
  */
@@ -25,7 +26,9 @@ import { answerInThread, threadTopic } from "../feedback/thread.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import type { RankJobs } from "../ranking/jobs.js";
 import { answeredText, readShortlists, saveShortlists, type Action } from "../shortlist/state.js";
+import type { TurnQueue } from "../turns/queue.js";
 import { draftCard, draftEdit, draftPosted, draftPublish } from "./draft-routes.js";
+import { turnRoute } from "./turn-routes.js";
 
 export type Reply = { status: number; body: Record<string, unknown> };
 const ACTIONS: readonly Action[] = ["write", "skip", "later"];
@@ -117,9 +120,14 @@ async function threadMessage(settings: GhostpenSettings, body: Record<string, un
   return { status: 200, body: { reply: await answerInThread(settings, { ...found, user: String(body.user), text, now }) } };
 }
 
-/** Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit; `ranker` ranks when due. */
+/**
+ * Routes one adapter request; null when the path is not an adapter route. `jobs` drafts after a Write or an Edit; `ranker` ranks
+ * when due; `turns` holds the model turns (`gone` aborts when a claim's request went away).
+ */
 export function adapterRoute(settings: GhostpenSettings, method: string, path: string, body: Record<string, unknown>, now: Date,
-  jobs?: DraftJobs, ranker?: RankJobs): Reply | Promise<Reply> | null {
+  jobs?: DraftJobs, ranker?: RankJobs, turns?: TurnQueue, gone?: AbortSignal): Reply | Promise<Reply> | null {
+  const turn = turns ? turnRoute(turns, method, path, body, gone) : null;
+  if (turn) return turn;
   if (path === "/v1/adapter/shortlist" && method === "GET") return shortlistNow(settings, now, ranker);
   if (path === "/v1/adapter/shortlist/posted" && method === "POST") return posted(settings, body);
   if (path === "/v1/adapter/shortlist/answer" && method === "POST") return answer(settings, body, now, jobs);
