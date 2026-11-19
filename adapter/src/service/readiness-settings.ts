@@ -6,13 +6,18 @@
 import { constants } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
+import { RETRY_MS } from "../ranking/jobs.js";
 import { parseSettings, type GhostpenSettings } from "../settings.js";
 import { parseAppKey } from "./app-identity.js";
-import { chosenOff, failing, type Facts, fileProblem, folderProblem, type Need, notSetUp, programProblem, type Reading, timeOf, working } from "./readiness-reading.js";
+import { chosenOff, failing, type Facts, fileProblem, folderProblem, type Need, notSetUp, type Reading, timeOf, working } from "./readiness-reading.js";
 
 export const INSTALL = "Run ghostpen's install for this instance through Relay; it writes this.";
 export const RESTART = "Restart ghostpen's service, which takes up the file.";
-export const RANK = "node dist/cli/rank.js <settings>";
+/**
+ * When ghostpen ranks again, for a fix to point at. No command ranks by hand: the scorer is a model turn chatter runs for
+ * the service (ghostpen#146), which ranks on its own before each weekly shortlist (`ranking/jobs.ts`).
+ */
+export const RANK = `ghostpen's service ranks again before the next weekly shortlist, and no sooner than ${RETRY_MS / 60_000} minutes after a failed try`;
 const needed = { kind: "setting", required: true, spends: "none" } as const;
 const ON_COPY = "so the service runs on the copy it started with";
 
@@ -78,22 +83,23 @@ export const SETTING_NEEDS: Need[] = [
     fix: "Add instanceFactsFile to ghostpen's kept settings (adapter/docs/shortlist.md), then restart ghostpen's service.", check: channelReading },
 ];
 
-/** The scorer spends usage (a model run per changed topic), so it is off until the operator adds it. */
+/**
+ * The scorer spends usage (a model turn per changed topic), so it is off until the operator adds it. Its turns run on
+ * chatter's `ghostpen.scorer` route, so a `scorer.command` older settings carry is not checked.
+ */
 export const SCORER_NEED: Need = {
   id: "scorer", label: "Topic scorer", kind: "setting", required: false, spends: "usage",
   fix: "Add scorer to ghostpen's kept settings (adapter/docs/ranking.md), then restart ghostpen's service.",
   check: async (f) => {
     const scorer = f.settings.scorer;
     if (scorer === undefined) return chosenOff("scorer is not set, so nothing is scored or ranked", f);
-    const problem = await programProblem(scorer.command[0]!);
-    if (problem !== undefined) return failing(`scorer.command[0]: ${problem}`, f.now.getTime());
     const kept = await f.ranking();
     const failures = kept.state === "ok" ? kept.value.problems.filter((p) => p.startsWith("scorer: ")).length : 0;
     if (kept.state === "ok" && failures > 0) {
       const at = timeOf(kept.value.ranAt);
       return failing(`the last ranking, at ${at === undefined ? "an unknown time" : new Date(at).toISOString()}, has ${failures} scorer ${failures === 1 ? "failure" : "failures"}`,
-        at ?? f.now.getTime(), `Read them on ghostpen's app page, correct the scorer, then rank again: ${RANK}.`);
+        at ?? f.now.getTime(), `Read them on ghostpen's app page; check ghostpen is on in chatter and its ghostpen.scorer route (adapter/docs/ranking.md). ${RANK}.`);
     }
-    return working("scorer.command[0] can be run", f.started.getTime());
+    return working("scorer is set, and no scorer failure is in the last ranking", f.started.getTime());
   },
 };

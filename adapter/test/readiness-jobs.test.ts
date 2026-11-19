@@ -32,11 +32,12 @@ describe("ranking", () => {
     expect((await installed({ sources: { topics: [{ name: "notes", kind: "markdown", root: folder(), include: ["*.md"] }] } }).read("ranking")).state).toBe("chosen_off");
   });
 
-  it("is short of data until 8 days after the service started, saying it ranks on its own and naming the rank command", async () => {
+  it("is short of data until 8 days after the service started, saying it ranks on its own and that no command ranks by hand", async () => {
     const read = await ranked().read("ranking");
     expect(read).toMatchObject({ state: "short_of_data", since: STARTED.toISOString(), expected_by: after(RANKING_STALE_MS).toISOString(), why: "no ranking has run yet" });
     expect(read.fix).toContain("ranks on its own when chatter's adapter asks for the weekly shortlist");
-    expect(read.fix).toContain("node dist/cli/rank.js <settings>");
+    expect(read.fix).toContain("no command ranks by hand. ghostpen's service ranks again before the next weekly shortlist, and no sooner than 60 minutes after a failed try.");
+    expect(read.fix).not.toContain("rank.js");
     expect(read.fix).not.toContain("nothing schedules");
   });
 
@@ -57,6 +58,8 @@ describe("ranking", () => {
     const read = await world.read("ranking", { now: after(3 * MINUTE) });
     expect(read).toMatchObject({ state: "failing", since: after(2 * MINUTE).toISOString(), why: `the ranking tried at ${after(2 * MINUTE).toISOString()} failed` });
     expect(JSON.stringify(read)).not.toContain("private");
+    expect(read.fix).toBe("Read the last try on ghostpen's app page and correct what it says. "
+      + "ghostpen's service ranks again before the next weekly shortlist, and no sooner than 60 minutes after a failed try.");
     tried(world.dataDir, "running", after(2 * MINUTE));
     expect(await world.read("ranking", { now: after(3 * MINUTE) })).toMatchObject({ state: "working", why: `a ranking started at ${after(2 * MINUTE).toISOString()}` });
     // A try a stopped service left running reads as the ranking itself once it is a day old.

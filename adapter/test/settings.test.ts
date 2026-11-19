@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSettings, readSettings } from "../src/settings.js";
+import { parseSettings, readSettings, scorerTimeoutMs } from "../src/settings.js";
 import { settingsFile, tempDir } from "./helpers.js";
 
 describe("settings", () => {
@@ -25,5 +25,20 @@ describe("settings", () => {
     expect(parseSettings({ ...base, draft: { writer: { command: ["claude", "-p"], timeoutSeconds: 600 } } }).draft?.writer).toEqual({ timeoutSeconds: 600 });
     expect(parseSettings({ ...base, draft: { writer: { command: [] } } }).draft?.writer).toEqual({ timeoutSeconds: 900 });
     expect(parseSettings({ ...base, draft: {} }).draft?.writer).toEqual({ timeoutSeconds: 900 });
+  });
+
+  it("reads scorer as its turn's time, tolerating and ignoring the command older settings carry (ghostpen#146)", () => {
+    const base = { instance: "x", port: 8794, dataDir: "/data" };
+    expect(parseSettings({ ...base, scorer: { timeoutSeconds: 600 } }).scorer).toEqual({ timeoutSeconds: 600 });
+    expect(parseSettings({ ...base, scorer: {} }).scorer).toEqual({ timeoutSeconds: 300 });
+    // The chatter-loaded adapter of an older install still refuses a scorer without a command: installs keep it, and it is ignored.
+    expect(parseSettings({ ...base, scorer: { command: ["claude", "-p"] } }).scorer).toEqual({ timeoutSeconds: 300 });
+    expect(parseSettings({ ...base, scorer: { command: [] } }).scorer).toEqual({ timeoutSeconds: 300 });
+    expect(() => parseSettings({ ...base, scorer: { timeoutSeconds: 5 } })).toThrow("settings: scorer.timeoutSeconds must be 10 to 3600");
+    expect(() => parseSettings({ ...base, scorer: { command: ["c"], timeoutSeconds: 3601 } })).toThrow("settings: scorer.timeoutSeconds must be 10 to 3600");
+    expect(() => parseSettings({ ...base, scorer: ["claude"] })).toThrow("settings: scorer must be an object");
+    // A turn gets at most chatter's 30 minutes, whatever the setting says.
+    expect(scorerTimeoutMs({ timeoutSeconds: 300 })).toBe(300_000);
+    expect(scorerTimeoutMs({ timeoutSeconds: 3600 })).toBe(30 * 60_000);
   });
 });

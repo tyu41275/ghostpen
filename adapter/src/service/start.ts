@@ -2,6 +2,7 @@
 import type { Server } from "node:http";
 import { DraftJobs } from "../publish/jobs.js";
 import { RankJobs } from "../ranking/jobs.js";
+import { rankNow } from "../ranking/run.js";
 import { readSettings } from "../settings.js";
 import { TurnQueue } from "../turns/queue.js";
 import { readAppKey } from "./app-identity.js";
@@ -23,8 +24,9 @@ export async function startService(settingsPath: string, port?: number): Promise
   // Drafting runs here, one draft at a time, its writer on the model turns; drafts a stopped service left unfinished start again.
   const jobs = settings.draft ? new DraftJobs(settings, { turns }) : undefined;
   jobs?.resume();
-  // The ranking runs here when a shortlist ask finds it due (ghostpen#118); with no scorer or no topics nothing would rank.
-  const ranker = settings.scorer && settings.sources.topics.length > 0 ? new RankJobs(settings) : undefined;
+  // The ranking runs here when a shortlist ask finds it due (ghostpen#118), its scorer on the model turns (ghostpen#146);
+  // with no scorer or no topics nothing would rank.
+  const ranker = settings.scorer && settings.sources.topics.length > 0 ? new RankJobs(settings, { rank: (s) => rankNow(s, { turns }) }) : undefined;
   const server = createGhostpenServer({ instance: settings.instance, dataDir: settings.dataDir, settings, ...(appKey ? { appKey } : {}),
     ...(adapterKey ? { adapterKey } : {}), ...(jobs ? { jobs } : {}), ...(ranker ? { ranker } : {}), readiness: { settingsFile: settingsPath, started }, turns });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port ?? settings.port, "127.0.0.1", resolve); });

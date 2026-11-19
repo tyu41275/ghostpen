@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import type { CommandSettings } from "./command.js";
 import type { ScorerSettings } from "./ranking/scorer.js";
 import { MAX_TIMEOUT_MS } from "./turns/queue.js";
 import { parseScreenshots, type ScreenshotSettings } from "./draft/screenshots.js";
@@ -25,7 +26,11 @@ export interface GhostpenSettings {
   appIdentityKeyFile?: string;
   /** What ghostpen reads (adapter/docs/sources.md); none configured: nothing to rank yet. */
   sources: SourcesSettings;
-  /** The command that proposes scores (adapter/docs/ranking.md); unset: ghostpen ranks nothing. */
+  /**
+   * The scorer: a `ghostpen.scorer` model turn chatter runs (ghostpen#146, adapter/docs/ranking.md), its time per turn
+   * (`timeoutSeconds` 10 to 3600, default 300; a turn gets at most chatter's 30 minutes, `scorerTimeoutMs`). A `command`
+   * left from older settings is ignored. Unset: ghostpen ranks nothing.
+   */
   scorer?: ScorerSettings;
   /** The key the chatter adapter sends on its routes (base64url, at least 32 bytes); unset: the routes answer 404. */
   adapterKeyFile?: string;
@@ -50,7 +55,7 @@ export interface DraftSettings {
   /** How many recent published posts the writer reads for the author's voice (0 to 5, default 2). */
   voicePosts: number;
   /** The command that prints the stack map (`relay graph --format json`); unset: diagrams cannot be checked. */
-  stackMap?: ScorerSettings;
+  stackMap?: CommandSettings;
   /** Mermaid flowchart files (`.mmd`, absolute, 1 to 10) a diagram may also match, beside or instead of the stack map. */
   diagramFiles?: string[];
   /** How many times a failed draft is sent back with the check report (0 to 3, default 2). */
@@ -106,8 +111,17 @@ export function parseSettings(raw: unknown): GhostpenSettings {
   return settings;
 }
 
-/** `scorer` (and every other command): `command` (argv, run without a shell) and `timeoutSeconds` (10 to 3600). */
-function parseScorer(raw: unknown, field = "scorer", defaultTimeout = 300): ScorerSettings {
+/** `scorer`: an object, `{timeoutSeconds?}` (10 to 3600, default 300); a `command` older settings still carry is tolerated and ignored, never refused. */
+function parseScorer(raw: unknown): ScorerSettings {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("settings: scorer must be an object");
+  return { timeoutSeconds: whole((raw as Record<string, unknown>).timeoutSeconds ?? 300, "scorer.timeoutSeconds", 10, 3600) };
+}
+
+/** One scorer turn's time: `scorer.timeoutSeconds`, at most chatter's 30-minute maximum for a model turn. */
+export const scorerTimeoutMs = (scorer: ScorerSettings): number => Math.min(scorer.timeoutSeconds * 1000, MAX_TIMEOUT_MS);
+
+/** A command (the stack map's): `command` (argv, run without a shell) and `timeoutSeconds` (10 to 3600). */
+function parseCommand(raw: unknown, field: string, defaultTimeout: number): CommandSettings {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`settings: ${field} must be an object`);
   const value = raw as Record<string, unknown>;
   if (!Array.isArray(value.command) || value.command.length === 0 || !value.command.every((a) => typeof a === "string" && a !== "")) {
@@ -156,7 +170,7 @@ function parseDraft(raw: unknown): DraftSettings {
   const draft: DraftSettings = { writer: parseWriter(value.writer), voicePosts: whole(value.voicePosts ?? 2, "draft.voicePosts", 0, 5),
     revisions: whole(value.revisions ?? 2, "draft.revisions", 0, 3) };
   if (value.styleGuide !== undefined) draft.styleGuide = absolute(value.styleGuide, "draft.styleGuide");
-  if (value.stackMap !== undefined) draft.stackMap = parseScorer(value.stackMap, "draft.stackMap", 60);
+  if (value.stackMap !== undefined) draft.stackMap = parseCommand(value.stackMap, "draft.stackMap", 60);
   if (value.screenshots !== undefined) draft.screenshots = parseScreenshots(value.screenshots);
   if (value.diagramFiles !== undefined) draft.diagramFiles = parseDiagramFiles(value.diagramFiles);
   return draft;

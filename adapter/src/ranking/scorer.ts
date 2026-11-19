@@ -1,18 +1,30 @@
 /**
- * The scorer: whatever proposes a candidate's scores, run as the command the settings name
- * (`scorer.command`, an argv run without a shell). Which model and account it uses is the operator's choice, in their
- * settings; nothing here names one. It gets one prompt on stdin, the rubric and the document with numbered lines, and
- * answers one JSON object. Its scores are only proposals: `checkScores` keeps a score only when its quote is in the
- * document word for word. Results are kept by document hash, so a weekly run scores only documents that changed.
+ * The scorer: what proposes a candidate's scores, a `ghostpen.scorer` model turn chatter runs for the service
+ * (ghostpen#146, `turns/queue.ts`). Which model and account it uses is that persona's route in chatter's settings; nothing
+ * here names one. It gets one prompt, the rubric and the document with numbered lines, and answers one JSON object. Its
+ * scores are only proposals: `checkScores` keeps a score only when its quote is in the document word for word. Results
+ * are kept by document hash, with what each turn ran on, so a weekly run scores only documents that changed.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runStdin, type CommandSettings } from "../command.js";
+import { scorerTimeoutMs } from "../settings.js";
+import type { TurnAsker, TurnPersona } from "../turns/queue.js";
+import type { Ran } from "../turns/ran.js";
 import type { Candidate } from "./candidates.js";
 import { checkScores, FACTORS, type ProposedScore, type Score } from "./scores.js";
 
-export type ScorerSettings = CommandSettings;
+/** The scorer's model turn (ghostpen#146): chatter runs it on this persona's route. */
+export const SCORER_PERSONA: TurnPersona = "ghostpen.scorer";
+/**
+ * The version of the scorer's instructions (`scorerPrompt` and its `MEANING`s): bump it with any change to their fixed
+ * words, so what a score ran on says which instructions it had (`test/instructions-versions.test.ts` pins them). A bump
+ * rescores nothing: kept scores keep the `ran` they were made with.
+ */
+export const SCORER_VERSION = "1";
+
+/** Each scorer turn's time (`timeoutSeconds` 10 to 3600, default 300; a turn gets at most chatter's 30 minutes). */
+export interface ScorerSettings { timeoutSeconds: number }
 /** What a scorer says about a candidate, after its scores are checked. */
 export interface Scored { topic: string; takeaway: string; scores: Score[] }
 export const SCORES_FILE = "scores.json";
@@ -58,16 +70,25 @@ export function scoredFrom(candidate: Candidate, answer: Record<string, unknown>
   return { topic: line(answer.topic, candidate.title), takeaway: line(answer.takeaway, ""), scores: checkScores(candidate, proposed) };
 }
 
-interface Kept { version: 1; entries: Record<string, { hash: string; scored: Scored }> }
+/** A kept score: its document's hash, and what its turn ran on (absent on a score kept before ghostpen#146, which stays valid). */
+export interface KeptScore { hash: string; scored: Scored; ran?: Ran }
+interface Kept { version: 1; entries: Record<string, KeptScore> }
 const hashOf = (candidate: Candidate) => createHash("sha256").update(`${candidate.kind}\n${candidate.document.lines.join("\n")}`).digest("hex");
 
+/** Where the scorer is asked: the service's model turns, or (tests) a `run` that answers a prompt with text. */
+export interface ScoreSeams { turns?: TurnAsker; run?: (prompt: string) => Promise<string> }
+
 /**
- * Scores every candidate whose document changed since it was last scored (or never was); the rest keep their kept scores.
- * A candidate the scorer fails on is left out and its failure returned, never given made-up scores.
+ * Scores every candidate whose document changed since it was last scored (or never was); the rest keep their kept scores
+ * and the `ran` they carry. A candidate whose turn fails is left out and its failure returned, never given made-up scores.
+ * With neither `turns` nor `run` nothing can be asked, and it rejects before scoring.
  */
-export async function scoreAll(candidates: Candidate[], settings: ScorerSettings, dataDir: string,
-  run: (prompt: string) => Promise<string> = (prompt) => runStdin(settings, prompt, "scorer")):
+export async function scoreAll(candidates: Candidate[], settings: ScorerSettings, dataDir: string, seams: ScoreSeams = {}):
   Promise<{ scored: Map<string, Scored>; failures: Array<{ candidate: string; problem: string }> }> {
+  const { turns, run } = seams;
+  if (!run && !turns) throw new Error("rankings run in ghostpen's service, which asks chatter's adapter for the scorer's model turns");
+  const ask = (prompt: string): Promise<{ text: string; ran?: Ran }> =>
+    run ? run(prompt).then((text) => ({ text })) : turns!.ask(SCORER_PERSONA, SCORER_VERSION, prompt, scorerTimeoutMs(settings));
   const path = join(dataDir, SCORES_FILE);
   let kept: Kept = { version: 1, entries: {} };
   try { if (existsSync(path)) kept = JSON.parse(readFileSync(path, "utf8")) as Kept; } catch { /* rescored */ }
@@ -79,8 +100,9 @@ export async function scoreAll(candidates: Candidate[], settings: ScorerSettings
     const old = kept.entries[candidate.id];
     if (old && old.hash === hash) { scored.set(candidate.id, old.scored); continue; }
     try {
-      const result = scoredFrom(candidate, parseAnswer(await run(scorerPrompt(candidate))));
-      kept.entries[candidate.id] = { hash, scored: result };
+      const answer = await ask(scorerPrompt(candidate));
+      const result = scoredFrom(candidate, parseAnswer(answer.text));
+      kept.entries[candidate.id] = { hash, scored: result, ...(answer.ran ? { ran: answer.ran } : {}) };
       scored.set(candidate.id, result);
     } catch (error) {
       failures.push({ candidate: candidate.id, problem: error instanceof Error ? error.message : String(error) });

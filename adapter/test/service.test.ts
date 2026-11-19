@@ -1,9 +1,10 @@
-import { chmodSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ATTEMPT_FILE, readAttempt } from "../src/ranking/attempt.js";
 import { RANKING_FILE } from "../src/ranking/run.js";
+import { SCORER_VERSION, SCORES_FILE } from "../src/ranking/scorer.js";
 import { renderApp } from "../src/service/app.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { startService } from "../src/service/start.js";
@@ -94,7 +95,7 @@ describe("ranking on its own (ghostpen#118)", () => {
     const dir = tempDir();
     const running = await startService(settingsFile(dir, { adapterKeyFile: keyFile(dir), shortlist: { operator: "12345", channel: "67890" }, ...over }), 0);
     servers.push(running.server);
-    return { dir, ask: async () => (await fetch(`http://127.0.0.1:${running.port}/v1/adapter/shortlist`, keyed)).json() };
+    return { dir, turns: running.turns, ask: async () => (await fetch(`http://127.0.0.1:${running.port}/v1/adapter/shortlist`, keyed)).json() };
   };
 
   it("starts a ranking from the keyed shortlist ask only with a scorer and topics, and the next ask makes the week from it", async () => {
@@ -104,6 +105,22 @@ describe("ranking on its own (ghostpen#118)", () => {
     expect(await ask()).toEqual({ waiting: "ranking the topics now" });
     await vi.waitFor(() => expect(readAttempt(dir)?.outcome).toBe("ok"));
     expect(await ask()).toMatchObject({ channel: "67890", items: [] });
+  });
+
+  it("scores on its own model turns, which the adapter claims, keeping what each ran on (ghostpen#146)", async () => {
+    const root = tempDir();
+    mkdirSync(join(root, "decisions"));
+    writeFileSync(join(root, "decisions", "0028.md"), "# Fast and slow tests\nCI is the main delivery bottleneck across every repo.\n");
+    const { dir, ask, turns } = await start({ scorer: { command: ["left-from-older-settings"] },
+      sources: { topics: [{ name: "notes", kind: "markdown", root, include: ["decisions/*.md"] }] } });
+    expect(await ask()).toEqual({ waiting: "ranking the topics now" });
+    const claim = await turns.claim(5_000).next;
+    expect(claim).toMatchObject({ persona: "ghostpen.scorer", instructionsVersion: SCORER_VERSION, timeoutMs: expect.any(Number) });
+    expect(turns.answer(claim!.id, { ok: true, persona: "ghostpen.scorer", provider: "a-provider", model: "a-model",
+      text: JSON.stringify({ topic: "Why CI", takeaway: "Split tests", stakes: { score: 3, quote: "CI is the main delivery bottleneck" } }) })).toBe(true);
+    await vi.waitFor(() => expect(readAttempt(dir)?.outcome).toBe("ok"));
+    expect(Object.values(JSON.parse(readFileSync(join(dir, SCORES_FILE), "utf8")).entries)).toEqual([expect.objectContaining({
+      ran: { persona: "ghostpen.scorer", instructionsVersion: SCORER_VERSION, provider: "a-provider", model: "a-model", effort: null, thinkingLevel: null } })]);
   });
 
   it("shows on the app page what the last try did and how old an old ranking is, every value escaped", async () => {

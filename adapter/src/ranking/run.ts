@@ -12,7 +12,7 @@ import { candidatesOf } from "./candidates.js";
 import { readChoices } from "./choices.js";
 import { rank, type BackgroundPost, type Mention, type OwedPostMortem } from "./rank.js";
 import type { Score } from "./scores.js";
-import { scoreAll, type Scored } from "./scorer.js";
+import { scoreAll, type ScoreSeams, type Scored } from "./scorer.js";
 
 export const RANKING_FILE = "ranking.json";
 
@@ -55,7 +55,8 @@ export function isRankingView(value: unknown): value is RankingView {
 const where = (document: TopicDocument, line: number | null) =>
   document.location.url ?? `${document.location.path ?? document.id}${line ? `:${line}` : ""}`;
 
-export async function rankNow(settings: GhostpenSettings, seams: { run?: (prompt: string) => Promise<string>; now?: Date } = {}):
+/** `seams.turns`: the service's model turns, which the scorer asks (ghostpen#146); `run` stands in for them in tests. */
+export async function rankNow(settings: GhostpenSettings, seams: ScoreSeams & { now?: Date } = {}):
   Promise<RankingView> {
   const { documents, definitions, index, problems } = await readSources(settings, seams.now);
   const candidates = candidatesOf(documents);
@@ -63,7 +64,7 @@ export async function rankNow(settings: GhostpenSettings, seams: { run?: (prompt
   const notes = problems.map((p) => `${p.source}: ${p.problem}`);
   if (!settings.scorer) notes.push("no scorer is set (settings.scorer): nothing is ranked");
   else {
-    const result = await scoreAll(candidates, settings.scorer, settings.dataDir, seams.run);
+    const result = await scoreAll(candidates, settings.scorer, settings.dataDir, seams);
     scored = result.scored;
     notes.push(...result.failures.map((f) => `scorer: ${f.candidate}: ${f.problem}`));
   }
