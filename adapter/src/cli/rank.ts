@@ -1,11 +1,11 @@
-/** `node dist/cli/rank.js <settings.json>`: one ranking run now, by hand. The service also ranks on its own when the weekly shortlist asks (docs/ranking.md); both take ranking.lock, so one runs at a time. */
-import { attemptRanking, HELD } from "../ranking/attempt.js";
-import { readSettings } from "../settings.js";
+/**
+ * `node dist/cli/rank.js`: rankings no longer run here. The scorer is a model turn chatter runs for ghostpen's service
+ * (ghostpen#146), and a command-line process has no chatter, so the service ranks: on its own before each weekly shortlist,
+ * and again after a failed try (`ranking/jobs.ts`). This says so and exits 1.
+ */
+import { RETRY_MS } from "../ranking/jobs.js";
 
-const path = process.argv[2];
-if (!path) { console.error("usage: node dist/cli/rank.js <settings.json>"); process.exit(2); }
-attemptRanking(readSettings(path), "hand").then(({ attempt, view }) => {
-  if (!view) { console.error(`ghostpen rank: ${attempt.outcome === "skipped" ? HELD : attempt.problem ?? "the ranking failed"}`); process.exit(1); }
-  console.log(`ranked ${view.entries.length} candidates; ${view.background.length} background posts; ${view.owed.length} post-mortems booked`);
-  for (const problem of view.problems) console.log(`problem: ${problem}`);
-}, (error: unknown) => { console.error(`ghostpen rank: ${error instanceof Error ? error.message : String(error)}`); process.exit(1); });
+console.error("ghostpen rank: rankings run in ghostpen's service, which asks chatter to run the scorer, so this command "
+  + `cannot rank. The service ranks on its own before each weekly shortlist, and tries a failed ranking again ${RETRY_MS / 60_000} `
+  + "minutes after it failed at the soonest; its app page shows the last ranking and the last try.");
+process.exit(1);

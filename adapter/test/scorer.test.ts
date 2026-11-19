@@ -3,18 +3,31 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateOf } from "../src/ranking/candidates.js";
 import { isRankingView, RANKING_FILE, rankNow } from "../src/ranking/run.js";
-import { runStdin } from "../src/command.js";
-import { parseAnswer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
+import { parseAnswer, SCORER_PERSONA, SCORER_VERSION, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
 import { parseSettings } from "../src/settings.js";
 import type { TopicDocument } from "../src/sources/types.js";
+import type { TurnAsker } from "../src/turns/queue.js";
+import type { Ran } from "../src/turns/ran.js";
 import { tempDir } from "./helpers.js";
 
 const doc = (id: string, lines: string[], kind: TopicDocument["kind"] = "decision"): TopicDocument =>
   ({ id, kind, source: "s", title: lines[0]!.replace(/^# /u, ""), lines, location: { path: `/o/${id}.md`, line: 1 } });
 const ADR = doc("adr", ["# ADR 0028: fast and slow tests", "CI is the main delivery bottleneck across every repo.", "Slow tests run every three hours."]);
+const OTHER = doc("other", ["# Other", "CI is the main delivery bottleneck again here."]);
 const answer = (over: Record<string, unknown> = {}) => JSON.stringify({ topic: "Why slow tests moved out of the way", takeaway: "Split tests by speed",
   stakes: { score: 3, quote: "CI is the main delivery bottleneck" }, carryOver: { score: 2, quote: "Slow tests run every three hours." },
   thoughtProcess: { score: 1, quote: "made up words that are not there" }, ...over });
+const RAN: Ran = { persona: "ghostpen.scorer", instructionsVersion: SCORER_VERSION, provider: "a-provider", model: "a-model", effort: null, thinkingLevel: "a-level" };
+/** A fake of the service's turns: each ask is kept and answered, its `ran` naming the version it was sent. */
+const turnsOf = () => {
+  const asked: Array<{ persona: string; version: string; timeoutMs: number }> = [];
+  const turns: TurnAsker = { ask: async (persona, version, _prompt, timeoutMs) => {
+    asked.push({ persona, version, timeoutMs });
+    return { text: answer(), ran: { ...RAN, instructionsVersion: version } };
+  } };
+  return { turns, asked };
+};
+const kept = (dir: string) => JSON.parse(readFileSync(join(dir, SCORES_FILE), "utf8")) as { entries: Record<string, { hash: string; ran?: Ran }> };
 
 describe("the scorer", () => {
   it("is told the rubric for the candidate's kind, the plain-words rule and the numbered document", () => {
@@ -35,30 +48,65 @@ describe("the scorer", () => {
     expect(scoredFrom(candidateOf(ADR), { topic: "a\nsecond line" }).topic).toBe("a");
   });
 
-  it("runs the configured command with the prompt on stdin, and says why when it fails", async () => {
-    const echo = { command: ["node", "-e", "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify({len:s.length})))"], timeoutSeconds: 10 };
-    expect(JSON.parse(await runStdin(echo, "hello", "scorer"))).toEqual({ len: 5 });
-    await expect(runStdin({ command: ["node", "-e", "console.error('quota gone');process.exit(3)"], timeoutSeconds: 10 }, "x", "scorer"))
-      .rejects.toThrow("the scorer exited 3: quota gone");
-    await expect(runStdin({ command: ["node", "-e", "setTimeout(()=>{}, 5000)"], timeoutSeconds: 1 }, "x", "scorer")).rejects.toThrow("did not answer within 1 s");
-    await expect(runStdin({ command: ["/nonexistent/scorer"], timeoutSeconds: 10 }, "x", "scorer")).rejects.toThrow("could not start");
-  });
-
   it("scores only documents that changed, and leaves out a candidate it fails on rather than inventing scores", async () => {
     const dir = tempDir();
-    const settings = { command: ["unused"], timeoutSeconds: 10 };
+    const settings = { timeoutSeconds: 10 };
     let asked = 0;
     const run = async () => { asked += 1; return answer(); };
-    const other = candidateOf(doc("other", ["# Other", "CI is the main delivery bottleneck again here."]));
-    await scoreAll([candidateOf(ADR), other], settings, dir, run);
+    const other = candidateOf(OTHER);
+    await scoreAll([candidateOf(ADR), other], settings, dir, { run });
     expect(asked).toBe(2);
-    await scoreAll([candidateOf(ADR), other], settings, dir, run);
+    await scoreAll([candidateOf(ADR), other], settings, dir, { run });
     expect(asked).toBe(2); // nothing changed: nothing asked
     const edited = candidateOf(doc("adr", [...ADR.lines, "A new line."]));
-    const result = await scoreAll([edited, other], settings, dir, async () => { throw new Error("rate limited"); });
+    const result = await scoreAll([edited, other], settings, dir, { run: async () => { throw new Error("rate limited"); } });
     expect([...result.scored.keys()]).toEqual(["other"]);
     expect(result.failures).toEqual([{ candidate: "adr", problem: "rate limited" }]);
-    expect(Object.keys(JSON.parse(readFileSync(join(dir, SCORES_FILE), "utf8")).entries)).toEqual(["adr", "other"]); // the old score is kept, not replaced
+    expect(Object.keys(kept(dir).entries)).toEqual(["adr", "other"]); // the old score is kept, not replaced
+  });
+});
+
+describe("the scorer's model turns (ghostpen#146)", () => {
+  it("asks a ghostpen.scorer turn under SCORER_VERSION, at most chatter's 30 minutes, and keeps what it ran on with the score", async () => {
+    const dir = tempDir(), { turns, asked } = turnsOf();
+    const result = await scoreAll([candidateOf(ADR)], { timeoutSeconds: 3600 }, dir, { turns });
+    expect(SCORER_PERSONA).toBe("ghostpen.scorer");
+    expect(asked).toEqual([{ persona: "ghostpen.scorer", version: SCORER_VERSION, timeoutMs: 30 * 60_000 }]);
+    expect(result.scored.get("adr")?.topic).toBe("Why slow tests moved out of the way");
+    expect(kept(dir).entries.adr?.ran).toEqual(RAN);
+  });
+
+  it("leaves out a candidate whose turn fails, with its failure, never made-up scores", async () => {
+    const dir = tempDir();
+    const turns: TurnAsker = { ask: async (_persona, _version, prompt) => {
+      if (prompt.includes("Document: Other")) throw new Error("nobody took ghostpen's ghostpen.scorer turn within 300 s");
+      return { text: answer(), ran: RAN };
+    } };
+    const result = await scoreAll([candidateOf(ADR), candidateOf(OTHER)], { timeoutSeconds: 300 }, dir, { turns });
+    expect([...result.scored.keys()]).toEqual(["adr"]);
+    expect(result.failures).toEqual([{ candidate: "other", problem: "nobody took ghostpen's ghostpen.scorer turn within 300 s" }]);
+    expect(Object.keys(kept(dir).entries)).toEqual(["adr"]);
+  });
+
+  it("keeps kept scores and their ran across a version bump, and reads a score kept before with no ran as valid", async () => {
+    const dir = tempDir(), candidates = [candidateOf(ADR), candidateOf(OTHER)];
+    await scoreAll(candidates, { timeoutSeconds: 300 }, dir, { turns: turnsOf().turns });
+    // As if ADR was scored under an older version, and OTHER before ghostpen#146 (no ran).
+    const file = kept(dir);
+    file.entries.adr!.ran = { ...RAN, instructionsVersion: "0" };
+    delete file.entries.other!.ran;
+    writeFileSync(join(dir, SCORES_FILE), JSON.stringify({ version: 1, ...file }));
+    const again = turnsOf();
+    const result = await scoreAll(candidates, { timeoutSeconds: 300 }, dir, { turns: again.turns });
+    expect(again.asked).toEqual([]); // nothing rescored
+    expect([...result.scored.keys()]).toEqual(["adr", "other"]);
+    expect(kept(dir).entries.adr?.ran).toEqual({ ...RAN, instructionsVersion: "0" });
+    expect(kept(dir).entries.other).not.toHaveProperty("ran");
+  });
+
+  it("refuses to score with nothing to ask: rankings run in the service", async () => {
+    await expect(scoreAll([candidateOf(ADR)], { timeoutSeconds: 300 }, tempDir()))
+      .rejects.toThrow("rankings run in ghostpen's service, which asks chatter's adapter for the scorer's model turns");
   });
 });
 
@@ -70,7 +118,7 @@ describe("a ranking run", () => {
     writeFileSync(join(root, "chatter", "decisions", "0028.md"), [...ADR.lines, "CI runs on the check runner.", "Every change waits for CI."].join("\n"));
     mkdirSync(join(root, "chatter", "docs"), { recursive: true });
     writeFileSync(join(root, "chatter", "docs", "CONTEXT.md"), "# g\n\n## CI\nThe checks that run on every change.\n");
-    const settings = parseSettings({ instance: "host", port: 8794, dataDir: data, scorer: { command: ["unused"] },
+    const settings = parseSettings({ instance: "host", port: 8794, dataDir: data, scorer: {},
       sources: { topics: [{ name: "decisions", kind: "markdown", root, include: ["*/decisions/*.md", "none/*.md"] }],
         references: [{ name: "glossaries", kind: "glossary", root, include: ["*/docs/CONTEXT.md"] }] } });
     const view = await rankNow(settings, { run: async () => answer(), now: new Date("2026-10-25T00:00:00Z") });
@@ -92,10 +140,17 @@ describe("a ranking run", () => {
     expect(unset.problems).toContain("no scorer is set (settings.scorer): nothing is ranked");
   });
 
-  it("refuses a scorer setting it cannot run, naming the field", () => {
-    const base = { instance: "x", port: 8794, dataDir: "/d" };
-    expect(() => parseSettings({ ...base, scorer: { command: [] } })).toThrow("settings: scorer.command must be a non-empty list of strings");
-    expect(() => parseSettings({ ...base, scorer: { command: ["c"], timeoutSeconds: 5 } })).toThrow("settings: scorer.timeoutSeconds must be 10 to 3600");
-    expect(parseSettings({ ...base, scorer: { command: ["claude", "-p"] } }).scorer).toEqual({ command: ["claude", "-p"], timeoutSeconds: 300 });
+  it("asks the scorer on the turns it is handed, and fails whole with none (the service hands its own)", async () => {
+    const root = tempDir(), data = tempDir();
+    mkdirSync(join(root, "decisions"), { recursive: true });
+    writeFileSync(join(root, "decisions", "0028.md"), ADR.lines.join("\n"));
+    const settings = parseSettings({ instance: "host", port: 8794, dataDir: data, scorer: { command: ["left-from-older-settings"] },
+      sources: { topics: [{ name: "decisions", kind: "markdown", root, include: ["decisions/*.md"] }] } });
+    await expect(rankNow(settings)).rejects.toThrow("rankings run in ghostpen's service");
+    const { turns, asked } = turnsOf();
+    const view = await rankNow(settings, { turns });
+    expect(asked.map((a) => a.persona)).toEqual(["ghostpen.scorer"]);
+    expect(view.entries.map((e) => e.topic)).toEqual(["Why slow tests moved out of the way"]);
+    expect(Object.values(kept(data).entries).map((e) => e.ran)).toEqual([RAN]);
   });
 });

@@ -41,7 +41,7 @@ export const SOURCE_NEEDS: Need[] = [
       if (count === 0) return asked;
       const at = timeOf(kept.value.ranAt);
       return failing(`the last ranking, at ${at === undefined ? "an unknown time" : new Date(at).toISOString()}, has ${plural(count, "problem", "problems")} reading the topic sources`,
-        at ?? f.now.getTime(), `Read them on ghostpen's app page, correct the sources (adapter/docs/sources.md), then rank again: ${RANK}.`);
+        at ?? f.now.getTime(), `Read them on ghostpen's app page and correct the sources (adapter/docs/sources.md). ${RANK}.`);
     } },
   { ...source, id: "glossaries", label: "Glossaries", fix: add("sources.references"),
     check: async (f) => {

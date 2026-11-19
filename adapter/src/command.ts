@@ -2,7 +2,7 @@
  * Running an operator-named program (git, gh, a review command) as an argv, never through a shell, in a folder, with a
  * time limit. Resolves its output; rejects naming the program and its last error line, never its arguments (they can
  * hold paths). Used for publishing (ghostpen#90). `runStdin` runs a command the settings name with one prompt on stdin, in a
- * process group of its own: the scorer and the stack map command.
+ * process group of its own: the stack map command.
  */
 import { execFile, spawn } from "node:child_process";
 
@@ -25,7 +25,7 @@ export interface CommandSettings { command: string[]; timeoutSeconds: number }
 export const KILL_GRACE_MS = 2_000;
 
 /**
- * Runs a command the settings name (named `name` in errors: the scorer, the stack map command) once on `prompt`; resolves its
+ * Runs a command the settings name (named `name` in errors: the stack map command) once on `prompt`; resolves its
  * stdout, rejects on a failure, a timeout or a non-zero exit. It runs in a process group of its own, so a timeout stops
  * it and anything it started: SIGTERM to the group, then SIGKILL after `KILL_GRACE_MS` for whatever ignores it. Its
  * streams are closed, so nothing it left keeps ghostpen waiting.

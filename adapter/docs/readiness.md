@@ -37,8 +37,9 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
 - `channel` (`shortlist.channel`, else `instanceFactsFile`): `working` when `shortlist.channel` is set, or chatter's
   instance facts name ghostpen's channel (`adapterChannels.ghostpen.channelId`). `not_set_up` with neither setting.
   `failing` when the facts file is missing, is not JSON, or names no channel for ghostpen yet.
-- `scorer` (`scorer`): `chosen_off` with no setting. `failing` when `scorer.command[0]` is not a file that can be run (a
-  bare name is looked up on `PATH`), or when the last ranking has scorer failures (counted).
+- `scorer` (`scorer`): `chosen_off` with no setting. `failing` when the last ranking has scorer failures (counted); the fix
+  points at chatter's `ghostpen.scorer` route and when ghostpen ranks again. The scorer is a model turn, so a
+  `scorer.command` older settings carry is not checked.
 
 ## Sources
 
@@ -50,8 +51,9 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
 
 ## Jobs
 
-- `ranking`: the service ranks on its own when the keyed shortlist ask finds a ranking due (`docs/ranking.md`), and
-  `node dist/cli/rank.js <settings>` ranks by hand. `not_set_up` with no topics, `chosen_off` with no scorer. A last try
+- `ranking`: the service ranks on its own when the keyed shortlist ask finds a ranking due (`docs/ranking.md`); no command
+  ranks by hand. Its fixes say the service ranks again before the next weekly shortlist, and no sooner than an hour
+  (`RETRY_MS`) after a failed try. `not_set_up` with no topics, `chosen_off` with no scorer. A last try
   (`ranking-attempt.json`) that failed after the last `ranAt` is `failing`, since that try, never quoting its problem. A
   try running for under a day is `working`, since it started. A record that is not one ghostpen wrote is `failing`.
   Otherwise: with no `ranking.json` yet it is `short_of_data`, due 8 days after the service started. A file that is not a

@@ -1,5 +1,5 @@
 /**
- * One ranking try, by the service or by hand (ghostpen#118). Every try takes `dataDir/ranking.lock` first (opened with
+ * One ranking try, by the service (ghostpen#118; `hand` is kept for a record the retired rank command wrote). Every try takes `dataDir/ranking.lock` first (opened with
  * `wx`, holding the taker's pid, a random token and start time), so one ranking runs at a time; a lock whose pid is not
  * alive is taken over by one contender only (see takeLock), and a try removes the lock when it ends while the lock is
  * still its own. What the last try did is kept in `dataDir/ranking-attempt.json`
@@ -13,7 +13,7 @@ import { rankNow, type RankingView } from "./run.js";
 
 export const ATTEMPT_FILE = "ranking-attempt.json";
 export const LOCK_FILE = "ranking.lock";
-/** A skipped try's problem, and what the rank command says when it finds a ranking running. */
+/** A skipped try's problem: another try holds the lock. */
 export const HELD = "a ranking is running already";
 /** A lock that cannot be read yet (its taker is still writing it) counts as held for this long. */
 const UNREAD_LOCK_MS = 60_000;

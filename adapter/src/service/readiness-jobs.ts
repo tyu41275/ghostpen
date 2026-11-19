@@ -1,6 +1,6 @@
 /**
  * The needs that are jobs (`readiness.ts`). The service ranks on its own when the keyed shortlist ask finds a ranking due
- * (`ranking/jobs.ts`), and anyone may run the rank command; the mark is the last try (ranking-attempt.json) and the `ranAt`
+ * (`ranking/jobs.ts`; no command ranks by hand, ghostpen#146); the mark is the last try (ranking-attempt.json) and the `ranAt`
  * of the last ranking.json. The weekly shortlist is asked for by chatter's adapter on its heartbeat, so its mark is the
  * last call that carried the adapter key, kept in memory since the service started.
  * Drafting and publishing run in this service; what they last did is kept on each draft in shortlist.json.
@@ -34,7 +34,7 @@ const job = { kind: "job", required: false, spends: "none" } as const;
 const iso = (ms: number) => new Date(ms).toISOString();
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const SHORTLIST_UNREAD = "shortlist.json in the data folder cannot be read as ghostpen's shortlist file";
-const RANK_FAILED_FIX = `Read the last try on ghostpen's app page and correct what it says; ghostpen tries again an hour after a failed try, or run ${RANK}.`;
+const RANK_FAILED_FIX = `Read the last try on ghostpen's app page and correct what it says. ${RANK}.`;
 const add = (block: string, page: string) => `Add ${block} to ghostpen's kept settings (adapter/docs/${page}.md), then restart ghostpen's service.`;
 
 /** Every draft kept, in every week. */
@@ -161,7 +161,7 @@ async function publishingReading(f: Facts): Promise<Reading> {
 }
 
 export const JOB_NEEDS: Need[] = [
-  { ...job, id: "ranking", label: "Topic ranking", fix: `ghostpen ranks on its own when chatter's adapter asks for the weekly shortlist (adapter/docs/ranking.md); to rank now, run ${RANK} on ghostpen's host.`, check: rankingReading },
+  { ...job, id: "ranking", label: "Topic ranking", fix: `ghostpen ranks on its own when chatter's adapter asks for the weekly shortlist (adapter/docs/ranking.md); no command ranks by hand. ${RANK}.`, check: rankingReading },
   { ...job, id: "weekly-shortlist", label: "Weekly shortlist", fix: add("shortlist and adapterKeyFile", "shortlist"), check: shortlistReading },
   { ...job, id: "drafting", label: "Drafting", spends: "usage", fix: add("draft", "drafting"), check: draftingReading },
   { ...job, id: "publishing", label: "Publishing", spends: "usage", fix: add("publish", "publishing"), check: publishingReading },

@@ -150,23 +150,33 @@ describe("glossaries and published-posts", () => {
 });
 
 describe("scorer", () => {
-  it("is chosen off with none, working on a program that runs, by path or on PATH", async () => {
+  it("is chosen off with none, and working with one, never checking a command older settings carry (ghostpen#146)", async () => {
     expect((await installed().read("scorer")).state).toBe("chosen_off");
-    expect((await installed({ scorer: { command: [join(programIn("score"), "score"), "--fast"] } }).read("scorer")).state).toBe("working");
-    vi.stubEnv("PATH", programIn("score"));
-    expect((await installed({ scorer: { command: ["score"] } }).read("scorer")).state).toBe("working");
-    expect(await installed({ scorer: { command: ["nothing-by-this-name"] } }).read("scorer")).toMatchObject({ state: "failing", why: "scorer.command[0]: it is not found on PATH" });
+    expect(await installed({ scorer: { timeoutSeconds: 300 } }).read("scorer"))
+      .toMatchObject({ state: "working", why: "scorer is set, and no scorer failure is in the last ranking" });
+    // Its turns run on chatter's ghostpen.scorer route: a command left in the settings is not a program it needs.
+    expect((await installed({ scorer: { command: ["nothing-by-this-name"] } }).read("scorer")).state).toBe("working");
+    expect((await installed({ scorer: { command: [join(tempDir(), "gone")] } }).read("scorer")).state).toBe("working");
   });
 
-  it("reads failing on a program missing, a folder, or one that cannot run", async () => {
-    expect(await installed({ scorer: { command: [join(tempDir(), "gone")] } }).read("scorer")).toMatchObject({ why: "scorer.command[0]: the file is missing" });
-    expect(await installed({ scorer: { command: [tempDir()] } }).read("scorer")).toMatchObject({ why: "scorer.command[0]: it is not a file" });
-    if (notRoot) expect(await programProblem(join(programIn("score", 0o644), "score"))).toBe("it cannot be run");
-  });
-
-  it("counts the last ranking's scorer failures", async () => {
-    const world = installed({ scorer: { command: [join(programIn("score"), "score")] } });
+  it("counts the last ranking's scorer failures, pointing at the route and when it ranks again, naming no command", async () => {
+    const world = installed({ scorer: {} });
     ranking(world.dataDir, ["scorer: a: /private/x timed out", "notes: other"]);
-    expect(await world.read("scorer")).toMatchObject({ state: "failing", why: `the last ranking, at ${after(0).toISOString()}, has 1 scorer failure` });
+    const read = await world.read("scorer");
+    expect(read).toMatchObject({ state: "failing", why: `the last ranking, at ${after(0).toISOString()}, has 1 scorer failure` });
+    expect(read.fix).toBe("Read them on ghostpen's app page; check ghostpen is on in chatter and its ghostpen.scorer route (adapter/docs/ranking.md). "
+      + "ghostpen's service ranks again before the next weekly shortlist, and no sooner than 60 minutes after a failed try.");
+  });
+});
+
+describe("a program a setting names", () => {
+  it("is found by path or on PATH, and says why one cannot run", async () => {
+    expect(await programProblem(join(programIn("score"), "score"))).toBeUndefined();
+    vi.stubEnv("PATH", programIn("score"));
+    expect(await programProblem("score")).toBeUndefined();
+    expect(await programProblem("nothing-by-this-name")).toBe("it is not found on PATH");
+    expect(await programProblem(join(tempDir(), "gone"))).toBe("the file is missing");
+    expect(await programProblem(tempDir())).toBe("it is not a file");
+    if (notRoot) expect(await programProblem(join(programIn("score", 0o644), "score"))).toBe("it cannot be run");
   });
 });
