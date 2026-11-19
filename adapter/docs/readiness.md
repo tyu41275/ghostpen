@@ -68,7 +68,7 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
   the style guide is not a file that reads, or a file in `draft.diagramFiles` is missing, is not a Mermaid flowchart or
   draws no arrows (each named by its place in the list; the file is read once, without blocking), when a draft stopped
   because the writer failed, or when a draft has been waiting or drafting longer than the writer's time limit for every
-  try (`timeoutSeconds`, at most 30 minutes, times `revisions` plus one) plus 15 minutes. Drafts that are ready, held or failed their checks are `working`: their cards already ask the operator.
+  try (`timeoutSeconds`, at most 30 minutes, plus one minute for the answer to come back, times `revisions` plus one) plus 15 minutes. Drafts that are ready, held or failed their checks are `working`: their cards already ask the operator.
 - `publishing` (`publish`): `chosen_off` with no setting, `not_set_up` with no `draft`. `failing` when `repoDir` is not a
   folder that can be written holding `.git`, when `git` or `gh` is not found on `PATH`, when the review command's program
   cannot be run, when `sources.published` is unset or its `blogDir` is not `repoDir`'s `postsDir` folder (through links;
