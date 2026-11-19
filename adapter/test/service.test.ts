@@ -110,7 +110,7 @@ describe("ranking on its own (ghostpen#118)", () => {
   it("scores on its own model turns, which the adapter claims, keeping what each ran on (ghostpen#146)", async () => {
     const root = tempDir();
     mkdirSync(join(root, "decisions"));
-    writeFileSync(join(root, "decisions", "0028.md"), "# ADR 0028: tests\nCI is the main delivery bottleneck across every repo.\n");
+    writeFileSync(join(root, "decisions", "0028.md"), "# Fast and slow tests\nCI is the main delivery bottleneck across every repo.\n");
     const { dir, ask, turns } = await start({ scorer: { command: ["left-from-older-settings"] },
       sources: { topics: [{ name: "notes", kind: "markdown", root, include: ["decisions/*.md"] }] } });
     expect(await ask()).toEqual({ waiting: "ranking the topics now" });
