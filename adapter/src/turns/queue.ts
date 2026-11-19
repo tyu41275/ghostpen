@@ -143,3 +143,6 @@ export class TurnQueue {
     return { id: turn.id, persona: turn.persona, instructionsVersion: turn.instructionsVersion, prompt: turn.prompt, timeoutMs: turn.timeoutMs };
   }
 }
+
+/** What a job needs of the queue: asking (a test passes a fake). */
+export type TurnAsker = Pick<TurnQueue, "ask">;

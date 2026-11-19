@@ -7,12 +7,14 @@ import adapter from "../src/adapter/index.js";
 import { syncShortlist, threadName, type Button } from "../src/adapter/shortlist.js";
 import { writerPrompt } from "../src/draft/prompt.js";
 import { addFeedback, readFeedback } from "../src/feedback/store.js";
-import { answerInThread, parseThreadAnswer, threadPrompt, threadTopic } from "../src/feedback/thread.js";
+import { answerInThread, parseThreadAnswer, THREAD_PERSONA, THREAD_VERSION, threadPrompt, threadTopic } from "../src/feedback/thread.js";
 import { RANKING_FILE } from "../src/ranking/run.js";
+import { adapterRoute } from "../src/service/adapter-routes.js";
 import { renderApp } from "../src/service/app.js";
 import { createGhostpenServer } from "../src/service/server.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { saveShortlists } from "../src/shortlist/state.js";
+import { TurnQueue, type TurnAsker } from "../src/turns/queue.js";
 import { KEY, keyFile, tempDir, tree } from "./helpers.js";
 
 const OPERATOR = "200000000000000001";
@@ -38,6 +40,10 @@ function setup(over: Record<string, unknown> = {}): GhostpenSettings {
   return settings;
 }
 const ID = "decisions:decisions/0001-timers.md";
+const RAN = { persona: THREAD_PERSONA, instructionsVersion: THREAD_VERSION, provider: "p", model: "m", effort: null, thinkingLevel: null };
+/** A model turn that answers `text`, recording what was asked. */
+const turnOf = (text: string, asked: unknown[][] = []): TurnAsker =>
+  ({ ask: async (persona, version, _prompt, timeoutMs) => { asked.push([persona, version, timeoutMs]); return { text, ran: RAN }; } });
 
 describe("which card a thread belongs to", () => {
   it("knows the thread ghostpen opened, a thread opened on the card itself, and one on a draft card", () => {
@@ -74,8 +80,9 @@ describe("answering in a thread", () => {
   });
 
   it("keeps a question with its answer, context as context, and both for a message that does both", async () => {
-    const settings = setup();
-    const ask = (kind: string, reply = "It saved two hours a week.") => async () => JSON.stringify({ kind, reply });
+    const settings = setup({ draft: { writer: { timeoutSeconds: 120 } } });
+    const asked: unknown[][] = [];
+    const ask = (kind: string, reply = "It saved two hours a week.") => turnOf(JSON.stringify({ kind, reply }), asked);
     expect(await answerInThread(settings, { topic: ID, title: "T", user: OPERATOR, text: "Why first?", now: NOW }, ask("question"))).toBe("It saved two hours a week.");
     await answerInThread(settings, { topic: ID, title: "T", user: OPERATOR, text: "Stress the cost.", now: NOW }, ask("context", "Thanks, the writer will get it."));
     await answerInThread(settings, { topic: ID, title: "T", user: OPERATOR, text: "It ran a month; was it worth it?", now: NOW }, ask("both"));
@@ -83,15 +90,35 @@ describe("answering in a thread", () => {
       ["me", "question", "Why first?"], ["ghostpen", "answer", "It saved two hours a week."],
       ["me", "context", "Stress the cost."], ["ghostpen", "answer", "Thanks, the writer will get it."],
       ["me", "context", "It ran a month; was it worth it?"], ["me", "question", "It ran a month; was it worth it?"], ["ghostpen", "answer", "It saved two hours a week."]]);
+    expect(asked[0]).toEqual([THREAD_PERSONA, THREAD_VERSION, 120_000]);
+    expect(readFeedback(settings.dataDir).filter((e) => e.kind === "answer").map((e) => e.ran)).toEqual([RAN, RAN, RAN]);
+    expect(readFeedback(settings.dataDir).filter((e) => e.kind !== "answer").every((e) => e.ran === undefined)).toBe(true);
   });
 
-  it("never loses the message: a failed answer, or no command, keeps it as context and says so", async () => {
-    const settings = setup();
-    expect(await answerInThread(settings, { topic: ID, title: "T", user: OPERATOR, text: "Note A", now: NOW }, async () => "not json"))
+  it("never loses the message: a failed turn or answer, or no drafting set up, keeps it as context and says so", async () => {
+    const settings = setup({ draft: {} });
+    const failed: TurnAsker = { ask: async () => { throw new Error("ghostpen's ghostpen.thread-answer turn failed: no account\nmore"); } };
+    const message = (text: string) => ({ topic: ID, title: "T", user: OPERATOR, text, now: NOW });
+    expect(await answerInThread(settings, message("Note A"), turnOf("not json")))
       .toBe("Kept your message as context for this topic, but ghostpen could not answer it: the answer was not the JSON asked for.");
-    expect(await answerInThread(settings, { topic: ID, title: "T", user: OPERATOR, text: "Note B", now: NOW }))
-      .toMatch(/^Kept as context for this topic\. ghostpen has no writer or scorer set here/u);
-    expect(readFeedback(settings.dataDir).map((e) => [e.kind, e.text])).toEqual([["context", "Note A"], ["context", "Note B"]]);
+    expect(await answerInThread(settings, message("Note B"), failed))
+      .toBe("Kept your message as context for this topic, but ghostpen could not answer it: ghostpen's ghostpen.thread-answer turn failed: no account.");
+    const asked: unknown[][] = [];
+    expect(await answerInThread({ ...settings, draft: undefined }, message("Note C"), turnOf("{}", asked)))
+      .toBe("Kept as context for this topic. ghostpen has no drafting set up here (settings.draft), so it cannot answer questions.");
+    expect(asked).toEqual([]);
+    expect(readFeedback(settings.dataDir).map((e) => [e.kind, e.text])).toEqual([["context", "Note A"], ["context", "Note B"], ["context", "Note C"]]);
+  });
+
+  it("asks the service's model turns from the thread message route", async () => {
+    const settings = setup({ draft: {} });
+    const turns = new TurnQueue();
+    const reply = adapterRoute(settings, "POST", "/v1/adapter/thread/message", { thread: "t1", user: OPERATOR, text: "Why first?" }, NOW, undefined, undefined, turns);
+    const claim = await turns.claim(2_000).next;
+    expect(claim).toMatchObject({ persona: THREAD_PERSONA, instructionsVersion: THREAD_VERSION, timeoutMs: 900_000 });
+    turns.answer(claim!.id, { ok: true, text: JSON.stringify({ kind: "question", reply: "Because it saved time." }), model: "m" });
+    expect(await reply).toEqual({ status: 200, body: { reply: "Because it saved time." } });
+    expect(readFeedback(settings.dataDir).at(-1)?.ran).toMatchObject({ persona: null, instructionsVersion: THREAD_VERSION, model: "m" });
   });
 
   it("checks the answer's shape and clips a long reply", () => {
@@ -122,7 +149,7 @@ describe("thread messages in chatter", () => {
     const message = (over: Record<string, unknown>) => ({ type: "message", is_thread: true, channel_id: "t1", user_id: OPERATOR, text: "Keep it short.", ...over });
     expect(await answerThreadMessage(message({}), ctx)).toEqual({ handled: true });
     await waitFor(() => posts.length > 0);
-    // No writer or scorer in these settings: the message is kept as context, and the reply says so.
+    // No drafting set up in these settings: the message is kept as context, and the reply says so.
     expect(posts[0]).toMatchObject({ channel: "t1", text: expect.stringMatching(/^Kept as context for this topic\./u) });
     expect(readFeedback(settings.dataDir).map((e) => [e.topic, e.kind, e.text])).toEqual([[ID, "context", "Keep it short."]]);
     expect(await answerThreadMessage(message({ user_id: "1" }), ctx)).toEqual({ handled: true });

@@ -124,7 +124,7 @@ describe("weekly-shortlist", () => {
 });
 
 describe("drafting", () => {
-  const writer = () => ({ draft: { writer: { command: [sh()], timeoutSeconds: 60 }, revisions: 1 } });
+  const writer = () => ({ draft: { writer: { timeoutSeconds: 60 }, revisions: 1 } });
 
   it("is chosen off with no draft, working with a writer that runs and drafts ready, held or failed", async () => {
     expect((await installed().read("drafting")).state).toBe("chosen_off");
@@ -133,9 +133,9 @@ describe("drafting", () => {
     expect((await world.read("drafting")).state).toBe("working");
   });
 
-  it("names the writer, the stack map or the style guide that cannot be used", async () => {
+  it("names the stack map or the style guide that cannot be used, never a writer command older settings carry", async () => {
     const gone = join(tempDir(), "gone");
-    expect(await installed({ draft: { writer: { command: [gone] } } }).read("drafting")).toMatchObject({ state: "failing", why: "draft.writer.command[0]: the file is missing" });
+    expect(await installed({ draft: { writer: { command: [gone] } } }).read("drafting")).toMatchObject({ state: "working", why: "no draft stopped" });
     expect(await installed({ draft: { writer: { command: [sh()] }, stackMap: { command: [gone] }, styleGuide: gone } }).read("drafting"))
       .toMatchObject({ state: "failing", why: "draft.stackMap.command[0]: the file is missing (and 1 more)" });
   });
@@ -163,6 +163,10 @@ describe("drafting", () => {
     week(world.dataDir, after(0), [drafted({ status: "drafting" }), drafted({ status: "queued" })]);
     expect((await world.read("drafting", { now: after(limit) })).state).toBe("working");
     expect(await world.read("drafting", { now: after(limit + 1) })).toMatchObject({ state: "failing", why: "2 drafts have been waiting or drafting for over 17 minutes" });
+    // A writer turn gets at most chatter's 30 minutes, whatever older settings say.
+    const long = installed({ draft: { writer: { timeoutSeconds: 3600 }, revisions: 0 } });
+    week(long.dataDir, after(0), [drafted({ status: "drafting" })]);
+    expect(await long.read("drafting", { now: after(45 * MINUTE + 1) })).toMatchObject({ state: "failing", why: "1 draft has been waiting or drafting for over 45 minutes" });
   });
 });
 

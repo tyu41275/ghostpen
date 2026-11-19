@@ -63,11 +63,12 @@ keyed call). A failing reading is `since` now, or since the time it went stale.
   or no `adapterKeyFile`. With no keyed call since the start it is `short_of_data`, due 20 minutes after the start. A last
   call over 30 minutes old is `failing`. So is a card of this week's shortlist that is not posted 30 minutes after the
   shortlist was made. Otherwise `working`, since the last call.
-- `drafting` (`draft`): `chosen_off` with no setting. `failing` when the writer's or the stack map's program cannot be run,
+- `drafting` (`draft`): `chosen_off` with no setting. `failing` when the stack map's program cannot be run (the writer is a
+  model turn, so a `draft.writer.command` older settings carry is not checked),
   the style guide is not a file that reads, or a file in `draft.diagramFiles` is missing, is not a Mermaid flowchart or
   draws no arrows (each named by its place in the list; the file is read once, without blocking), when a draft stopped
   because the writer failed, or when a draft has been waiting or drafting longer than the writer's time limit for every
-  try (`timeoutSeconds` times `revisions` plus one) plus 15 minutes. Drafts that are ready, held or failed their checks are `working`: their cards already ask the operator.
+  try (`timeoutSeconds`, at most 30 minutes, times `revisions` plus one) plus 15 minutes. Drafts that are ready, held or failed their checks are `working`: their cards already ask the operator.
 - `publishing` (`publish`): `chosen_off` with no setting, `not_set_up` with no `draft`. `failing` when `repoDir` is not a
   folder that can be written holding `.git`, when `git` or `gh` is not found on `PATH`, when the review command's program
   cannot be run, when `sources.published` is unset or its `blogDir` is not `repoDir`'s `postsDir` folder (through links;

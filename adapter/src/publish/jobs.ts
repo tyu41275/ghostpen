@@ -9,10 +9,12 @@ import { mkdirSync } from "node:fs";
 import { reportText } from "../draft/checks.js";
 import { draftNow, readDraft } from "../draft/write.js";
 import type { GhostpenSettings } from "../settings.js";
+import type { TurnAsker } from "../turns/queue.js";
 import { findItem, readShortlists, saveShortlists, type DraftState, type WeekItem } from "../shortlist/state.js";
 import { openPostPr, startReview } from "./github.js";
 
-export interface JobDeps { draft: typeof draftNow; open: typeof openPostPr; review: typeof startReview; now: () => Date }
+/** `turns`: the service's model turns, which the writer asks (ghostpen#146). */
+export interface JobDeps { draft: typeof draftNow; open: typeof openPostPr; review: typeof startReview; now: () => Date; turns?: TurnAsker }
 const DEFAULTS: JobDeps = { draft: draftNow, open: openPostPr, review: startReview, now: () => new Date() };
 /** How a draft's `problem` starts when its writer failed, and when its pull request could not be opened (the readiness list counts them). */
 export const WRITE_FAILED = "the draft could not be written: ";
@@ -65,7 +67,7 @@ export class DraftJobs {
     const previous = notes ? readDraft(this.settings.dataDir, item.id) : null;
     let draft;
     try {
-      draft = await this.deps.draft(this.settings, item.id, {}, previous && notes ? { previous, notes } : undefined);
+      draft = await this.deps.draft(this.settings, item.id, this.deps.turns ? { turns: this.deps.turns } : {}, previous && notes ? { previous, notes } : undefined);
     } catch (error) {
       this.update(week, index, (d) => { d.status = "error"; d.problem = `${WRITE_FAILED}${message(error)}`; });
       return;

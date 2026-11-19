@@ -12,6 +12,7 @@ import { answer } from "../src/service/adapter-routes.js";
 import { draftCard, draftEdit, draftPosted, draftPublish, LINKS_FAILED, publishLinks } from "../src/service/draft-routes.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import { readShortlists, saveShortlists, type DraftState } from "../src/shortlist/state.js";
+import type { TurnAsker } from "../src/turns/queue.js";
 import { tempDir, tree } from "./helpers.js";
 
 const REPORT = { passed: true, grade: 4, hold: [], later: [], checks: [{ name: "Plain words", passed: true, findings: [] }] };
@@ -400,7 +401,9 @@ describe("the draft's card, Publish and Edit", () => {
   it("sends the operator's changes to the writer, starting from the last draft", async () => {
     const settings = withDraft({ ...base, status: "failed" });
     const seen: unknown[] = [];
-    const jobs = new DraftJobs(settings, { draft: async (_s, _id, _seams, edit) => { seen.push(edit?.notes); return draft({ title: "T2" }); }, open: async (_p, _d, _date, _run, branch) => ({ ...pr, branch: branch ?? "new" }), review: () => true, now: () => NOW });
+    const turns: TurnAsker = { ask: () => Promise.reject(new Error("unused")) };
+    const jobs = new DraftJobs(settings, { draft: async (_s, _id, seams, edit) => { seen.push(edit?.notes, seams?.turns === turns); return draft({ title: "T2" }); },
+      open: async (_p, _d, _date, _run, branch) => ({ ...pr, branch: branch ?? "new" }), review: () => true, now: () => NOW, turns });
     expect(draftEdit(settings, { ...at, round: 1, user: "1", notes: "x" }, NOW, jobs).body.refused).toContain("Only the operator");
     expect(draftEdit(settings, { ...at, round: 1, user: OPERATOR, notes: " " }, NOW, jobs).body.refused).toBe("An Edit needs the changes you want, so nothing was done.");
     expect(draftEdit(settings, { ...at, round: 5, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This card is for an older draft; use the newest card. Nothing was done.");
@@ -410,7 +413,7 @@ describe("the draft's card, Publish and Edit", () => {
     expect(draftOf(settings)).toMatchObject({ status: "queued", round: 2, notes: "Shorter intro." });
     expect(readFeedback(settings.dataDir).map((e) => [e.kind, e.action, e.text])).toEqual([["reason", "edit", "Shorter intro."]]);
     await jobs.idle();
-    expect(seen).toEqual([undefined]); // no earlier draft file: the writer starts fresh
+    expect(seen).toEqual([undefined, true]); // no earlier draft file: the writer starts fresh, on the service's model turns
     expect(draftOf(settings)).toMatchObject({ status: "ready", round: 2, title: "T2", pr: { branch: "ghostpen/x" } });
     expect(draftOf(settings)?.notes).toBeUndefined();
     // With the last draft kept, an Edit hands the writer that draft and the changes.
@@ -418,7 +421,7 @@ describe("the draft's card, Publish and Edit", () => {
     writeFileSync(draftFile(settings.dataDir, "d:1"), JSON.stringify(draft({ title: "T2" })));
     draftEdit(settings, { ...at, round: 2, user: OPERATOR, notes: "Add a diagram." }, NOW, jobs);
     await jobs.idle();
-    expect(seen).toEqual([undefined, "Add a diagram."]);
+    expect(seen).toEqual([undefined, true, "Add a diagram.", true]);
     expect(draftEdit(withDraft({ ...base, status: "drafting" }), { ...at, round: 1, user: OPERATOR, notes: "x" }, NOW, jobs).body.refused).toBe("This draft cannot be edited now, so nothing was done.");
   });
 });

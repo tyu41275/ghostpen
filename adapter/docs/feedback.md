@@ -13,10 +13,11 @@ ghostpen keeps everything the operator tells it, so a learning loop can grow fro
   - A thread the operator opens on a card, or on a draft card, counts the same: on Discord its id is the card's.
   - chatter hands every message to the adapter first. A message in a card's thread is ghostpen's: chatter is told so at once, and the reply follows in the thread.
   - Only the operator's messages are taken.
-  - ghostpen asks its answering command (`settings.draft.writer`, else `settings.scorer`) with the plain-words rule first, the topic's source documents, its ranking entry and scores with their quoted lines, and the thread so far. The command answers whether the message is a question, context or both, plus a reply in plain words. It says so when the sources don't hold the answer.
+  - Where drafting is set up (`settings.draft`), ghostpen answers on a `ghostpen.thread-answer` model turn (ghostpen#146), which chatter runs ahead of every other queued turn (`docs/adapter.md`, Model turns). It gets the writer's time per turn (`draft.writer.timeoutSeconds`, at most 30 minutes).
+  - The turn gets the fixed instructions first (`THREAD_INSTRUCTIONS`, versioned by `THREAD_VERSION` in `src/feedback/thread.ts` and pinned by `test/instructions-versions.test.ts`: bump it with any change), then the topic's source documents, its ranking entry and scores with their quoted lines, and the thread so far. It answers whether the message is a question, context or both, plus a reply in plain words. It says so when the sources don't hold the answer.
   - Context is kept on the topic and given to the writer as true facts. It never changes a score.
-  - The message is kept before the answer is asked for, so a failed answer or no command still keeps it as context, and the reply says so.
+  - The message is kept even when the turn or its answer fails, or drafting isn't set up: it's kept as context, and the reply says so.
 - **On the app page**: each topic shows its context, and "What you told ghostpen" lists the latest 50 notes, newest first.
-- **Where it goes** (`src/feedback/store.ts`, `dataDir/feedback.json`, oldest first): every reason, with its press and whether it was a pick. Questions, answers and context from a card's thread go here too.
+- **Where it goes** (`src/feedback/store.ts`, `dataDir/feedback.json`, oldest first): every reason, with its press and whether it was a pick. Questions, answers and context from a card's thread go here too. An answer keeps `ran`, what its turn ran on (`src/turns/ran.ts`); one kept before has none.
   - Reasons still tune the ranking through `choices.json` (`docs/ranking.md`).
   - Each entry is marked `intake: "pending"`. Once chatter's operator intake exists (ensemble-chatter#4637), ghostpen hands the entries to it, so Reflection learns from them.

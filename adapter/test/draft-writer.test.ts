@@ -1,13 +1,14 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseWritten, revisePrompt, SNIPPET_LINE, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
+import { parseWritten, revisePrompt, SNIPPET_LINE, WRITER_PERSONA, WRITER_VERSION, writerPrompt, type WriterBrief } from "../src/draft/prompt.js";
 import { parseStackMap, readStackMap, STACK_MAP_FORMAT } from "../src/draft/stack-map.js";
 import { LINKS_CHECK } from "../src/draft/links.js";
 import { draftFile, draftNow as draftLive, readDraft } from "../src/draft/write.js";
 import { addFeedback } from "../src/feedback/store.js";
 import { parseSettings, type GhostpenSettings } from "../src/settings.js";
 import type { SitemapGet } from "../src/sources/served.js";
+import type { TurnAsker } from "../src/turns/queue.js";
 import { tempDir, tree } from "./helpers.js";
 
 const MAP = JSON.stringify({ format: STACK_MAP_FORMAT, scope: "x", source: "y",
@@ -40,9 +41,9 @@ const LINKED = `${PLAIN} [Tempo](https://blog.example/blog/tempo) grades work. W
 describe("settings.draft", () => {
   it("reads the writer with its defaults and checks every field", () => {
     const base = { instance: "i", port: 8794, dataDir: "/d" };
-    expect(parseSettings({ ...base, draft: { writer: { command: ["w"] } } }).draft).toEqual({ writer: { command: ["w"], timeoutSeconds: 900 }, voicePosts: 2, revisions: 2 });
+    expect(parseSettings({ ...base, draft: {} }).draft).toEqual({ writer: { timeoutSeconds: 900 }, voicePosts: 2, revisions: 2 });
     expect(parseSettings({ ...base, draft: { writer: { command: ["w"] }, stackMap: { command: ["relay", "graph"] } } }).draft?.stackMap).toEqual({ command: ["relay", "graph"], timeoutSeconds: 60 });
-    for (const [draft, error] of [[{}, "draft.writer must be an object"], [{ writer: { command: [] } }, "draft.writer.command must be a non-empty list"],
+    for (const [draft, error] of [[{ writer: [] }, "draft.writer must be an object"], [{ writer: { timeoutSeconds: 5 } }, "draft.writer.timeoutSeconds must be 10 to 3600"],
       [{ writer: { command: ["w"] }, revisions: 4 }, "draft.revisions must be 0 to 3"], [{ writer: { command: ["w"] }, voicePosts: -1 }, "draft.voicePosts must be 0 to 5"],
       [{ writer: { command: ["w"] }, styleGuide: "rel.md" }, "draft.styleGuide must be an absolute path"],
       [{ writer: { command: ["w"] }, stackMap: { command: ["x"], timeoutSeconds: 5 } }, "draft.stackMap.timeoutSeconds must be 10 to 3600"]] as const) {
@@ -182,6 +183,7 @@ describe("drafting a post", () => {
     await expect(draftNow(settings, "decisions:nope.md", { write: async () => answer(LINKED) })).rejects.toThrow("no source document has the id decisions:nope.md");
     await expect(draftNow(settings, "background:Nothing", { write: async () => answer(LINKED) })).rejects.toThrow("nothing in the sources defines or names Nothing");
     await expect(draftNow({ ...settings, draft: undefined }, ID)).rejects.toThrow("no draft writer is set");
+    await expect(draftNow(settings, ID)).rejects.toThrow("drafts are written in ghostpen's service, which asks chatter's adapter for the writer's model turns");
     expect(existsSync(draftFile(settings.dataDir, ID))).toBe(false);
   });
 
@@ -268,6 +270,25 @@ describe("drafting a post", () => {
     expect(calls).toBe(1);
     expect(draft.problems).toContain("published: the blog's sitemap did not answer");
     expect(draft.report.checks[3]!.findings).toEqual(["the link /blog/tempo cannot be checked: the blog's sitemap did not answer"]);
+  });
+
+  it("asks the writer's model turn, at most chatter's 30 minutes, and keeps what the kept text ran on; an older draft without it reads", async () => {
+    const base = setup();
+    const settings = { ...base, draft: { ...base.draft!, writer: { timeoutSeconds: 3600 } } };
+    const replies = [answer(`${PLAIN} We use Clock.`), answer(LINKED)];
+    const asked: unknown[][] = [];
+    const ran = (model: string) => ({ persona: WRITER_PERSONA, instructionsVersion: WRITER_VERSION, provider: "p", model, effort: null, thinkingLevel: null });
+    const turns: TurnAsker = { ask: async (persona, version, _prompt, timeoutMs) => {
+      asked.push([persona, version, timeoutMs]);
+      return { text: replies.shift()!, ran: ran(`m${asked.length}`) };
+    } };
+    const draft = await draftNow(settings, ID, { turns, stackMap: async () => MAP });
+    expect(asked).toEqual([[WRITER_PERSONA, WRITER_VERSION, 1_800_000], [WRITER_PERSONA, WRITER_VERSION, 1_800_000]]);
+    expect(draft).toMatchObject({ status: "ready", attempts: 2, ran: ran("m2") });
+    expect(readDraft(settings.dataDir, ID)?.ran).toEqual(ran("m2"));
+    const { ran: _kept, ...older } = draft;
+    writeFileSync(draftFile(settings.dataDir, ID), JSON.stringify(older));
+    expect(readDraft(settings.dataDir, ID)).toEqual(older);
   });
 
   it("keeps drafts under distinct files per id", () => {

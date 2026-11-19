@@ -14,6 +14,7 @@ import { PR_OPEN_FAILED, WRITE_FAILED } from "../publish/jobs.js";
 import { FRESH_MS } from "../ranking/jobs.js";
 import type { DraftState, ShortlistState } from "../shortlist/state.js";
 import { currentWeek } from "../shortlist/schedule.js";
+import { writerTimeoutMs } from "../settings.js";
 import { MERGE_FAILED } from "./draft-routes.js";
 import { chosenOff, failing, type Facts, fileProblem, folderProblem, more, type Need, notSetUp, programProblem, type Reading, short, timeOf, working } from "./readiness-reading.js";
 import { RANK } from "./readiness-settings.js";
@@ -94,7 +95,6 @@ async function draftingReading(f: Facts): Promise<Reading> {
   const { draft } = f.settings;
   if (draft === undefined) return chosenOff("draft is not set, so a Write is kept and nothing is drafted", f);
   const problems = (await Promise.all([
-    programProblem(draft.writer.command[0]!).then((p) => p && `draft.writer.command[0]: ${p}`),
     draft.stackMap ? programProblem(draft.stackMap.command[0]!).then((p) => p && `draft.stackMap.command[0]: ${p}`) : undefined,
     draft.styleGuide ? fileProblem(draft.styleGuide, constants.R_OK).then((p) => p && `draft.styleGuide: ${p}`) : undefined,
     ...(draft.diagramFiles ?? []).map((file, i) => diagramFileProblem(file).then((p) => p && `draft.diagramFiles[${i}]: ${p}`)),
@@ -106,15 +106,15 @@ async function draftingReading(f: Facts): Promise<Reading> {
   const stopped = drafts.filter((d) => d.status === "error" && d.problem?.startsWith(WRITE_FAILED));
   if (stopped.length > 0) {
     return failing(`${plural(stopped.length, "draft", "drafts")} stopped because the writer failed; each card says so`, earliest(stopped, f),
-      "Press Edit on the draft's card to try again; if it stops again, check draft.writer (adapter/docs/drafting.md).");
+      "Press Edit on the draft's card to try again; if it stops again, check that ghostpen is on in chatter and its ghostpen.writer route (adapter/docs/drafting.md).");
   }
-  const limit = draft.writer.timeoutSeconds * 1000 * (draft.revisions + 1) + DRAFT_MARGIN_MS;
+  const limit = writerTimeoutMs(draft) * (draft.revisions + 1) + DRAFT_MARGIN_MS;
   const stuck = drafts.filter((d) => (d.status === "queued" || d.status === "drafting") && f.now.getTime() - (timeOf(d.at) ?? 0) > limit);
   if (stuck.length > 0) {
     return failing(`${plural(stuck.length, "draft has", "drafts have")} been waiting or drafting for over ${Math.round(limit / 60_000)} minutes`,
       earliest(stuck, f), "Restart ghostpen's service, which takes up again the drafts it was in the middle of.");
   }
-  return working("the writer can be run and no draft stopped", f.started.getTime());
+  return working("no draft stopped", f.started.getTime());
 }
 
 /** A folder as the file system resolves it (through links); one that is not there, as written. */

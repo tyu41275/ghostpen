@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateOf } from "../src/ranking/candidates.js";
 import { isRankingView, RANKING_FILE, rankNow } from "../src/ranking/run.js";
-import { parseAnswer, runScorer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
+import { runStdin } from "../src/command.js";
+import { parseAnswer, scoreAll, scoredFrom, scorerPrompt, SCORES_FILE } from "../src/ranking/scorer.js";
 import { parseSettings } from "../src/settings.js";
 import type { TopicDocument } from "../src/sources/types.js";
 import { tempDir } from "./helpers.js";
@@ -36,11 +37,11 @@ describe("the scorer", () => {
 
   it("runs the configured command with the prompt on stdin, and says why when it fails", async () => {
     const echo = { command: ["node", "-e", "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify({len:s.length})))"], timeoutSeconds: 10 };
-    expect(JSON.parse(await runScorer(echo, "hello"))).toEqual({ len: 5 });
-    await expect(runScorer({ command: ["node", "-e", "console.error('quota gone');process.exit(3)"], timeoutSeconds: 10 }, "x"))
+    expect(JSON.parse(await runStdin(echo, "hello", "scorer"))).toEqual({ len: 5 });
+    await expect(runStdin({ command: ["node", "-e", "console.error('quota gone');process.exit(3)"], timeoutSeconds: 10 }, "x", "scorer"))
       .rejects.toThrow("the scorer exited 3: quota gone");
-    await expect(runScorer({ command: ["node", "-e", "setTimeout(()=>{}, 5000)"], timeoutSeconds: 1 }, "x")).rejects.toThrow("did not answer within 1 s");
-    await expect(runScorer({ command: ["/nonexistent/scorer"], timeoutSeconds: 10 }, "x")).rejects.toThrow("could not start");
+    await expect(runStdin({ command: ["node", "-e", "setTimeout(()=>{}, 5000)"], timeoutSeconds: 1 }, "x", "scorer")).rejects.toThrow("did not answer within 1 s");
+    await expect(runStdin({ command: ["/nonexistent/scorer"], timeoutSeconds: 10 }, "x", "scorer")).rejects.toThrow("could not start");
   });
 
   it("scores only documents that changed, and leaves out a candidate it fails on rather than inventing scores", async () => {

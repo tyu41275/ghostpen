@@ -7,6 +7,15 @@
 import type { TopicDocument } from "../sources/types.js";
 import type { CheckReport } from "./checks.js";
 import type { StackGraph } from "./diagrams.js";
+import type { TurnPersona } from "../turns/queue.js";
+
+/** The writer's model turn (ghostpen#146): chatter runs it on this persona's route. */
+export const WRITER_PERSONA: TurnPersona = "ghostpen.writer";
+/**
+ * The version of the writer's instructions: `writerPrompt`, `revisePrompt` and `editPrompt`. Bump it with any change to
+ * their fixed words, so what a draft ran on says which instructions it had (`test/instructions-versions.test.ts` pins them).
+ */
+export const WRITER_VERSION = "1";
 
 export type DraftKind = "decision" | "post-mortem" | "background";
 export interface PartBrief { term: string; post?: { url: string; title: string }; definition?: string }

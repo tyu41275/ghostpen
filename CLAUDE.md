@@ -107,7 +107,7 @@ ghostpen drafts posts as an optional chatter adapter in `adapter/` (see `adapter
 
 - **Sources:** only what its settings' `sources` block names (`adapter/docs/sources.md`); nothing in code names a machine or a person's folders. `adapter/test/repo-portable.test.ts` fails on a machine-specific path (a drive path, a home or user folder) or a Claude hook in any code file.
 - **Ranking and shortlist:** it ranks topics by value on its own before each weekly shortlist (`adapter/docs/ranking.md`; by hand, `node adapter/dist/cli/rank.js <settings>`), shown on its app page, and proposes the shortlist in its channel with Write, Skip and Not yet (`adapter/docs/shortlist.md`).
-- **Drafting:** the checks every draft must pass and the writer (`adapter/docs/drafting.md`; `node adapter/dist/cli/draft.js <settings> <id>`). Screenshots are taken with Playwright, masked, and privacy-checked, failing closed.
+- **Drafting:** the checks every draft must pass and the writer, a model turn chatter runs for the service (`adapter/docs/drafting.md`; drafts start from a card's Write or Edit, not the command line). Screenshots are taken with Playwright, masked, and privacy-checked, failing closed.
 - **Publishing:** a Write drafts the topic, opens the blog pull request and starts its review; Publish lands it once the review approves and Edit sends changes (`adapter/docs/publishing.md`). Every press carries a reason; each card's thread takes questions and context (`adapter/docs/feedback.md`).
 - **Install:** `adapter/scripts/install-host.sh`, or Relay's `adapter/scripts/relay-install.mjs`; it declares the readiness list in chatter's drop-in unless `--readiness off` (`adapter/docs/install.md`).
 

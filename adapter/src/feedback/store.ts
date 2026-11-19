@@ -7,6 +7,7 @@
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Ran } from "../turns/ran.js";
 
 export type FeedbackKind = "reason" | "context" | "question" | "answer";
 export interface FeedbackEntry {
@@ -22,6 +23,8 @@ export interface FeedbackEntry {
   chip?: boolean;
   text: string;
   intake: "pending";
+  /** For an answer: what its model turn ran on (ghostpen#146); absent on an answer kept before. */
+  ran?: Ran;
 }
 interface FeedbackState { version: 1; entries: FeedbackEntry[] }
 export const FEEDBACK_FILE = "feedback.json";

@@ -34,9 +34,13 @@ Every draft must pass these checks before the operator sees it. Each check can f
   - What it can't see: text inside pictures (images, icons). Mask those, or don't configure the page.
   - Pictures are kept next to the draft, in `drafts/<id>-<hash>-shots/<name>.png`.
 
-## Writing a draft (`src/draft/write.ts`, `node dist/cli/draft.js <settings.json> <id>`)
+## Writing a draft (`src/draft/write.ts`)
 
 The `id` is a shortlist item's: a candidate id, or `background:<part>` for a background post.
+
+- **Where it runs** (ghostpen#146): in ghostpen's service, after a Write or an Edit. The writer is a `ghostpen.writer` model turn: the service queues it and ghostpen's adapter in chatter runs it with `ctx.runCapability`, so chatter's settings pick the model and account (`docs/adapter.md`, Model turns). A command line has no chatter: `node dist/cli/draft.js` only says to press Write or Edit on the card.
+  - Each turn gets `draft.writer.timeoutSeconds`, at most chatter's 30 minutes. A turn that fails fails the draft (or, for a revision, keeps the last draft and says why), never hidden.
+  - The turn sends the writer's instructions version (`WRITER_VERSION` in `src/draft/prompt.ts`, covering the first, revise and edit prompts). Change their fixed words and bump it: `test/instructions-versions.test.ts` pins each prompt's hash under its version.
 
 - **What the writer gets** (`src/draft/prompt.ts`), the plain-words rule first:
   - the kind of post. A decision post whose outcome isn't known yet says so; a follow-up post-mortem tells how it went.
@@ -52,13 +56,13 @@ The `id` is a shortlist item's: a candidate id, or `background:<part>` for a bac
   - A draft **held** for a background post stops at once, because rewording can't write that post.
   - A draft whose post links can't be checked (the sitemap unread) stops at once too, and fails: rewording can't read the sitemap.
   - A failed revision keeps the last draft and says why.
-- **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map). Nothing is published from here: the operator approves every post.
+- **Kept** in `dataDir/drafts/<id>-<hash>.json` with its status (`ready`, `held` or `failed`), report, attempts and every problem (an unreadable source, no stack map), and `ran`: what the turn that wrote the kept text ran on (persona, instructions version, provider, model, effort, thinking level; `src/turns/ran.ts`). A draft kept before has no `ran`. Nothing is published from here: the operator approves every post.
 
 Settings (`draft`):
 
 | Field | Meaning | Default |
 | --- | --- | --- |
-| `writer` | `{command, timeoutSeconds}`: the command that writes (argv, no shell). Which model and account is the operator's choice. | required; 900 s |
+| `writer` | `{timeoutSeconds}`: each writer turn's time, 10 to 3600 s, at most 30 minutes used. The model and account are the `ghostpen.writer` route's in chatter's settings. A `command` from older settings is ignored: keep it until chatter's adapter is the one that runs turns (an older adapter refuses a writer without one), then delete it. | 900 s |
 | `styleGuide` | absolute path of a markdown style guide | none |
 | `voicePosts` | recent published posts read for the voice, 0 to 5 | 2 |
 | `stackMap` | `{command, timeoutSeconds}` printing `relay.stack.graph/v1` JSON (`relay graph --format json`) | none: diagrams can't be checked; 60 s |

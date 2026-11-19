@@ -18,4 +18,12 @@ describe("settings", () => {
     expect(() => parseSettings({ ...base, appIdentityKeyFile: "key" })).toThrow("settings: appIdentityKeyFile must be an absolute path");
     expect(() => readSettings("/nonexistent/settings.json")).toThrow(/^settings: the settings file cannot be read as JSON$/u);
   });
+
+  it("reads draft.writer with or without the command older settings carry, ignoring the command (ghostpen#146)", () => {
+    const base = { instance: "x", port: 8794, dataDir: "/data" };
+    expect(parseSettings({ ...base, draft: { writer: { timeoutSeconds: 600 } } }).draft?.writer).toEqual({ timeoutSeconds: 600 });
+    expect(parseSettings({ ...base, draft: { writer: { command: ["claude", "-p"], timeoutSeconds: 600 } } }).draft?.writer).toEqual({ timeoutSeconds: 600 });
+    expect(parseSettings({ ...base, draft: { writer: { command: [] } } }).draft?.writer).toEqual({ timeoutSeconds: 900 });
+    expect(parseSettings({ ...base, draft: {} }).draft?.writer).toEqual({ timeoutSeconds: 900 });
+  });
 });
