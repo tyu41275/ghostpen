@@ -9,6 +9,7 @@ import { readSettings } from "../settings.js";
 import { answerDraftPress } from "./drafts.js";
 import { answerThreadMessage } from "./threads.js";
 import { answerShortlistPress, syncShortlist, type PressEvent, type ShortlistContext } from "./shortlist.js";
+import { startTurns, type TurnsContext } from "./turns.js";
 
 /** How often the adapter asks the service whether a shortlist card is due: a weekly post lands within this of its slot. */
 export const HEARTBEAT_MS = 10 * 60_000;
@@ -20,10 +21,12 @@ export const REQUEST_TIMEOUT_MS = 5_000;
  */
 export const ADAPTER_API_VERSION = "1.0.0";
 
-/** The slice of chatter's adapter context ghostpen uses: its config, its log, and posting to its channel. */
+/** The slice of chatter's adapter context ghostpen uses: its config, its log, posting to its channel and running model turns. */
 export interface GhostpenAdapterContext extends ShortlistContext {
   config: Record<string, unknown>;
   log: (level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) => void;
+  /** Runs one model turn on one of ghostpen's personas (chatter docs/adapter-capability-run.md); absent in older chatters. */
+  runCapability?: TurnsContext["runCapability"];
 }
 
 let heartbeat: ReturnType<typeof setInterval> | undefined, run: object | undefined;
@@ -76,7 +79,10 @@ export const adapter = {
       try { return statusText(await health(ctx)); } catch (error) { return statusText({ answering: false, error: errorText(error) }); }
     },
   }],
-  /** Posts the weekly shortlist's cards now and on every heartbeat; the first beat redraws unanswered ones, re-arming them. */
+  /**
+   * Posts the weekly shortlist's cards now and on every heartbeat; the first beat redraws unanswered ones, re-arming them.
+   * Starts running the service's model turns (`turns.ts`).
+   */
   onStartup: async (ctx: GhostpenAdapterContext): Promise<void> => {
     clearInterval(heartbeat);
     const mine = {}, redrawn = new Set<string>();
@@ -91,6 +97,8 @@ export const adapter = {
     };
     heartbeat = setInterval(() => { void beat(); }, HEARTBEAT_MS);
     heartbeat.unref();
+    // The service's model turns (ghostpen#146): claimed and run here until this run ends.
+    startTurns(ctx, () => run === mine);
     await beat();
   },
   onMessage: async (event: PressEvent, ctx: GhostpenAdapterContext) =>

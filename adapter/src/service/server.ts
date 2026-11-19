@@ -15,10 +15,12 @@ import { GHOSTPEN_VERSION } from "../version.js";
 import type { DraftJobs } from "../publish/jobs.js";
 import { readAttempt } from "../ranking/attempt.js";
 import type { RankJobs } from "../ranking/jobs.js";
+import type { TurnQueue } from "../turns/queue.js";
 import { adapterRoute } from "./adapter-routes.js";
 import { APP_CSP, renderApp } from "./app.js";
 import { verifyAppIdentity } from "./app-identity.js";
 import { READINESS_PATH, readinessList } from "./readiness.js";
+import { MAX_TURN_ANSWER_BODY, TURN_ANSWER_PATH } from "./turn-routes.js";
 
 export interface ServerOptions {
   instance: string; dataDir: string; appKey?: Buffer; now?: () => number;
@@ -30,6 +32,8 @@ export interface ServerOptions {
   ranker?: RankJobs;
   /** The readiness list's facts beyond the settings and keys: the settings file and when the service started; unset (or no settings): no such route. */
   readiness?: { settingsFile?: string | undefined; started: Date };
+  /** ghostpen's model turns, which the adapter in chatter claims and answers (ghostpen#146); unset: no turn routes. */
+  turns?: TurnQueue;
 }
 
 const MAX_BODY = 64 * 1024;
@@ -109,10 +113,15 @@ export function createGhostpenServer(options: ServerOptions): Server {
       if (!options.settings || !options.adapterKey || !keyMatches(req.headers.authorization, options.adapterKey)) return send(res, 404, { error: "not found" });
       lastKeyedCall = new Date((options.now ?? Date.now)());
       const chunks: Buffer[] = [];
+      // A turn's answer may carry 100,000 characters (ghostpen#146): its route alone takes more than the others' 64 KiB.
+      const limit = path === TURN_ANSWER_PATH ? MAX_TURN_ANSWER_BODY : MAX_BODY;
       let size = 0;
-      req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= MAX_BODY) chunks.push(chunk); });
+      // A long-polled claim whose request goes away before its answer puts back the turn it was handed.
+      const gone = new AbortController();
+      res.on("close", () => { if (!res.writableFinished) gone.abort(); });
+      req.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= limit) chunks.push(chunk); });
       req.on("end", async () => {
-        if (size > MAX_BODY) return send(res, 413, { error: "body too large" });
+        if (size > limit) return send(res, 413, { error: "body too large" });
         let body: Record<string, unknown> = {};
         try {
           const text = Buffer.concat(chunks).toString("utf8");
@@ -121,7 +130,8 @@ export function createGhostpenServer(options: ServerOptions): Server {
           body = parsed as Record<string, unknown>;
         } catch { return send(res, 400, { error: "the body must be a JSON object" }); }
         try {
-          const reply = await adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()), options.jobs, options.ranker);
+          const reply = await adapterRoute(options.settings!, req.method ?? "GET", path, body, new Date((options.now ?? Date.now)()), options.jobs, options.ranker,
+            options.turns, gone.signal);
           send(res, reply?.status ?? 404, reply?.body ?? { error: "not found" });
         } catch (error) {
           send(res, 500, { error: error instanceof Error ? error.message : String(error) });
